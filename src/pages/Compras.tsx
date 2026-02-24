@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export default function Compras() {
   const [fornecedores, setFornecedores] = useState<any[]>([]);
@@ -71,7 +74,7 @@ export default function Compras() {
       });
       setModalVisivel(false);
       carregarDados();
-      alert("Pedido de Compra emitido e guardado com sucesso!");
+      alert("Pedido de Compra emitido, e-mails disparados e registo guardado com sucesso!");
     } catch (error: any) { 
       const erroReal = error.response?.data?.error || error.message;
       alert(`Erro do Servidor: ${erroReal}\n\nVerifique se o Back-end foi reiniciado.`); 
@@ -96,19 +99,92 @@ export default function Compras() {
     }
   }
 
+  // ==========================================
+  // EXPORTAR PARA EXCEL
+  // ==========================================
+  const exportarExcel = () => {
+    if (pedidos.length === 0) return alert("Não há dados para exportar.");
+
+    const dadosFormatados = pedidos.map(item => ({
+      'Código': item.codigo || '-',
+      'Data do Pedido': new Date(item.createdAt).toLocaleDateString('pt-BR'),
+      'Fornecedor': item.fornecedor?.nomeEmpresa || 'Desconhecido',
+      'Produto/Insumo': item.produto?.nome || 'Desconhecido',
+      'Quantidade': item.quantidade,
+      'Custo Total (R$)': item.custoTotal.toFixed(2).replace('.', ','),
+      'Status': item.status
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(dadosFormatados);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Pedidos de Compra");
+    XLSX.writeFile(workbook, "Relatorio_Compras_ViaPro.xlsx");
+  };
+
+  // ==========================================
+  // EXPORTAR PARA PDF
+  // ==========================================
+  const exportarPDF = () => {
+    if (pedidos.length === 0) return alert("Não há dados para exportar.");
+
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.setTextColor(44, 62, 80);
+    doc.text("Relatório de Pedidos de Compra - ViaPro ERP", 14, 22);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(127, 140, 141);
+    doc.text(`Emitido em: ${new Date().toLocaleString('pt-BR')}`, 14, 30);
+
+    const colunas = ["Código", "Data", "Fornecedor", "Produto", "Qtd", "Custo Total", "Status"];
+    const linhas = pedidos.map(item => [
+      item.codigo || '-',
+      new Date(item.createdAt).toLocaleDateString('pt-BR'),
+      item.fornecedor?.nomeEmpresa || '-',
+      item.produto?.nome || '-',
+      item.quantidade.toString(),
+      `R$ ${item.custoTotal.toFixed(2).replace('.', ',')}`,
+      item.status
+    ]);
+
+    autoTable(doc, {
+      head: [colunas],
+      body: linhas,
+      startY: 35,
+      styles: { fontSize: 8, cellPadding: 3 },
+      headStyles: { fillColor: [230, 126, 34], textColor: [255, 255, 255] }, // Laranja para combinar com o tema de compras
+      alternateRowStyles: { fillColor: [253, 246, 237] } 
+    });
+
+    doc.save("Relatorio_Compras_ViaPro.pdf");
+  };
+
   if (carregando) return <div>Sincronizando Módulo de Compras...</div>;
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <h1 style={{ color: '#2c3e50', margin: 0 }}>Pedidos de Compra</h1>
-        <button onClick={abrirModalNovo} style={styles.btnPrincipal}>+ Emitir Pedido</button>
+        
+        {/* BOTÕES DE EXPORTAÇÃO E NOVO PEDIDO */}
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button onClick={exportarExcel} style={styles.btnExcel}>
+            📊 Exportar Excel
+          </button>
+          <button onClick={exportarPDF} style={styles.btnPDF}>
+            📄 Exportar PDF
+          </button>
+          <button onClick={abrirModalNovo} style={styles.btnPrincipal}>
+            + Emitir Pedido
+          </button>
+        </div>
       </div>
 
       <div style={styles.tableContainer}>
         <table style={styles.table}>
           <thead>
             <tr>
+              <th style={styles.th}>Código</th>
               <th style={styles.th}>Data do Pedido</th>
               <th style={styles.th}>Fornecedor</th>
               <th style={styles.th}>Insumo</th>
@@ -120,10 +196,14 @@ export default function Compras() {
           </thead>
           <tbody>
             {pedidos.length === 0 && (
-              <tr><td colSpan={7} style={{textAlign: 'center', padding: '30px', color: '#7f8c8d'}}>Ainda não efetuou nenhum pedido.</td></tr>
+              <tr><td colSpan={8} style={{textAlign: 'center', padding: '30px', color: '#7f8c8d'}}>Ainda não efetuou nenhum pedido.</td></tr>
             )}
             {pedidos.map((item) => (
               <tr key={item.id} style={styles.tr}>
+                <td style={styles.td}>
+                  {/* Badge de Código Sequencial */}
+                  <span style={styles.badgeCodigo}>{item.codigo || '-'}</span>
+                </td>
                 <td style={styles.td}>{new Date(item.createdAt).toLocaleDateString('pt-BR')}</td>
                 <td style={styles.td}><strong>{item.fornecedor?.nomeEmpresa}</strong></td>
                 <td style={styles.td}>{item.produto?.nome}</td>
@@ -205,8 +285,15 @@ const styles: { [key: string]: React.CSSProperties } = {
   td: { padding: '15px 20px', color: '#2c3e50', fontSize: '14px', verticalAlign: 'middle' },
   badgeAmarelo: { backgroundColor: '#fef9e7', color: '#f39c12', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' },
   badgeVerde: { backgroundColor: '#eafaf1', color: '#27ae60', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' },
-  btnPrincipal: { backgroundColor: '#e67e22', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' },
+  badgeCodigo: { backgroundColor: '#f1f2f6', color: '#2c3e50', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', border: '1px solid #ddd' },
+  
+  btnPrincipal: { backgroundColor: '#e67e22', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' },
   btnAcao: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' },
+  
+  // ESTILOS DOS BOTÕES DE EXPORTAÇÃO
+  btnExcel: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 5px rgba(39, 174, 96, 0.3)' },
+  btnPDF: { backgroundColor: '#e74c3c', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 5px rgba(231, 76, 60, 0.3)' },
+
   modalOverlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
   modalContent: { backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '100%', maxWidth: '500px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' },
   btnFechar: { background: 'none', border: 'none', fontSize: '20px', color: '#e74c3c', cursor: 'pointer' },
