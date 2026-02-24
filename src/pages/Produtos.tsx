@@ -5,6 +5,7 @@ export default function Produtos() {
   const [produtos, setProdutos] = useState<any[]>([]);
   const [categorias, setCategorias] = useState<any[]>([]);
   const [localizacoes, setLocalizacoes] = useState<any[]>([]);
+  const [fornecedores, setFornecedores] = useState<any[]>([]); // NOVO: Estado para fornecedores
   const [carregando, setCarregando] = useState(true);
 
   const [usuarioLogado, setUsuarioLogado] = useState<any>(null);
@@ -20,22 +21,29 @@ export default function Produtos() {
   const [descricao, setDescricao] = useState('');
   const [quantidadeInicial, setQuantidadeInicial] = useState('0');
   
-  // NOVOS CAMPOS FINANCEIROS
   const [precoCusto, setPrecoCusto] = useState('');
   const [precoVenda, setPrecoVenda] = useState('');
+
+  // ==========================================
+  // NOVOS CAMPOS: Lote, Endereço e Fornecedor
+  // ==========================================
+  const [lote, setLote] = useState('');
+  const [enderecoLocalizacao, setEnderecoLocalizacao] = useState('');
+  const [fornecedorId, setFornecedorId] = useState('');
 
   const [novaCategoriaNome, setNovaCategoriaNome] = useState('');
 
   async function carregarDados() {
     setCarregando(true);
     try {
-      const [resProd, resCat, resLoc] = await Promise.all([
-        api.get('/produtos'), api.get('/categorias'), api.get('/localizacoes')
+      const [resProd, resCat, resLoc, resForn] = await Promise.all([
+        api.get('/produtos'), api.get('/categorias'), api.get('/localizacoes'), api.get('/fornecedores')
       ]);
       
       setProdutos(resProd.data.sort((a: any, b: any) => a.nome.localeCompare(b.nome)));
       setCategorias(resCat.data);
       setLocalizacoes(resLoc.data);
+      setFornecedores(resForn.data);
       
       if (resCat.data.length > 0 && !categoriaId) setCategoriaId(resCat.data[0].id);
       if (resLoc.data.length > 0 && !localizacaoId) setLocalizacaoId(resLoc.data[0].id);
@@ -57,6 +65,7 @@ export default function Produtos() {
     setIdEdicao(null);
     setNome(''); setSku(''); setTipo('ACABADO'); setDescricao(''); setQuantidadeInicial('0');
     setPrecoCusto(''); setPrecoVenda('');
+    setLote(''); setEnderecoLocalizacao(''); setFornecedorId('');
     if (categorias.length > 0) setCategoriaId(categorias[0].id);
     if (localizacoes.length > 0) setLocalizacaoId(localizacoes[0].id);
     setModalVisivel(true);
@@ -68,6 +77,9 @@ export default function Produtos() {
     setDescricao(p.descricao || '');
     setPrecoCusto(p.precoCusto ? String(p.precoCusto) : '');
     setPrecoVenda(p.precoVenda ? String(p.precoVenda) : '');
+    setLote(p.lote || '');
+    setEnderecoLocalizacao(p.enderecoLocalizacao || '');
+    setFornecedorId(p.fornecedorId || '');
     setModalVisivel(true);
   }
 
@@ -98,7 +110,12 @@ export default function Produtos() {
     const custoNum = Number(precoCusto.toString().replace(',', '.')) || 0;
     const vendaNum = Number(precoVenda.toString().replace(',', '.')) || 0;
 
-    const payload = { nome, sku, tipo, categoriaId, descricao, precoCusto: custoNum, precoVenda: vendaNum };
+    const payload = { 
+      nome, sku, tipo, categoriaId, descricao, 
+      precoCusto: custoNum, precoVenda: vendaNum,
+      lote, enderecoLocalizacao, 
+      fornecedorId: fornecedorId || null // Envia nulo se não selecionar
+    };
 
     try {
       if (idEdicao) {
@@ -127,9 +144,9 @@ export default function Produtos() {
             <tr>
               <th style={styles.th}>Nome do Produto</th>
               <th style={styles.th}>SKU</th>
-              <th style={styles.th}>Categoria</th>
-              <th style={styles.th}>Classificação</th>
-              <th style={styles.th}>Preço</th>
+              <th style={styles.th}>Endereço</th>
+              <th style={styles.th}>Lote</th>
+              <th style={styles.th}>Fornecedor</th>
               {!isVendedor && <th style={{...styles.th, textAlign: 'center'}}>Ações</th>}
             </tr>
           </thead>
@@ -139,19 +156,9 @@ export default function Produtos() {
               <tr key={item.id} style={styles.tr}>
                 <td style={styles.td}><strong>{item.nome}</strong></td>
                 <td style={styles.td}><span style={styles.badgeCinza}>{item.sku}</span></td>
-                <td style={styles.td}>{item.categoria?.nome}</td>
-                <td style={styles.td}>
-                  <span style={item.tipo === 'MATERIA_PRIMA' ? styles.badgeAzul : styles.badgeAmarelo}>
-                    {item.tipo === 'MATERIA_PRIMA' ? 'M. Prima' : 'Acabado'}
-                  </span>
-                </td>
-                <td style={styles.td}>
-                  {item.tipo !== 'MATERIA_PRIMA' && (
-                    <span style={{color: '#27ae60', fontWeight: 'bold'}}>
-                      R$ {item.precoVenda ? Number(item.precoVenda).toFixed(2).replace('.', ',') : '0,00'}
-                    </span>
-                  )}
-                </td>
+                <td style={styles.td}>{item.enderecoLocalizacao || '-'}</td>
+                <td style={styles.td}>{item.lote || '-'}</td>
+                <td style={styles.td}>{item.fornecedor?.nomeEmpresa || '-'}</td>
                 
                 {!isVendedor && (
                   <td style={{...styles.td, textAlign: 'center'}}>
@@ -167,33 +174,23 @@ export default function Produtos() {
 
       {modalVisivel && (
         <div style={styles.modalOverlay}>
-          <div style={styles.modalContent}>
+          <div style={{...styles.modalContent, maxHeight: '90vh', overflowY: 'auto'}}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '15px', marginBottom: '20px' }}>
               <h2 style={{ margin: 0, color: '#2c3e50' }}>{idEdicao ? 'Editar Produto' : 'Novo Produto'}</h2>
               <button onClick={() => setModalVisivel(false)} style={styles.btnFechar}>✖</button>
             </div>
 
             <form onSubmit={salvarProduto} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              {/* BLOCO: DADOS BÁSICOS */}
+              <div style={styles.formGroupTitle}>Dados Essenciais</div>
               <div style={{ display: 'flex', gap: '15px' }}>
                 <div style={{ flex: 2 }}>
-                  <label style={styles.label}>Nome do Produto</label>
+                  <label style={styles.label}>Nome do Produto *</label>
                   <input type="text" style={styles.input} value={nome} onChange={e => setNome(e.target.value)} required placeholder="Ex: Lupa de Leitura" />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label style={styles.label}>SKU (Código)</label>
+                  <label style={styles.label}>SKU (Código) *</label>
                   <input type="text" style={styles.input} value={sku} onChange={e => setSku(e.target.value)} required placeholder="Ex: MUN-099" />
-                </div>
-              </div>
-
-              {/* NOVOS CAMPOS FINANCEIROS */}
-              <div style={{ display: 'flex', gap: '15px' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={styles.label}>Preço de Custo (R$)</label>
-                  <input type="text" style={styles.input} value={precoCusto} onChange={e => setPrecoCusto(e.target.value)} placeholder="0,00" />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={styles.label}>Preço de Venda (R$)</label>
-                  <input type="text" style={styles.input} value={precoVenda} onChange={e => setPrecoVenda(e.target.value)} placeholder="0,00" />
                 </div>
               </div>
 
@@ -216,14 +213,48 @@ export default function Produtos() {
                 </div>
               </div>
 
+              {/* BLOCO: RASTREABILIDADE */}
+              <div style={styles.formGroupTitle}>Logística e Rastreabilidade</div>
+              <div style={{ display: 'flex', gap: '15px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={styles.label}>Endereço Físico (Ex: R-01-P02-C01)</label>
+                  <input type="text" style={styles.input} value={enderecoLocalizacao} onChange={e => setEnderecoLocalizacao(e.target.value)} placeholder="Rua - Prateleira - Célula" />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={styles.label}>Nº do Lote</label>
+                  <input type="text" style={styles.input} value={lote} onChange={e => setLote(e.target.value)} placeholder="Ex: L2026B" />
+                </div>
+              </div>
+
+              <div>
+                <label style={styles.label}>Fornecedor de Origem</label>
+                <select style={styles.input} value={fornecedorId} onChange={e => setFornecedorId(e.target.value)}>
+                  <option value="">(Nenhum / Fabrico Próprio)</option>
+                  {fornecedores.map(f => <option key={f.id} value={f.id}>{f.nomeEmpresa}</option>)}
+                </select>
+              </div>
+
+              {/* BLOCO: FINANCEIRO E INÍCIO */}
+              <div style={styles.formGroupTitle}>Financeiro</div>
+              <div style={{ display: 'flex', gap: '15px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={styles.label}>Preço de Custo (R$)</label>
+                  <input type="text" style={styles.input} value={precoCusto} onChange={e => setPrecoCusto(e.target.value)} placeholder="0,00" />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={styles.label}>Preço de Venda (R$)</label>
+                  <input type="text" style={styles.input} value={precoVenda} onChange={e => setPrecoVenda(e.target.value)} placeholder="0,00" />
+                </div>
+              </div>
+
               {!idEdicao && (
-                <div style={{ display: 'flex', gap: '15px', backgroundColor: '#f9fbfb', padding: '15px', borderRadius: '8px', border: '1px solid #ecf0f1' }}>
+                <div style={{ display: 'flex', gap: '15px', backgroundColor: '#f9fbfb', padding: '15px', borderRadius: '8px', border: '1px solid #ecf0f1', marginTop: '10px' }}>
                   <div style={{ flex: 1 }}>
-                    <label style={styles.label}>Qtd. Inicial</label>
+                    <label style={styles.label}>Qtd. Inicial do Inventário</label>
                     <input type="number" style={styles.input} value={quantidadeInicial} onChange={e => setQuantidadeInicial(e.target.value)} min="0" />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <label style={styles.label}>Local Inicial</label>
+                    <label style={styles.label}>Zona Principal</label>
                     <select style={styles.input} value={localizacaoId} onChange={e => setLocalizacaoId(e.target.value)}>
                       {localizacoes.map(l => <option key={l.id} value={l.id}>{l.zona}</option>)}
                     </select>
@@ -237,6 +268,7 @@ export default function Produtos() {
         </div>
       )}
 
+      {/* Modal de Categoria (mantido) */}
       {modalCategoriaVisivel && (
         <div style={{...styles.modalOverlay, zIndex: 1100}}>
           <div style={{...styles.modalContent, maxWidth: '400px'}}>
@@ -275,5 +307,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   btnSalvar: { backgroundColor: '#27ae60', color: 'white', padding: '15px', borderRadius: '8px', border: 'none', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
   btnLink: { background: 'none', border: 'none', color: '#27ae60', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px', padding: 0 },
   btnCancelar: { backgroundColor: '#f1f2f6', color: '#7f8c8d', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' },
-  btnSalvarPequeno: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }
+  btnSalvarPequeno: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' },
+  formGroupTitle: { backgroundColor: '#ecf0f1', padding: '5px 10px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', color: '#7f8c8d', textTransform: 'uppercase', marginTop: '10px' }
 };
