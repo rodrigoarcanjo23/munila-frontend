@@ -70,7 +70,8 @@ export default function Estoque() {
       if (formTipo !== 'Ajuste' || qtdNum < 0) return alert("Aviso: Digite uma quantidade válida.");
     }
 
-    if ((formTipo === 'Saida_Venda' || formTipo === 'Saida_Demonstracao') && qtdNum > itemSelecionado.quantidade) {
+    // A validação agora abrange qualquer tipo de "Saida"
+    if ((formTipo.includes('Saida')) && qtdNum > itemSelecionado.quantidade) {
       return alert(`Aviso: O saldo atual é de apenas ${itemSelecionado.quantidade} unidades.`);
     }
 
@@ -101,6 +102,14 @@ export default function Estoque() {
         payload.estoqueOrigemId = itemSelecionado.id;
         payload.quantidade = qtdNum;
         payload.dataPrevistaRetorno = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      } else if (formTipo === 'Entrada_Interna') {
+        endpoint = '/movimentacoes/entrada-interna';
+        payload.estoqueDestinoId = itemSelecionado.id;
+        payload.quantidade = qtdNum;
+      } else if (formTipo === 'Saida_Interna') {
+        endpoint = '/movimentacoes/saida-interna';
+        payload.estoqueOrigemId = itemSelecionado.id;
+        payload.quantidade = qtdNum;
       }
 
       await api.post(endpoint, payload);
@@ -207,10 +216,15 @@ export default function Estoque() {
               <div>
                 <label style={styles.label}>Tipo de Operação</label>
                 <select style={styles.input} value={formTipo} onChange={(e) => setFormTipo(e.target.value)}>
+                  {/* OPÇÕES ANTIGAS */}
                   {(isAdmin || isEstoque) && <option value="Entrada">Entrada de Mercadoria</option>}
                   {(isAdmin || isVendedor) && <option value="Saida_Venda">Saída P/ Venda</option>}
                   {(isAdmin || isVendedor) && <option value="Saida_Demonstracao">Saída P/ Demonstração</option>}
                   {(isAdmin || isEstoque) && <option value="Ajuste">Ajuste Manual de Inventário</option>}
+                  
+                  {/* NOVAS OPÇÕES DO CLIENTE */}
+                  {(isAdmin || isEstoque) && <option value="Entrada_Interna">Entrada Interna</option>}
+                  {(isAdmin || isEstoque) && <option value="Saida_Interna">Saída Interna</option>}
                 </select>
               </div>
 
@@ -232,7 +246,7 @@ export default function Estoque() {
               </div>
 
               <button type="submit" style={formTipo === 'Ajuste' ? styles.btnAlerta : styles.btnConfirmar} disabled={enviando}>
-                {enviando ? 'Processando...' : (formTipo === 'Entrada' ? 'Confirmar Entrada' : formTipo === 'Ajuste' ? 'Aplicar Ajuste' : 'Confirmar Saída')}
+                {enviando ? 'Processando...' : (formTipo.includes('Entrada') ? 'Confirmar Entrada' : formTipo === 'Ajuste' ? 'Aplicar Ajuste' : 'Confirmar Saída')}
               </button>
             </form>
           </div>

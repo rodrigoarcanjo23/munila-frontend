@@ -5,7 +5,7 @@ interface Localizacao {
   id: string;
   codigo: string;
   zona: string;
-  corredor: string;
+  corredor: string; // Mantemos 'corredor' no código para comunicar com o Back-end sem quebrar
   prateleira: string;
 }
 
@@ -13,10 +13,9 @@ export function Locais() {
   const [locais, setLocais] = useState<Localizacao[]>([]);
   const [codigo, setCodigo] = useState('');
   const [zona, setZona] = useState('');
-  const [corredor, setCorredor] = useState('');
+  const [corredor, setCorredor] = useState(''); 
   const [prateleira, setPrateleira] = useState('');
   
-  // Novo estado para saber se estamos a editar ou a criar
   const [editandoId, setEditandoId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -36,11 +35,9 @@ export function Locais() {
     e.preventDefault();
     try {
       if (editandoId) {
-        // Se tem ID, é uma EDIÇÃO
         await api.put(`/localizacoes/${editandoId}`, { codigo, zona, corredor, prateleira });
         alert('Local atualizado com sucesso!');
       } else {
-        // Se não tem ID, é uma CRIAÇÃO
         await api.post('/localizacoes', { codigo, zona, corredor, prateleira });
         alert('Local criado com sucesso!');
       }
@@ -49,7 +46,7 @@ export function Locais() {
       carregarLocais();
     } catch (error) {
       console.error('Erro ao salvar local:', error);
-      alert('Erro ao salvar o local. Verifique se o Back-end já atualizou na nuvem.');
+      alert('Erro ao salvar o local. Verifique a conexão com o servidor.');
     }
   }
 
@@ -62,7 +59,7 @@ export function Locais() {
   }
 
   async function handleExcluir(id: string) {
-    if (window.confirm('Tem a certeza que deseja excluir esta prateleira/local?')) {
+    if (window.confirm('Tem a certeza que deseja excluir esta prateleira/célula?')) {
       try {
         await api.delete(`/localizacoes/${id}`);
         alert('Local excluído com sucesso!');
@@ -94,7 +91,7 @@ export function Locais() {
   return (
     <div style={containerStyle}>
       <h1 style={{ color: '#2c3e50', margin: '0 0 5px 0' }}>Gestão de Locais Físicos</h1>
-      <p style={{ color: '#7f8c8d', margin: '0 0 25px 0' }}>Cadastre as ruas, prateleiras e células do seu armazém.</p>
+      <p style={{ color: '#7f8c8d', margin: '0 0 25px 0' }}>Cadastre os módulos, prateleiras e células do seu armazém.</p>
 
       {/* CARD DO FORMULÁRIO */}
       <div style={cardStyle}>
@@ -112,10 +109,13 @@ export function Locais() {
               <label style={labelStyle}>Zona (Ex: Pulmão, Loja)</label>
               <input required type="text" value={zona} onChange={e => setZona(e.target.value)} style={inputStyle} placeholder="Pulmão" />
             </div>
+            
+            {/* ALTERAÇÃO SOLICITADA PELO EDUARDO: "Módulo de Armazenamento" */}
             <div style={inputContainerStyle}>
-              <label style={labelStyle}>Corredor / Rua</label>
-              <input required type="text" value={corredor} onChange={e => setCorredor(e.target.value)} style={inputStyle} placeholder="01" />
+              <label style={labelStyle}>Módulo de Armazenamento</label>
+              <input required type="text" value={corredor} onChange={e => setCorredor(e.target.value)} style={inputStyle} placeholder="Módulo 01" />
             </div>
+            
             <div style={inputContainerStyle}>
               <label style={labelStyle}>Prateleira / Célula</label>
               <input required type="text" value={prateleira} onChange={e => setPrateleira(e.target.value)} style={inputStyle} placeholder="A" />
@@ -142,7 +142,8 @@ export function Locais() {
             <tr>
               <th style={thStyle}>Código</th>
               <th style={thStyle}>Zona</th>
-              <th style={thStyle}>Corredor</th>
+              {/* ALTERAÇÃO SOLICITADA PELO EDUARDO: Cabeçalho da Tabela */}
+              <th style={thStyle}>Módulo de Armaz.</th>
               <th style={thStyle}>Prateleira</th>
               <th style={{...thStyle, textAlign: 'center'}}>Ações</th>
             </tr>

@@ -28,8 +28,9 @@ export default function Historico() {
   const exportarExcel = () => {
     if (historico.length === 0) return alert("Não há dados para exportar.");
 
-    // Formatar os dados para o formato de grelha do Excel
+    // Formatar os dados para o formato de grelha do Excel (Agora com o Código)
     const dadosFormatados = historico.map(item => ({
+      'Código RE/RS': item.codigo || 'S/C',
       'Data e Hora': new Date(item.dataHora).toLocaleString('pt-BR'),
       'Produto': item.produto?.nome || 'Desconhecido',
       'Ação Realizada': item.tipoAcao.replace('_', ' '),
@@ -41,10 +42,10 @@ export default function Historico() {
     // Criar a folha de cálculo e o ficheiro
     const worksheet = XLSX.utils.json_to_sheet(dadosFormatados);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Auditoria Munila");
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Auditoria ViaPro");
     
     // Descarregar o ficheiro
-    XLSX.writeFile(workbook, "Relatorio_Auditoria_Munila.xlsx");
+    XLSX.writeFile(workbook, "Relatorio_Auditoria_ViaPro.xlsx");
   };
 
   // ==========================================
@@ -57,17 +58,18 @@ export default function Historico() {
     
     // Título do Documento
     doc.setFontSize(18);
-    doc.setTextColor(44, 62, 80); // Cor Azul Escuro (Munila)
-    doc.text("Relatório de Auditoria e Movimentações - Munila ERP", 14, 22);
+    doc.setTextColor(44, 62, 80); // Cor Azul Escuro
+    doc.text("Relatório de Auditoria e Movimentações - ViaPro ERP", 14, 22);
     
     // Data de emissão
     doc.setFontSize(10);
     doc.setTextColor(127, 140, 141);
     doc.text(`Emitido em: ${new Date().toLocaleString('pt-BR')}`, 14, 30);
 
-    // Estrutura da Tabela
-    const colunas = ["Data e Hora", "Produto", "Ação", "Qtd", "Responsável", "Observação"];
+    // Estrutura da Tabela (Agora com o Código)
+    const colunas = ["Código", "Data e Hora", "Produto", "Ação", "Qtd", "Responsável", "Observação"];
     const linhas = historico.map(item => [
+      item.codigo || 'S/C',
       new Date(item.dataHora).toLocaleString('pt-BR'),
       item.produto?.nome || '-',
       item.tipoAcao.replace('_', ' '),
@@ -81,13 +83,13 @@ export default function Historico() {
       head: [colunas],
       body: linhas,
       startY: 35,
-      styles: { fontSize: 9, cellPadding: 3 },
-      headStyles: { fillColor: [2, 136, 209], textColor: [255, 255, 255] }, // Azul Munila
-      alternateRowStyles: { fillColor: [245, 247, 250] } // Zebrado suave
+      styles: { fontSize: 8, cellPadding: 3 }, // Fonte levemente menor para caber todas as colunas
+      headStyles: { fillColor: [2, 136, 209], textColor: [255, 255, 255] },
+      alternateRowStyles: { fillColor: [245, 247, 250] } 
     });
 
     // Descarregar o ficheiro
-    doc.save("Relatorio_Auditoria_Munila.pdf");
+    doc.save("Relatorio_Auditoria_ViaPro.pdf");
   };
 
   if (carregando) return <div>A extrair logs do sistema...</div>;
@@ -112,6 +114,7 @@ export default function Historico() {
         <table style={styles.table}>
           <thead>
             <tr>
+              <th style={styles.th}>Código</th>
               <th style={styles.th}>Data e Hora</th>
               <th style={styles.th}>Produto</th>
               <th style={styles.th}>Ação</th>
@@ -122,13 +125,17 @@ export default function Historico() {
           </thead>
           <tbody>
             {historico.length === 0 && (
-              <tr><td colSpan={6} style={{textAlign: 'center', padding: '20px', color: '#7f8c8d'}}>Sem histórico registado.</td></tr>
+              <tr><td colSpan={7} style={{textAlign: 'center', padding: '20px', color: '#7f8c8d'}}>Sem histórico registado.</td></tr>
             )}
             {historico.map((item) => {
               const isEntrada = item.tipoAcao.includes('Entrada') || (item.tipoAcao === 'Ajuste_Estoque' && item.quantidade > 0);
               
               return (
                 <tr key={item.id} style={styles.tr}>
+                  <td style={styles.td}>
+                    {/* Badge destacado para o código da requisição */}
+                    <span style={styles.badgeCodigo}>{item.codigo || '-'}</span>
+                  </td>
                   <td style={styles.td}>{new Date(item.dataHora).toLocaleString('pt-BR')}</td>
                   <td style={styles.td}><strong>{item.produto?.nome}</strong></td>
                   <td style={styles.td}>
@@ -157,6 +164,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   th: { padding: '15px 20px', backgroundColor: '#f9fbfb', color: '#7f8c8d', borderBottom: '2px solid #ecf0f1', textTransform: 'uppercase', fontSize: '12px', letterSpacing: '1px' },
   tr: { borderBottom: '1px solid #ecf0f1' },
   td: { padding: '15px 20px', color: '#2c3e50', fontSize: '14px', verticalAlign: 'middle' },
+  
+  badgeCodigo: { backgroundColor: '#f1f2f6', color: '#2c3e50', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', border: '1px solid #ddd' },
   badgeVerde: { backgroundColor: '#eafaf1', color: '#27ae60', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' },
   badgeVermelho: { backgroundColor: '#fdf2e9', color: '#e74c3c', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' },
   
