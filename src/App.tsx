@@ -31,8 +31,7 @@ function Sidebar({ usuarioLogado, fazerLogout }: any) {
   return (
     <div style={{ width: '250px', backgroundColor: '#2c3e50', color: 'white', display: 'flex', flexDirection: 'column', height: '100vh', position: 'fixed', top: 0, left: 0 }}>
       <div style={{ padding: '20px', borderBottom: '1px solid #34495e', marginBottom: '20px' }}>
-        <h2 style={{ margin: 0, color: '#0288D1' }}>Munila ERP</h2>
-        <p style={{ margin: '5px 0 0 0', fontSize: '13px', color: '#95a5a6' }}>Versão Desktop</p>
+<img src="/favicon.png" style={{ width: '120px' }} />        <p style={{ margin: '5px 0 0 0', fontSize: '13px', color: '#95a5a6' }}>Versão Desktop</p>
       </div>
 
       <nav style={{ flex: 1, padding: '0 15px' }}>

@@ -50,8 +50,7 @@ export default function Login({ onLoginSucesso }: { onLoginSucesso: (user: any) 
       <div style={styles.card}>
         <div style={styles.logoContainer}>
           {/* Pode substituir pelo caminho da sua logo real se a tiver na pasta public */}
-          <h1 style={styles.titulo}>Munila</h1>
-          <p style={styles.subtitulo}>Gestão de Estoque</p>
+<img src="/favicon.png" alt="Logo ViaPro" style={{ width: '150px', marginBottom: '10px' }} />          <p style={styles.subtitulo}>Gestão de Estoque</p>
         </div>
 
         <form onSubmit={handleAcao} style={styles.form}>
