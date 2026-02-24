@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export default function Dashboard() {
   const [visaoAtiva, setVisaoAtiva] = useState<'estoque' | 'vendas'>('estoque');
@@ -76,6 +79,90 @@ export default function Dashboard() {
     return Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
   };
 
+  // ==========================================
+  // EXPORTAR PARA EXCEL (DASHBOARD COMPLETO)
+  // ==========================================
+  const exportarExcel = () => {
+    const workbook = XLSX.utils.book_new();
+
+    // Aba 1: Resumo do Armazém
+    const dadosE = [
+      { Indicador: 'Total de Itens no Armazém', Valor: dadosEstoque.total },
+      { Indicador: 'Itens em Estoque Crítico', Valor: dadosEstoque.criticos },
+      { Indicador: '', Valor: '' },
+      { Indicador: 'TOP 5 PRODUTOS', Valor: 'QUANTIDADE' },
+      ...dadosEstoque.topProdutos.map((p: any) => ({ Indicador: p.produto.nome, Valor: p.quantidade }))
+    ];
+    const wsEstoque = XLSX.utils.json_to_sheet(dadosE);
+    XLSX.utils.book_append_sheet(workbook, wsEstoque, "Resumo Armazém");
+
+    // Aba 2: Resumo Financeiro
+    const dadosF = [
+      { Indicador: 'Faturamento do Mês', Valor: formatarReal(dadosVendas.faturamentoMes) },
+      { Indicador: '', Valor: '' },
+      { Indicador: 'TOP CLIENTES', Valor: 'VALOR GASTO' },
+      ...dadosVendas.topClientes.map((c: any) => ({ Indicador: c.nome, Valor: formatarReal(c.valorGasto) }))
+    ];
+    const wsFinanceiro = XLSX.utils.json_to_sheet(dadosF);
+    XLSX.utils.book_append_sheet(workbook, wsFinanceiro, "Resumo Financeiro");
+
+    XLSX.writeFile(workbook, "Relatorio_Gerencial_ViaPro.xlsx");
+  };
+
+  // ==========================================
+  // EXPORTAR PARA PDF (DASHBOARD COMPLETO)
+  // ==========================================
+  const exportarPDF = () => {
+    const doc = new jsPDF();
+    
+    // Cabeçalho
+    doc.setFontSize(18);
+    doc.setTextColor(44, 62, 80);
+    doc.text("Relatório Gerencial - ViaPro ERP", 14, 22);
+    doc.setFontSize(10);
+    doc.setTextColor(127, 140, 141);
+    doc.text(`Emitido em: ${new Date().toLocaleString('pt-BR')}`, 14, 30);
+
+    // Seção 1: Armazém
+    doc.setFontSize(14);
+    doc.setTextColor(2, 136, 209); // Azul
+    doc.text("1. Resumo do Armazém", 14, 45);
+    
+    doc.setFontSize(11);
+    doc.setTextColor(44, 62, 80);
+    doc.text(`Itens Totais em Estoque: ${dadosEstoque.total}`, 14, 55);
+    doc.text(`Alerta de Estoque Crítico: ${dadosEstoque.criticos} produtos`, 14, 62);
+
+    autoTable(doc, {
+      startY: 68,
+      head: [["Top 5 Produtos (Maior Volume)", "Quantidade"]],
+      body: dadosEstoque.topProdutos.map((p: any) => [p.produto.nome, `${p.quantidade} un`]),
+      styles: { fontSize: 10, cellPadding: 4 },
+      headStyles: { fillColor: [2, 136, 209] }
+    });
+
+    const finalY = (doc as any).lastAutoTable.finalY || 68;
+
+    // Seção 2: Financeiro
+    doc.setFontSize(14);
+    doc.setTextColor(39, 174, 96); // Verde
+    doc.text("2. Resumo Financeiro (Mês Atual)", 14, finalY + 20);
+    
+    doc.setFontSize(11);
+    doc.setTextColor(44, 62, 80);
+    doc.text(`Faturamento Total: ${formatarReal(dadosVendas.faturamentoMes)}`, 14, finalY + 30);
+
+    autoTable(doc, {
+      startY: finalY + 36,
+      head: [["Top 5 Clientes", "Valor Gasto"]],
+      body: dadosVendas.topClientes.map((c: any) => [c.nome, formatarReal(c.valorGasto)]),
+      styles: { fontSize: 10, cellPadding: 4 },
+      headStyles: { fillColor: [39, 174, 96] }
+    });
+
+    doc.save("Relatorio_Gerencial_ViaPro.pdf");
+  };
+
   if (carregando) return <div>Atualizando indicadores...</div>;
 
   return (
@@ -83,19 +170,29 @@ export default function Dashboard() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
         <h1 style={{ color: '#2c3e50', margin: 0 }}>Visão Geral do Negócio</h1>
         
-        {/* Toggle UI */}
-        <div style={{ display: 'flex', backgroundColor: '#e0e6ed', padding: '4px', borderRadius: '8px' }}>
-          <button 
-            onClick={() => setVisaoAtiva('estoque')} 
-            style={{ ...styles.toggleBtn, backgroundColor: visaoAtiva === 'estoque' ? '#0288D1' : 'transparent', color: visaoAtiva === 'estoque' ? 'white' : '#7f8c8d' }}>
-            Armazém
+        {/* BOTÕES DE EXPORTAÇÃO */}
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button onClick={exportarExcel} style={styles.btnExcel}>
+            📊 Relatório Excel
           </button>
-          <button 
-            onClick={() => setVisaoAtiva('vendas')} 
-            style={{ ...styles.toggleBtn, backgroundColor: visaoAtiva === 'vendas' ? '#27ae60' : 'transparent', color: visaoAtiva === 'vendas' ? 'white' : '#7f8c8d' }}>
-            Financeiro
+          <button onClick={exportarPDF} style={styles.btnPDF}>
+            📄 Relatório PDF
           </button>
         </div>
+      </div>
+
+      {/* Toggle UI */}
+      <div style={{ display: 'flex', backgroundColor: '#e0e6ed', padding: '4px', borderRadius: '8px', marginBottom: '25px', width: 'fit-content' }}>
+        <button 
+          onClick={() => setVisaoAtiva('estoque')} 
+          style={{ ...styles.toggleBtn, backgroundColor: visaoAtiva === 'estoque' ? '#0288D1' : 'transparent', color: visaoAtiva === 'estoque' ? 'white' : '#7f8c8d' }}>
+          Armazém
+        </button>
+        <button 
+          onClick={() => setVisaoAtiva('vendas')} 
+          style={{ ...styles.toggleBtn, backgroundColor: visaoAtiva === 'vendas' ? '#27ae60' : 'transparent', color: visaoAtiva === 'vendas' ? 'white' : '#7f8c8d' }}>
+          Financeiro
+        </button>
       </div>
 
       {visaoAtiva === 'estoque' && (
@@ -147,9 +244,13 @@ export default function Dashboard() {
   );
 }
 
-const styles = {
+const styles: { [key: string]: React.CSSProperties } = {
   card: { backgroundColor: 'white', padding: '25px', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' },
   cardTitulo: { margin: 0, fontSize: '14px', color: '#7f8c8d', textTransform: 'uppercase' as const, letterSpacing: '1px' },
   cardValor: { margin: '10px 0 0 0', fontSize: '36px', fontWeight: '900' },
-  toggleBtn: { padding: '8px 20px', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s', fontSize: '14px' }
+  toggleBtn: { padding: '8px 20px', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s', fontSize: '14px' },
+  
+  // ESTILOS DOS NOVOS BOTÕES
+  btnExcel: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 5px rgba(39, 174, 96, 0.3)' },
+  btnPDF: { backgroundColor: '#e74c3c', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 5px rgba(231, 76, 60, 0.3)' }
 };

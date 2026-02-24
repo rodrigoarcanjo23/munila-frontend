@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export default function Estoque() {
   const [inventario, setInventario] = useState<any[]>([]);
@@ -53,7 +56,7 @@ export default function Estoque() {
 
   function abrirModal(item: any) {
     setItemSelecionado(item);
-    if (isEstoque && !isAdmin) setFormTipo('Entrada');
+    if (isEstoque && !isAdmin) setFormTipo('Entrada_Interna');
     else setFormTipo('Saida_Venda');
     setFormQuantidade('1');
     setFormCliente('');
@@ -70,7 +73,6 @@ export default function Estoque() {
       if (formTipo !== 'Ajuste' || qtdNum < 0) return alert("Aviso: Digite uma quantidade válida.");
     }
 
-    // A validação agora abrange qualquer tipo de "Saida"
     if ((formTipo.includes('Saida')) && qtdNum > itemSelecionado.quantidade) {
       return alert(`Aviso: O saldo atual é de apenas ${itemSelecionado.quantidade} unidades.`);
     }
@@ -132,11 +134,79 @@ export default function Estoque() {
 
   inventarioFiltrado.sort((a, b) => a.produto.nome.localeCompare(b.produto.nome));
 
+  // ==========================================
+  // EXPORTAR PARA EXCEL (ARMAZÉM)
+  // ==========================================
+  const exportarExcel = () => {
+    if (inventarioFiltrado.length === 0) return alert("Não há dados para exportar.");
+
+    const dadosFormatados = inventarioFiltrado.map(item => ({
+      'Produto': item.produto.nome,
+      'SKU': item.produto.sku,
+      'Categoria': item.produto.categoria?.nome || '-',
+      'Tipo': item.produto.tipo === 'MATERIA_PRIMA' ? 'M. Prima' : 'Acabado',
+      'Saldo em Estoque': item.quantidade
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(dadosFormatados);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Posição de Estoque");
+    XLSX.writeFile(workbook, "Relatorio_Armazem_ViaPro.xlsx");
+  };
+
+  // ==========================================
+  // EXPORTAR PARA PDF (ARMAZÉM)
+  // ==========================================
+  const exportarPDF = () => {
+    if (inventarioFiltrado.length === 0) return alert("Não há dados para exportar.");
+
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.setTextColor(44, 62, 80);
+    doc.text("Relatório de Posição de Estoque - ViaPro ERP", 14, 22);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(127, 140, 141);
+    doc.text(`Emitido em: ${new Date().toLocaleString('pt-BR')}`, 14, 30);
+
+    const colunas = ["Produto", "SKU", "Categoria", "Tipo", "Saldo"];
+    const linhas = inventarioFiltrado.map(item => [
+      item.produto.nome,
+      item.produto.sku,
+      item.produto.categoria?.nome || '-',
+      item.produto.tipo === 'MATERIA_PRIMA' ? 'M. Prima' : 'Acabado',
+      item.quantidade.toString()
+    ]);
+
+    autoTable(doc, {
+      head: [colunas],
+      body: linhas,
+      startY: 35,
+      styles: { fontSize: 9, cellPadding: 3 },
+      headStyles: { fillColor: [2, 136, 209], textColor: [255, 255, 255] },
+      alternateRowStyles: { fillColor: [245, 247, 250] } 
+    });
+
+    doc.save("Relatorio_Armazem_ViaPro.pdf");
+  };
+
   if (carregando) return <div>Atualizando armazém...</div>;
 
   return (
     <div>
-      <h1 style={{ color: '#2c3e50', marginTop: 0, marginBottom: '20px' }}>Gestão de Armazém</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h1 style={{ color: '#2c3e50', margin: 0 }}>Gestão de Armazém</h1>
+        
+        {/* BOTÕES DE EXPORTAÇÃO */}
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button onClick={exportarExcel} style={styles.btnExcel}>
+            📊 Exportar Excel
+          </button>
+          <button onClick={exportarPDF} style={styles.btnPDF}>
+            📄 Exportar PDF
+          </button>
+        </div>
+      </div>
 
       {/* BARRA DE FERRAMENTAS (Filtros) */}
       <div style={styles.toolbar}>
@@ -216,13 +286,10 @@ export default function Estoque() {
               <div>
                 <label style={styles.label}>Tipo de Operação</label>
                 <select style={styles.input} value={formTipo} onChange={(e) => setFormTipo(e.target.value)}>
-                  {/* OPÇÕES ANTIGAS */}
                   {(isAdmin || isEstoque) && <option value="Entrada">Entrada de Mercadoria</option>}
                   {(isAdmin || isVendedor) && <option value="Saida_Venda">Saída P/ Venda</option>}
                   {(isAdmin || isVendedor) && <option value="Saida_Demonstracao">Saída P/ Demonstração</option>}
                   {(isAdmin || isEstoque) && <option value="Ajuste">Ajuste Manual de Inventário</option>}
-                  
-                  {/* NOVAS OPÇÕES DO CLIENTE */}
                   {(isAdmin || isEstoque) && <option value="Entrada_Interna">Entrada Interna</option>}
                   {(isAdmin || isEstoque) && <option value="Saida_Interna">Saída Interna</option>}
                 </select>
@@ -280,5 +347,9 @@ const styles: { [key: string]: React.CSSProperties } = {
   label: { display: 'block', fontSize: '13px', fontWeight: 'bold', color: '#34495e', marginBottom: '5px' },
   input: { width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '15px', boxSizing: 'border-box' },
   btnConfirmar: { backgroundColor: '#0288D1', color: 'white', padding: '15px', borderRadius: '8px', border: 'none', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
-  btnAlerta: { backgroundColor: '#f39c12', color: 'white', padding: '15px', borderRadius: '8px', border: 'none', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' }
+  btnAlerta: { backgroundColor: '#f39c12', color: 'white', padding: '15px', borderRadius: '8px', border: 'none', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
+
+  // ESTILOS DOS NOVOS BOTÕES
+  btnExcel: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 5px rgba(39, 174, 96, 0.3)' },
+  btnPDF: { backgroundColor: '#e74c3c', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 5px rgba(231, 76, 60, 0.3)' }
 };
