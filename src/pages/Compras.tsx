@@ -3,6 +3,7 @@ import { api } from '../api';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { toast } from 'react-toastify'; // <-- IMPORTAÇÃO
 
 export default function Compras() {
   const [fornecedores, setFornecedores] = useState<any[]>([]);
@@ -10,9 +11,7 @@ export default function Compras() {
   const [pedidos, setPedidos] = useState<any[]>([]); 
   const [carregando, setCarregando] = useState(true);
 
-  // Essencial para enviar a assinatura da Auditoria!
   const [usuarioLogado, setUsuarioLogado] = useState<any>(null);
-
   const [modalVisivel, setModalVisivel] = useState(false);
 
   const [fornecedorId, setFornecedorId] = useState('');
@@ -23,7 +22,6 @@ export default function Compras() {
 
   async function carregarDados() {
     setCarregando(true);
-    
     const userSalvo = localStorage.getItem('@Munila:user');
     if (userSalvo) setUsuarioLogado(JSON.parse(userSalvo));
 
@@ -31,22 +29,20 @@ export default function Compras() {
       try {
         const resFornecedores = await api.get('/fornecedores');
         setFornecedores(resFornecedores.data);
-      } catch (e) { console.error("Erro ao carregar fornecedores"); }
+      } catch (e) { toast.error("Erro ao carregar fornecedores"); } // TOAST
 
       try {
         const resProdutos = await api.get('/produtos');
         const materiasPrimas = resProdutos.data.filter((p: any) => p.tipo === 'MATERIA_PRIMA');
         setProdutos(materiasPrimas.length > 0 ? materiasPrimas : resProdutos.data);
-      } catch (e) { console.error("Erro ao carregar produtos"); }
+      } catch (e) { toast.error("Erro ao carregar produtos"); } // TOAST
 
       try {
         const resPedidos = await api.get('/pedidos-compra');
         setPedidos(resPedidos.data);
-      } catch (e) { console.error("Erro ao carregar pedidos"); }
+      } catch (e) { toast.error("Erro ao carregar pedidos"); } // TOAST
 
-    } finally { 
-      setCarregando(false); 
-    }
+    } finally { setCarregando(false); }
   }
 
   useEffect(() => { carregarDados(); }, []);
@@ -59,103 +55,68 @@ export default function Compras() {
   async function salvarPedido(e: React.FormEvent) {
     e.preventDefault();
     if (!fornecedorId || !produtoId || !quantidade) {
-      return alert("Por favor, selecione o Fornecedor, o Produto e a Quantidade.");
+      return toast.warn("Por favor, selecione o Fornecedor, o Produto e a Quantidade."); // TOAST
     }
 
     const custoTotal = Number(quantidade) * Number(custoEstimado.replace(',', '.') || 0);
 
     try {
       await api.post('/pedidos-compra', {
-        fornecedorId,
-        produtoId,
-        quantidade,
-        custoTotal,
+        fornecedorId, produtoId, quantidade, custoTotal,
         dataPrevisao: previsaoEntrega ? previsaoEntrega + "T00:00:00.000Z" : undefined 
       });
       setModalVisivel(false);
       carregarDados();
-      alert("Pedido de Compra emitido, e-mails disparados e registo guardado com sucesso!");
+      toast.success("Pedido de Compra emitido e e-mails disparados com sucesso!"); // TOAST
     } catch (error: any) { 
       const erroReal = error.response?.data?.error || error.message;
-      alert(`Erro do Servidor: ${erroReal}\n\nVerifique se o Back-end foi reiniciado.`); 
+      toast.error(`Erro do Servidor: ${erroReal}`); // TOAST
     }
   }
 
   async function marcarComoRecebido(id: string) {
-    if (!usuarioLogado) return alert("Erro de segurança: A sua sessão expirou.");
+    if (!usuarioLogado) return toast.error("Erro de segurança: A sua sessão expirou."); // TOAST
 
     if (window.confirm("Confirmar a receção? O estoque do Armazém vai ser atualizado automaticamente!")) {
       try {
-        await api.put(`/pedidos-compra/${id}/receber`, {
-          usuarioId: usuarioLogado.id // Passa quem recebeu a mercadoria para gravar no histórico
-        });
-        
+        await api.put(`/pedidos-compra/${id}/receber`, { usuarioId: usuarioLogado.id });
         carregarDados();
-        alert("Mercadoria recebida e estoque atualizado com sucesso!");
+        toast.success("Mercadoria recebida e estoque atualizado com sucesso!"); // TOAST
       } catch (error: any) { 
         const erroReal = error.response?.data?.error || error.message;
-        alert(`Erro ao receber mercadoria: ${erroReal}`); 
+        toast.error(`Erro ao receber mercadoria: ${erroReal}`); // TOAST
       }
     }
   }
 
-  // ==========================================
-  // EXPORTAR PARA EXCEL
-  // ==========================================
   const exportarExcel = () => {
-    if (pedidos.length === 0) return alert("Não há dados para exportar.");
-
+    if (pedidos.length === 0) return toast.warn("Não há dados para exportar."); // TOAST
     const dadosFormatados = pedidos.map(item => ({
-      'Código': item.codigo || '-',
-      'Data do Pedido': new Date(item.createdAt).toLocaleDateString('pt-BR'),
-      'Fornecedor': item.fornecedor?.nomeEmpresa || 'Desconhecido',
-      'Produto/Insumo': item.produto?.nome || 'Desconhecido',
-      'Quantidade': item.quantidade,
-      'Custo Total (R$)': item.custoTotal.toFixed(2).replace('.', ','),
-      'Status': item.status
+      'Código': item.codigo || '-', 'Data do Pedido': new Date(item.createdAt).toLocaleDateString('pt-BR'),
+      'Fornecedor': item.fornecedor?.nomeEmpresa || 'Desconhecido', 'Produto/Insumo': item.produto?.nome || 'Desconhecido',
+      'Quantidade': item.quantidade, 'Custo Total (R$)': item.custoTotal.toFixed(2).replace('.', ','), 'Status': item.status
     }));
-
     const worksheet = XLSX.utils.json_to_sheet(dadosFormatados);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Pedidos de Compra");
     XLSX.writeFile(workbook, "Relatorio_Compras_ViaPro.xlsx");
   };
 
-  // ==========================================
-  // EXPORTAR PARA PDF
-  // ==========================================
   const exportarPDF = () => {
-    if (pedidos.length === 0) return alert("Não há dados para exportar.");
-
+    if (pedidos.length === 0) return toast.warn("Não há dados para exportar."); // TOAST
     const doc = new jsPDF();
-    doc.setFontSize(18);
-    doc.setTextColor(44, 62, 80);
-    doc.text("Relatório de Pedidos de Compra - ViaPro ERP", 14, 22);
-    
-    doc.setFontSize(10);
-    doc.setTextColor(127, 140, 141);
-    doc.text(`Emitido em: ${new Date().toLocaleString('pt-BR')}`, 14, 30);
-
+    doc.setFontSize(18); doc.setTextColor(44, 62, 80); doc.text("Relatório de Pedidos de Compra", 14, 22);
+    doc.setFontSize(10); doc.setTextColor(127, 140, 141); doc.text(`Emitido em: ${new Date().toLocaleString('pt-BR')}`, 14, 30);
     const colunas = ["Código", "Data", "Fornecedor", "Produto", "Qtd", "Custo Total", "Status"];
     const linhas = pedidos.map(item => [
-      item.codigo || '-',
-      new Date(item.createdAt).toLocaleDateString('pt-BR'),
-      item.fornecedor?.nomeEmpresa || '-',
-      item.produto?.nome || '-',
-      item.quantidade.toString(),
-      `R$ ${item.custoTotal.toFixed(2).replace('.', ',')}`,
-      item.status
+      item.codigo || '-', new Date(item.createdAt).toLocaleDateString('pt-BR'),
+      item.fornecedor?.nomeEmpresa || '-', item.produto?.nome || '-', item.quantidade.toString(),
+      `R$ ${item.custoTotal.toFixed(2).replace('.', ',')}`, item.status
     ]);
-
     autoTable(doc, {
-      head: [colunas],
-      body: linhas,
-      startY: 35,
-      styles: { fontSize: 8, cellPadding: 3 },
-      headStyles: { fillColor: [230, 126, 34], textColor: [255, 255, 255] }, // Laranja para combinar com o tema de compras
-      alternateRowStyles: { fillColor: [253, 246, 237] } 
+      head: [colunas], body: linhas, startY: 35, styles: { fontSize: 8, cellPadding: 3 },
+      headStyles: { fillColor: [230, 126, 34], textColor: [255, 255, 255] }, alternateRowStyles: { fillColor: [253, 246, 237] } 
     });
-
     doc.save("Relatorio_Compras_ViaPro.pdf");
   };
 
@@ -165,18 +126,10 @@ export default function Compras() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <h1 style={{ color: '#2c3e50', margin: 0 }}>Pedidos de Compra</h1>
-        
-        {/* BOTÕES DE EXPORTAÇÃO E NOVO PEDIDO */}
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button onClick={exportarExcel} style={styles.btnExcel}>
-            📊 Exportar Excel
-          </button>
-          <button onClick={exportarPDF} style={styles.btnPDF}>
-            📄 Exportar PDF
-          </button>
-          <button onClick={abrirModalNovo} style={styles.btnPrincipal}>
-            + Emitir Pedido
-          </button>
+          <button onClick={exportarExcel} style={styles.btnExcel}>📊 Exportar Excel</button>
+          <button onClick={exportarPDF} style={styles.btnPDF}>📄 Exportar PDF</button>
+          <button onClick={abrirModalNovo} style={styles.btnPrincipal}>+ Emitir Pedido</button>
         </div>
       </div>
 
@@ -200,18 +153,13 @@ export default function Compras() {
             )}
             {pedidos.map((item) => (
               <tr key={item.id} style={styles.tr}>
-                <td style={styles.td}>
-                  {/* Badge de Código Sequencial */}
-                  <span style={styles.badgeCodigo}>{item.codigo || '-'}</span>
-                </td>
+                <td style={styles.td}><span style={styles.badgeCodigo}>{item.codigo || '-'}</span></td>
                 <td style={styles.td}>{new Date(item.createdAt).toLocaleDateString('pt-BR')}</td>
                 <td style={styles.td}><strong>{item.fornecedor?.nomeEmpresa}</strong></td>
                 <td style={styles.td}>{item.produto?.nome}</td>
                 <td style={{...styles.td, textAlign: 'center', fontWeight: 'bold'}}>{item.quantidade}</td>
                 <td style={{...styles.td, color: '#e74c3c', fontWeight: 'bold'}}>R$ {item.custoTotal.toFixed(2).replace('.', ',')}</td>
-                <td style={styles.td}>
-                  <span style={item.status === 'Pendente' ? styles.badgeAmarelo : styles.badgeVerde}>{item.status}</span>
-                </td>
+                <td style={styles.td}><span style={item.status === 'Pendente' ? styles.badgeAmarelo : styles.badgeVerde}>{item.status}</span></td>
                 <td style={{...styles.td, textAlign: 'center'}}>
                   {item.status === 'Pendente' ? (
                     <button onClick={() => marcarComoRecebido(item.id)} style={styles.btnAcao}>Receber Mercadoria</button>
@@ -232,7 +180,6 @@ export default function Compras() {
               <h2 style={{ margin: 0, color: '#2c3e50' }}>Emitir Pedido de Compra</h2>
               <button onClick={() => setModalVisivel(false)} style={styles.btnFechar}>✖</button>
             </div>
-
             <form onSubmit={salvarPedido} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <div>
                 <label style={styles.label}>Fornecedor Destinatário *</label>
@@ -240,18 +187,14 @@ export default function Compras() {
                   <option value="">Selecione um fornecedor...</option>
                   {fornecedores.map(f => <option key={f.id} value={f.id}>{f.nomeEmpresa}</option>)}
                 </select>
-                {fornecedores.length === 0 && <span style={{fontSize: '11px', color: '#e74c3c'}}>*Cadastre um fornecedor no menu lateral primeiro.</span>}
               </div>
-
               <div>
                 <label style={styles.label}>Produto / Insumo *</label>
                 <select style={styles.input} value={produtoId} onChange={e => setProdutoId(e.target.value)} required>
                   <option value="">Selecione um produto/insumo...</option>
                   {produtos.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
                 </select>
-                {produtos.length === 0 && <span style={{fontSize: '11px', color: '#e74c3c'}}>*Nenhum produto cadastrado no catálogo.</span>}
               </div>
-
               <div style={{ display: 'flex', gap: '15px' }}>
                 <div style={{ flex: 1 }}>
                   <label style={styles.label}>Quantidade a Comprar *</label>
@@ -262,12 +205,10 @@ export default function Compras() {
                   <input type="text" style={styles.input} value={custoEstimado} onChange={e => setCustoEstimado(e.target.value)} placeholder="0,00" />
                 </div>
               </div>
-
               <div>
                 <label style={styles.label}>Data de Entrega (Previsão)</label>
                 <input type="date" style={styles.input} value={previsaoEntrega} onChange={e => setPrevisaoEntrega(e.target.value)} />
               </div>
-
               <button type="submit" style={styles.btnSalvar}>Gerar Pedido</button>
             </form>
           </div>
@@ -286,14 +227,10 @@ const styles: { [key: string]: React.CSSProperties } = {
   badgeAmarelo: { backgroundColor: '#fef9e7', color: '#f39c12', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' },
   badgeVerde: { backgroundColor: '#eafaf1', color: '#27ae60', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' },
   badgeCodigo: { backgroundColor: '#f1f2f6', color: '#2c3e50', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', border: '1px solid #ddd' },
-  
   btnPrincipal: { backgroundColor: '#e67e22', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' },
   btnAcao: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' },
-  
-  // ESTILOS DOS BOTÕES DE EXPORTAÇÃO
   btnExcel: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 5px rgba(39, 174, 96, 0.3)' },
   btnPDF: { backgroundColor: '#e74c3c', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 5px rgba(231, 76, 60, 0.3)' },
-
   modalOverlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
   modalContent: { backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '100%', maxWidth: '500px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' },
   btnFechar: { background: 'none', border: 'none', fontSize: '20px', color: '#e74c3c', cursor: 'pointer' },

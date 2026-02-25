@@ -1,23 +1,24 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { api } from '../api';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { toast } from 'react-toastify'; // <-- IMPORTAÇÃO
 
 export default function Estoque() {
+  const location = useLocation();
   const [inventario, setInventario] = useState<any[]>([]);
   const [categorias, setCategorias] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
   
   const [usuarioLogado, setUsuarioLogado] = useState<any>(null);
-
   const [busca, setBusca] = useState('');
   const [categoriaSelecionada, setCategoriaSelecionada] = useState('');
+  const [mostrarCriticos, setMostrarCriticos] = useState(location.state?.filtrarCriticos || false);
 
   const [modalVisivel, setModalVisivel] = useState(false);
   const [itemSelecionado, setItemSelecionado] = useState<any>(null);
-  
-  // ATUALIZADO: Estado inicial com o novo nome
   const [formTipo, setFormTipo] = useState('Entrada de mercadoria');
   const [formQuantidade, setFormQuantidade] = useState('1');
   const [formObservacao, setFormObservacao] = useState('');
@@ -26,16 +27,28 @@ export default function Estoque() {
   async function carregarDados() {
     setCarregando(true);
     try {
-      const [resEstoque, resCategorias] = await Promise.all([
-        api.get('/estoque'), api.get('/categorias')
+      const [resEstoque, resCategorias, resProdutos] = await Promise.all([
+        api.get('/estoque'), api.get('/categorias'), api.get('/produtos')
       ]);
-      const apenasDisponiveis = resEstoque.data.filter((item: any) => item.status === 'Disponível');
+      
+      const produtosMap: any = {};
+      resProdutos.data.forEach((p: any) => { produtosMap[p.id] = p; });
+
+      const apenasDisponiveis = resEstoque.data
+        .filter((item: any) => item.status === 'Disponível')
+        .map((item: any) => ({
+          ...item,
+          produto: produtosMap[item.produtoId] || item.produto
+        }));
+
       setInventario(apenasDisponiveis);
       setCategorias(resCategorias.data);
       
       const userSalvo = localStorage.getItem('@Munila:user');
       if (userSalvo) setUsuarioLogado(JSON.parse(userSalvo));
-    } catch (error) { alert("Erro ao conectar com o servidor."); } 
+    } catch (error) { 
+      toast.error("Erro ao conectar com o servidor."); // TOAST
+    } 
     finally { setCarregando(false); }
   }
 
@@ -55,12 +68,11 @@ export default function Estoque() {
     
     const qtdNum = Number(formQuantidade);
     if (qtdNum <= 0 || isNaN(qtdNum)) {
-      return alert("Aviso: Digite uma quantidade válida.");
+      return toast.warn("Aviso: Digite uma quantidade válida."); // TOAST
     }
 
     setEnviando(true);
     try {
-      // Usa a Nova Super Rota criada no Back-end!
       await api.post('/movimentacoes/operacao', {
         produtoId: itemSelecionado.produto.id,
         usuarioId: usuarioLogado.id,
@@ -70,11 +82,11 @@ export default function Estoque() {
         observacao: formObservacao
       });
       
-      alert("Operação registada com sucesso!");
+      toast.success("Operação registada com sucesso no Armazém!"); // TOAST
       setModalVisivel(false);
       carregarDados();
     } catch (error: any) { 
-      alert("Erro ao registar: " + (error.response?.data?.error || "Verifique o saldo no armazém.")); 
+      toast.error("Erro ao registar: " + (error.response?.data?.error || "Verifique o saldo no armazém.")); // TOAST
     } 
     finally { setEnviando(false); }
   }
@@ -84,20 +96,16 @@ export default function Estoque() {
     item.produto.sku.toLowerCase().includes(busca.toLowerCase())
   );
 
-  if (categoriaSelecionada) {
-    inventarioFiltrado = inventarioFiltrado.filter(item => item.produto.categoriaId === categoriaSelecionada);
-  }
+  if (categoriaSelecionada) inventarioFiltrado = inventarioFiltrado.filter(item => item.produto.categoriaId === categoriaSelecionada);
+  if (mostrarCriticos) inventarioFiltrado = inventarioFiltrado.filter(item => item.quantidade < 10);
 
   inventarioFiltrado.sort((a, b) => a.produto.nome.localeCompare(b.produto.nome));
 
   const exportarExcel = () => {
-    if (inventarioFiltrado.length === 0) return alert("Não há dados para exportar.");
+    if (inventarioFiltrado.length === 0) return toast.warn("Não há dados para exportar."); // TOAST
     const dadosFormatados = inventarioFiltrado.map(item => ({
-      'Produto': item.produto.nome,
-      'SKU': item.produto.sku,
-      'Categoria': item.produto.categoria?.nome || '-',
-      'Tipo': item.produto.tipo === 'MATERIA_PRIMA' ? 'M. Prima' : 'Acabado',
-      'Saldo em Estoque': item.quantidade
+      'Produto': item.produto.nome, 'SKU': item.produto.sku, 'Endereço': item.produto.enderecoLocalizacao || '-',
+      'Lote': item.produto.lote || '-', 'Fornecedor': item.produto.fornecedor?.nomeEmpresa || '-', 'Saldo em Estoque': item.quantidade
     }));
     const worksheet = XLSX.utils.json_to_sheet(dadosFormatados);
     const workbook = XLSX.utils.book_new();
@@ -106,21 +114,17 @@ export default function Estoque() {
   };
 
   const exportarPDF = () => {
-    if (inventarioFiltrado.length === 0) return alert("Não há dados para exportar.");
+    if (inventarioFiltrado.length === 0) return toast.warn("Não há dados para exportar."); // TOAST
     const doc = new jsPDF();
-    doc.setFontSize(18);
-    doc.setTextColor(44, 62, 80);
-    doc.text("Relatório de Posição de Estoque - ViaPro ERP", 14, 22);
-    doc.setFontSize(10);
-    doc.setTextColor(127, 140, 141);
-    doc.text(`Emitido em: ${new Date().toLocaleString('pt-BR')}`, 14, 30);
-    const colunas = ["Produto", "SKU", "Categoria", "Tipo", "Saldo"];
+    doc.setFontSize(18); doc.setTextColor(44, 62, 80); doc.text("Relatório de Posição de Estoque", 14, 22);
+    doc.setFontSize(10); doc.setTextColor(127, 140, 141); doc.text(`Emitido em: ${new Date().toLocaleString('pt-BR')}`, 14, 30);
+    const colunas = ["Produto", "SKU", "Endereço", "Lote", "Fornecedor", "Saldo"];
     const linhas = inventarioFiltrado.map(item => [
-      item.produto.nome, item.produto.sku, item.produto.categoria?.nome || '-',
-      item.produto.tipo === 'MATERIA_PRIMA' ? 'M. Prima' : 'Acabado', item.quantidade.toString()
+      item.produto.nome, item.produto.sku, item.produto.enderecoLocalizacao || '-',
+      item.produto.lote || '-', item.produto.fornecedor?.nomeEmpresa || '-', item.quantidade.toString()
     ]);
     autoTable(doc, {
-      head: [colunas], body: linhas, startY: 35, styles: { fontSize: 9, cellPadding: 3 },
+      head: [colunas], body: linhas, startY: 35, styles: { fontSize: 8, cellPadding: 3 },
       headStyles: { fillColor: [2, 136, 209], textColor: [255, 255, 255] }, alternateRowStyles: { fillColor: [245, 247, 250] } 
     });
     doc.save("Relatorio_Armazem_ViaPro.pdf");
@@ -144,6 +148,16 @@ export default function Estoque() {
           <option value="">Todas as Categorias</option>
           {categorias.map(cat => <option key={cat.id} value={cat.id}>{cat.nome}</option>)}
         </select>
+        
+        <label style={{ 
+          display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', 
+          backgroundColor: mostrarCriticos ? '#fdf2e9' : 'white', 
+          padding: '10px 15px', borderRadius: '8px', border: `1px solid ${mostrarCriticos ? '#e74c3c' : '#ddd'}`, 
+          color: mostrarCriticos ? '#e74c3c' : '#7f8c8d', fontWeight: 'bold', fontSize: '14px', transition: '0.2s' 
+        }}>
+          <input type="checkbox" checked={mostrarCriticos} onChange={e => setMostrarCriticos(e.target.checked)} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
+          Apenas Críticos (abaixo de 10)
+        </label>
       </div>
 
       <div style={styles.tableContainer}>
@@ -152,36 +166,28 @@ export default function Estoque() {
             <tr>
               <th style={styles.th}>Produto</th>
               <th style={styles.th}>SKU</th>
-              <th style={styles.th}>Categoria</th>
-              <th style={styles.th}>Tipo</th>
+              <th style={styles.th}>Endereço</th>
+              <th style={styles.th}>Lote</th>
+              <th style={styles.th}>Fornecedor</th>
               <th style={{...styles.th, textAlign: 'center'}}>Saldo</th>
               <th style={{...styles.th, textAlign: 'center'}}>Ação</th>
             </tr>
           </thead>
           <tbody>
             {inventarioFiltrado.length === 0 && (
-              <tr><td colSpan={6} style={{textAlign: 'center', padding: '20px', color: '#7f8c8d'}}>Nenhum produto encontrado.</td></tr>
+              <tr><td colSpan={7} style={{textAlign: 'center', padding: '20px', color: '#7f8c8d'}}>Nenhum produto encontrado.</td></tr>
             )}
             {inventarioFiltrado.map((item) => {
               const ehCritico = item.quantidade < 10;
               return (
                 <tr key={item.id} style={styles.tr}>
-                  <td style={styles.td}>
-                    <strong>{item.produto.nome}</strong>
-                    {/* Exibe o Endereço R-P-C direto na tabela de estoque */}
-                    {item.produto.enderecoLocalizacao && <div style={{fontSize: '11px', color: '#7f8c8d', marginTop: '4px'}}>Endereço: {item.produto.enderecoLocalizacao}</div>}
-                  </td>
+                  <td style={styles.td}><strong>{item.produto.nome}</strong></td>
                   <td style={styles.td}><span style={styles.badgeCinza}>{item.produto.sku}</span></td>
-                  <td style={styles.td}>{item.produto.categoria?.nome}</td>
-                  <td style={styles.td}>
-                    <span style={item.produto.tipo === 'MATERIA_PRIMA' ? styles.badgeAzul : styles.badgeAmarelo}>
-                      {item.produto.tipo === 'MATERIA_PRIMA' ? 'M. Prima' : 'Acabado'}
-                    </span>
-                  </td>
+                  <td style={styles.td}>{item.produto.enderecoLocalizacao || '-'}</td>
+                  <td style={styles.td}>{item.produto.lote || '-'}</td>
+                  <td style={styles.td}>{item.produto.fornecedor?.nomeEmpresa || '-'}</td>
                   <td style={{...styles.td, textAlign: 'center'}}>
-                    <span style={{ fontSize: '18px', fontWeight: 'bold', color: ehCritico ? '#e74c3c' : '#27ae60' }}>
-                      {item.quantidade}
-                    </span>
+                    <span style={{ fontSize: '18px', fontWeight: 'bold', color: ehCritico ? '#e74c3c' : '#27ae60' }}>{item.quantidade}</span>
                   </td>
                   <td style={{...styles.td, textAlign: 'center'}}>
                     <button onClick={() => abrirModal(item)} style={styles.btnAcao}>Gerenciar</button>
@@ -207,7 +213,6 @@ export default function Estoque() {
               <div>
                 <label style={styles.label}>Nova Ação de Inventário</label>
                 <select style={styles.input} value={formTipo} onChange={(e) => setFormTipo(e.target.value)}>
-                  {/* AS 6 OPÇÕES EXATAS SOLICITADAS PELA VIAPRO */}
                   <option value="Entrada de mercadoria">📥 Entrada de mercadoria</option>
                   <option value="Saída de mercadoria">📤 Saída de mercadoria</option>
                   <option value="Devolução VIAPRO">🔄 Devolução VIAPRO</option>
@@ -248,8 +253,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   tr: { borderBottom: '1px solid #ecf0f1', transition: '0.2s' },
   td: { padding: '15px 20px', color: '#2c3e50', fontSize: '14px', verticalAlign: 'middle' },
   badgeCinza: { backgroundColor: '#f1f2f6', color: '#7f8c8d', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' },
-  badgeAmarelo: { backgroundColor: '#fef9e7', color: '#f39c12', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' },
-  badgeAzul: { backgroundColor: '#e1f5fe', color: '#0288D1', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' },
   btnAcao: { backgroundColor: '#0288D1', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' },
   modalOverlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
   modalContent: { backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '100%', maxWidth: '500px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' },

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom'; // <-- IMPORTAÇÃO NOVA
 import { api } from '../api';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 export default function Dashboard() {
+  const navigate = useNavigate(); // <-- FERRAMENTA DE NAVEGAÇÃO
   const [visaoAtiva, setVisaoAtiva] = useState<'estoque' | 'vendas'>('estoque');
   const [dadosEstoque, setDadosEstoque] = useState<any>({ total: 0, criticos: 0, topProdutos: [] });
   const [dadosVendas, setDadosVendas] = useState<any>({ faturamentoMes: 0, topClientes: [] });
@@ -14,9 +16,7 @@ export default function Dashboard() {
     async function carregarDashboard() {
       try {
         const [resEstoque, resMovimentacoes, resProdutos] = await Promise.all([
-          api.get('/estoque'),
-          api.get('/movimentacoes'),
-          api.get('/produtos')
+          api.get('/estoque'), api.get('/movimentacoes'), api.get('/produtos')
         ]);
         
         const estoque = resEstoque.data;
@@ -26,7 +26,6 @@ export default function Dashboard() {
         const precosMap: Record<string, number> = {};
         produtos.forEach((p: any) => { precosMap[p.id] = p.precoVenda || 0; });
 
-        // 1. DADOS DE ESTOQUE
         let total = 0; let criticos = 0;
         estoque.forEach((i: any) => {
           if (i.status === 'Disponível') {
@@ -37,7 +36,6 @@ export default function Dashboard() {
         const topProd = [...estoque].filter(i => i.status === 'Disponível').sort((a, b) => b.quantidade - a.quantidade).slice(0, 5);
         setDadosEstoque({ total, criticos, topProdutos: topProd });
 
-        // 2. DADOS FINANCEIROS
         const agora = new Date();
         let faturamentoMes = 0;
         const mapaClientes: Record<string, number> = {};
@@ -46,10 +44,8 @@ export default function Dashboard() {
           if (mov.tipoAcao === 'Saida_Venda') {
             const dataMov = new Date(mov.dataHora);
             if (dataMov.getMonth() === agora.getMonth() && dataMov.getFullYear() === agora.getFullYear()) {
-              
               const precoVendaItem = precosMap[mov.produtoId] || 0;
               const valorDaVenda = mov.quantidade * precoVendaItem;
-              
               faturamentoMes += valorDaVenda;
 
               let nomeCliente = "Balcão";
@@ -75,17 +71,10 @@ export default function Dashboard() {
     carregarDashboard();
   }, []);
 
-  const formatarReal = (valor: number) => {
-    return Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
-  };
+  const formatarReal = (valor: number) => Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
 
-  // ==========================================
-  // EXPORTAR PARA EXCEL (DASHBOARD COMPLETO)
-  // ==========================================
   const exportarExcel = () => {
     const workbook = XLSX.utils.book_new();
-
-    // Aba 1: Resumo do Armazém
     const dadosE = [
       { Indicador: 'Total de Itens no Armazém', Valor: dadosEstoque.total },
       { Indicador: 'Itens em Estoque Crítico', Valor: dadosEstoque.criticos },
@@ -96,7 +85,6 @@ export default function Dashboard() {
     const wsEstoque = XLSX.utils.json_to_sheet(dadosE);
     XLSX.utils.book_append_sheet(workbook, wsEstoque, "Resumo Armazém");
 
-    // Aba 2: Resumo Financeiro
     const dadosF = [
       { Indicador: 'Faturamento do Mês', Valor: formatarReal(dadosVendas.faturamentoMes) },
       { Indicador: '', Valor: '' },
@@ -105,59 +93,33 @@ export default function Dashboard() {
     ];
     const wsFinanceiro = XLSX.utils.json_to_sheet(dadosF);
     XLSX.utils.book_append_sheet(workbook, wsFinanceiro, "Resumo Financeiro");
-
     XLSX.writeFile(workbook, "Relatorio_Gerencial_ViaPro.xlsx");
   };
 
-  // ==========================================
-  // EXPORTAR PARA PDF (DASHBOARD COMPLETO)
-  // ==========================================
   const exportarPDF = () => {
     const doc = new jsPDF();
-    
-    // Cabeçalho
-    doc.setFontSize(18);
-    doc.setTextColor(44, 62, 80);
-    doc.text("Relatório Gerencial - ViaPro ERP", 14, 22);
-    doc.setFontSize(10);
-    doc.setTextColor(127, 140, 141);
-    doc.text(`Emitido em: ${new Date().toLocaleString('pt-BR')}`, 14, 30);
+    doc.setFontSize(18); doc.setTextColor(44, 62, 80); doc.text("Relatório Gerencial - ViaPro ERP", 14, 22);
+    doc.setFontSize(10); doc.setTextColor(127, 140, 141); doc.text(`Emitido em: ${new Date().toLocaleString('pt-BR')}`, 14, 30);
 
-    // Seção 1: Armazém
-    doc.setFontSize(14);
-    doc.setTextColor(2, 136, 209); // Azul
-    doc.text("1. Resumo do Armazém", 14, 45);
-    
-    doc.setFontSize(11);
-    doc.setTextColor(44, 62, 80);
+    doc.setFontSize(14); doc.setTextColor(2, 136, 209); doc.text("1. Resumo do Armazém", 14, 45);
+    doc.setFontSize(11); doc.setTextColor(44, 62, 80);
     doc.text(`Itens Totais em Estoque: ${dadosEstoque.total}`, 14, 55);
     doc.text(`Alerta de Estoque Crítico: ${dadosEstoque.criticos} produtos`, 14, 62);
 
     autoTable(doc, {
-      startY: 68,
-      head: [["Top 5 Produtos (Maior Volume)", "Quantidade"]],
+      startY: 68, head: [["Top 5 Produtos (Maior Volume)", "Quantidade"]],
       body: dadosEstoque.topProdutos.map((p: any) => [p.produto.nome, `${p.quantidade} un`]),
-      styles: { fontSize: 10, cellPadding: 4 },
-      headStyles: { fillColor: [2, 136, 209] }
+      styles: { fontSize: 10, cellPadding: 4 }, headStyles: { fillColor: [2, 136, 209] }
     });
 
     const finalY = (doc as any).lastAutoTable.finalY || 68;
-
-    // Seção 2: Financeiro
-    doc.setFontSize(14);
-    doc.setTextColor(39, 174, 96); // Verde
-    doc.text("2. Resumo Financeiro (Mês Atual)", 14, finalY + 20);
-    
-    doc.setFontSize(11);
-    doc.setTextColor(44, 62, 80);
-    doc.text(`Faturamento Total: ${formatarReal(dadosVendas.faturamentoMes)}`, 14, finalY + 30);
+    doc.setFontSize(14); doc.setTextColor(39, 174, 96); doc.text("2. Resumo Financeiro (Mês Atual)", 14, finalY + 20);
+    doc.setFontSize(11); doc.setTextColor(44, 62, 80); doc.text(`Faturamento Total: ${formatarReal(dadosVendas.faturamentoMes)}`, 14, finalY + 30);
 
     autoTable(doc, {
-      startY: finalY + 36,
-      head: [["Top 5 Clientes", "Valor Gasto"]],
+      startY: finalY + 36, head: [["Top 5 Clientes", "Valor Gasto"]],
       body: dadosVendas.topClientes.map((c: any) => [c.nome, formatarReal(c.valorGasto)]),
-      styles: { fontSize: 10, cellPadding: 4 },
-      headStyles: { fillColor: [39, 174, 96] }
+      styles: { fontSize: 10, cellPadding: 4 }, headStyles: { fillColor: [39, 174, 96] }
     });
 
     doc.save("Relatorio_Gerencial_ViaPro.pdf");
@@ -169,30 +131,15 @@ export default function Dashboard() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
         <h1 style={{ color: '#2c3e50', margin: 0 }}>Visão Geral do Negócio</h1>
-        
-        {/* BOTÕES DE EXPORTAÇÃO */}
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button onClick={exportarExcel} style={styles.btnExcel}>
-            📊 Relatório Excel
-          </button>
-          <button onClick={exportarPDF} style={styles.btnPDF}>
-            📄 Relatório PDF
-          </button>
+          <button onClick={exportarExcel} style={styles.btnExcel}>📊 Relatório Excel</button>
+          <button onClick={exportarPDF} style={styles.btnPDF}>📄 Relatório PDF</button>
         </div>
       </div>
 
-      {/* Toggle UI */}
       <div style={{ display: 'flex', backgroundColor: '#e0e6ed', padding: '4px', borderRadius: '8px', marginBottom: '25px', width: 'fit-content' }}>
-        <button 
-          onClick={() => setVisaoAtiva('estoque')} 
-          style={{ ...styles.toggleBtn, backgroundColor: visaoAtiva === 'estoque' ? '#0288D1' : 'transparent', color: visaoAtiva === 'estoque' ? 'white' : '#7f8c8d' }}>
-          Armazém
-        </button>
-        <button 
-          onClick={() => setVisaoAtiva('vendas')} 
-          style={{ ...styles.toggleBtn, backgroundColor: visaoAtiva === 'vendas' ? '#27ae60' : 'transparent', color: visaoAtiva === 'vendas' ? 'white' : '#7f8c8d' }}>
-          Financeiro
-        </button>
+        <button onClick={() => setVisaoAtiva('estoque')} style={{ ...styles.toggleBtn, backgroundColor: visaoAtiva === 'estoque' ? '#0288D1' : 'transparent', color: visaoAtiva === 'estoque' ? 'white' : '#7f8c8d' }}>Armazém</button>
+        <button onClick={() => setVisaoAtiva('vendas')} style={{ ...styles.toggleBtn, backgroundColor: visaoAtiva === 'vendas' ? '#27ae60' : 'transparent', color: visaoAtiva === 'vendas' ? 'white' : '#7f8c8d' }}>Financeiro</button>
       </div>
 
       {visaoAtiva === 'estoque' && (
@@ -202,9 +149,18 @@ export default function Dashboard() {
               <h3 style={styles.cardTitulo}>Itens no Armazém</h3>
               <p style={{ ...styles.cardValor, color: '#0288D1' }}>{dadosEstoque.total}</p>
             </div>
-            <div style={{ ...styles.card, borderLeft: '5px solid #e74c3c' }}>
+            
+            {/* O CARD CRÍTICO AGORA É UM BOTÃO CLICÁVEL */}
+            <div 
+              onClick={() => navigate('/estoque', { state: { filtrarCriticos: true } })}
+              style={{ ...styles.card, borderLeft: '5px solid #e74c3c', cursor: 'pointer', position: 'relative' }}
+              title="Clique para ver a lista de produtos críticos"
+            >
               <h3 style={styles.cardTitulo}>Estoque Crítico</h3>
               <p style={{ ...styles.cardValor, color: '#e74c3c' }}>{dadosEstoque.criticos}</p>
+              <div style={{ position: 'absolute', bottom: '15px', right: '20px', fontSize: '11px', color: '#e74c3c', fontWeight: 'bold' }}>
+                ➔ VER LISTA
+              </div>
             </div>
           </div>
 
@@ -249,8 +205,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   cardTitulo: { margin: 0, fontSize: '14px', color: '#7f8c8d', textTransform: 'uppercase' as const, letterSpacing: '1px' },
   cardValor: { margin: '10px 0 0 0', fontSize: '36px', fontWeight: '900' },
   toggleBtn: { padding: '8px 20px', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s', fontSize: '14px' },
-  
-  // ESTILOS DOS NOVOS BOTÕES
   btnExcel: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 5px rgba(39, 174, 96, 0.3)' },
   btnPDF: { backgroundColor: '#e74c3c', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 5px rgba(231, 76, 60, 0.3)' }
 };

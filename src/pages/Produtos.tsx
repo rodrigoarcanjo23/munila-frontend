@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
+import { toast } from 'react-toastify'; // <-- IMPORTAÇÃO DO TOASTY!
 
 export default function Produtos() {
   const [produtos, setProdutos] = useState<any[]>([]);
   const [categorias, setCategorias] = useState<any[]>([]);
   const [localizacoes, setLocalizacoes] = useState<any[]>([]);
-  const [fornecedores, setFornecedores] = useState<any[]>([]); // NOVO: Estado para fornecedores
+  const [fornecedores, setFornecedores] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
 
   const [usuarioLogado, setUsuarioLogado] = useState<any>(null);
@@ -24,9 +25,6 @@ export default function Produtos() {
   const [precoCusto, setPrecoCusto] = useState('');
   const [precoVenda, setPrecoVenda] = useState('');
 
-  // ==========================================
-  // NOVOS CAMPOS: Lote, Endereço e Fornecedor
-  // ==========================================
   const [lote, setLote] = useState('');
   const [enderecoLocalizacao, setEnderecoLocalizacao] = useState('');
   const [fornecedorId, setFornecedorId] = useState('');
@@ -51,7 +49,9 @@ export default function Produtos() {
       const userSalvo = localStorage.getItem('@Munila:user');
       if (userSalvo) setUsuarioLogado(JSON.parse(userSalvo));
 
-    } catch (error) { alert("Erro ao carregar o catálogo."); } 
+    } catch (error) { 
+      toast.error("Erro ao carregar o catálogo de produtos."); // TOAST
+    } 
     finally { setCarregando(false); }
   }
 
@@ -87,25 +87,40 @@ export default function Produtos() {
     if (window.confirm("Deseja mesmo excluir este produto?")) {
       try {
         await api.delete(`/produtos/${id}`);
+        toast.success("Produto excluído com sucesso!"); // TOAST
         carregarDados();
-      } catch (err) { alert("Bloqueado: Este produto possui histórico no armazém."); }
+      } catch (err) { 
+        toast.warn("Ação bloqueada: Este produto possui histórico no armazém."); // TOAST
+      }
     }
   }
 
   async function salvarNovaCategoria(e: React.FormEvent) {
     e.preventDefault();
-    if (!novaCategoriaNome.trim()) return alert("Digite o nome da categoria.");
+    if (!novaCategoriaNome.trim()) {
+      toast.warn("Digite o nome da categoria."); // TOAST
+      return;
+    }
     try {
       const res = await api.post('/categorias', { nome: novaCategoriaNome, descricao: "Criada via Desktop" });
       setCategorias([...categorias, res.data]); setCategoriaId(res.data.id);
       setModalCategoriaVisivel(false); setNovaCategoriaNome('');
-    } catch (error) { alert("Erro ao criar a categoria."); }
+      toast.success("Categoria criada com sucesso!"); // TOAST
+    } catch (error) { 
+      toast.error("Erro ao criar a categoria."); // TOAST
+    }
   }
 
   async function salvarProduto(e: React.FormEvent) {
     e.preventDefault();
-    if (!nome || !sku) return alert("Preencha Nome e SKU.");
-    if (!categoriaId) return alert("Crie ou selecione uma Categoria.");
+    if (!nome || !sku) {
+      toast.warn("Preencha o Nome e o SKU do produto."); // TOAST
+      return;
+    }
+    if (!categoriaId) {
+      toast.warn("Crie ou selecione uma Categoria."); // TOAST
+      return;
+    }
 
     const custoNum = Number(precoCusto.toString().replace(',', '.')) || 0;
     const vendaNum = Number(precoVenda.toString().replace(',', '.')) || 0;
@@ -114,19 +129,23 @@ export default function Produtos() {
       nome, sku, tipo, categoriaId, descricao, 
       precoCusto: custoNum, precoVenda: vendaNum,
       lote, enderecoLocalizacao, 
-      fornecedorId: fornecedorId || null // Envia nulo se não selecionar
+      fornecedorId: fornecedorId || null
     };
 
     try {
       if (idEdicao) {
         await api.put(`/produtos/${idEdicao}`, payload);
+        toast.success("Produto atualizado com sucesso!"); // TOAST
       } else {
         const res = await api.post('/produtos', payload);
         await api.post('/estoque', { produtoId: res.data.id, quantidade: Number(quantidadeInicial) || 0, status: 'Disponível', localizacaoId });
+        toast.success("Novo produto registado no catálogo!"); // TOAST
       }
       setModalVisivel(false);
       carregarDados();
-    } catch (error: any) { alert("Erro: " + (error.response?.data?.error || "Verifique os dados.")); }
+    } catch (error: any) { 
+      toast.error("Erro: " + (error.response?.data?.error || "Verifique os dados preenchidos.")); // TOAST
+    }
   }
 
   if (carregando) return <div>A carregar catálogo...</div>;
@@ -268,7 +287,7 @@ export default function Produtos() {
         </div>
       )}
 
-      {/* Modal de Categoria (mantido) */}
+      {/* Modal de Categoria */}
       {modalCategoriaVisivel && (
         <div style={{...styles.modalOverlay, zIndex: 1100}}>
           <div style={{...styles.modalContent, maxWidth: '400px'}}>
@@ -294,8 +313,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   tr: { borderBottom: '1px solid #ecf0f1' },
   td: { padding: '15px 20px', color: '#2c3e50', fontSize: '14px', verticalAlign: 'middle' },
   badgeCinza: { backgroundColor: '#f1f2f6', color: '#7f8c8d', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' },
-  badgeAmarelo: { backgroundColor: '#fef9e7', color: '#f39c12', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' },
-  badgeAzul: { backgroundColor: '#e1f5fe', color: '#0288D1', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' },
   btnPrincipal: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' },
   btnEditar: { backgroundColor: '#f1f2f6', color: '#f39c12', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px', marginRight: '8px' },
   btnApagar: { backgroundColor: '#fef5e7', color: '#e74c3c', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' },

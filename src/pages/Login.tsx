@@ -1,141 +1,70 @@
 import React, { useState } from 'react';
-import { api } from '../api'; // Ajuste o caminho se o seu api.ts estiver noutra pasta
+import { api } from '../api';
+import { toast } from 'react-toastify'; // <-- IMPORTAÇÃO
 
-export default function Login({ onLoginSucesso }: { onLoginSucesso: (user: any) => void }) {
-  const [modo, setModo] = useState<'login' | 'cadastro'>('login');
-  
-  const [nome, setNome] = useState('');
-  const [cargo, setCargo] = useState('Vendedor');
+export default function Login({ onLoginSucesso }: any) {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [carregando, setCarregando] = useState(false);
 
-  async function handleAcao(e: React.FormEvent) {
-    e.preventDefault(); // Evita que a página recarregue ao submeter o formulário
-    
-    if (!email || !senha) return alert('Aviso: Preencha o e-mail e a palavra-passe.');
-
+  async function fazerLogin(e: React.FormEvent) {
+    e.preventDefault();
     setCarregando(true);
+
     try {
-      if (modo === 'login') {
-        const res = await api.post('/login', { email: email.trim().toLowerCase(), senha });
-        const usuario = res.data;
-        
-        // Na Web usamos localStorage em vez de AsyncStorage!
-        localStorage.setItem('@Munila:user', JSON.stringify(usuario));
-        onLoginSucesso(usuario);
-      } else {
-        if (!nome || !cargo) return alert('Aviso: Preencha Nome e Cargo para cadastrar.');
-        
-        await api.post('/usuarios', { 
-          nome, 
-          cargo, 
-          email: email.trim().toLowerCase(), 
-          senha 
-        });
-        
-        alert('Sucesso! Conta criada. Pode fazer login agora.');
-        setModo('login');
-        setSenha('');
-      }
+      const response = await api.post('/login', { email, senha });
+      localStorage.setItem('@Munila:user', JSON.stringify(response.data));
+      
+      toast.success(`Bem-vindo, ${response.data.nome}!`); // TOAST
+      onLoginSucesso(response.data);
     } catch (error: any) {
-      alert('Erro: ' + (error.response?.data?.error || 'Erro ao conectar com o servidor.'));
+      toast.error(error.response?.data?.error || "Erro ao conectar com o servidor."); // TOAST
     } finally {
       setCarregando(false);
     }
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.card}>
-        <div style={styles.logoContainer}>
-          {/* Pode substituir pelo caminho da sua logo real se a tiver na pasta public */}
-<img src="/favicon.png" alt="Logo ViaPro" style={{ width: '150px', marginBottom: '10px' }} />          <p style={styles.subtitulo}>Gestão de Estoque</p>
-        </div>
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f4f7f6' }}>
+      <div style={{ backgroundColor: 'white', padding: '40px', borderRadius: '12px', boxShadow: '0 10px 30px rgba(0,0,0,0.1)', width: '100%', maxWidth: '400px', textAlign: 'center' }}>
+        
+        <img 
+          src="/favicon.png" 
+          alt="ViaPro ERP" 
+          style={{ width: '140px', marginBottom: '10px' }} 
+        />
+        <p style={{ color: '#7f8c8d', fontSize: '14px', marginBottom: '30px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase' }}>
+          Gestão de Armazém
+        </p>
 
-        <form onSubmit={handleAcao} style={styles.form}>
-          {modo === 'cadastro' && (
-            <>
-              <input style={styles.input} type="text" placeholder="Nome Completo" value={nome} onChange={e => setNome(e.target.value)} />
-              
-              <select style={styles.input} value={cargo} onChange={e => setCargo(e.target.value)}>
-                <option value="Vendedor">Vendedor (Apenas Saídas)</option>
-                <option value="Estoquista">Estoquista (Entradas e Ajustes)</option>
-                <option value="Administrador">Administrador (Acesso Total)</option>
-              </select>
-            </>
-          )}
-
-          <input style={styles.input} type="email" placeholder="E-mail corporativo" value={email} onChange={e => setEmail(e.target.value)} required />
-          <input style={styles.input} type="password" placeholder="Palavra-passe" value={senha} onChange={e => setSenha(e.target.value)} required />
-
-          <button type="submit" style={styles.btnPrincipal} disabled={carregando}>
-            {carregando ? 'Aguarde...' : (modo === 'login' ? 'Entrar no Sistema' : 'Criar Conta')}
+        <form onSubmit={fazerLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+          <input 
+            type="email" 
+            placeholder="Seu e-mail" 
+            value={email} 
+            onChange={e => setEmail(e.target.value)} 
+            required 
+            style={styles.input}
+          />
+          <input 
+            type="password" 
+            placeholder="Sua senha" 
+            value={senha} 
+            onChange={e => setSenha(e.target.value)} 
+            required 
+            style={styles.input}
+          />
+          
+          <button type="submit" disabled={carregando} style={styles.btn}>
+            {carregando ? 'A Autenticar...' : 'Entrar no Sistema'}
           </button>
         </form>
-
-        <button type="button" style={styles.btnSecundario} onClick={() => setModo(modo === 'login' ? 'cadastro' : 'login')}>
-          {modo === 'login' ? 'Novo por aqui? Criar uma conta' : 'Já tem conta? Faça Login'}
-        </button>
       </div>
     </div>
   );
 }
 
-// Estilos embutidos para facilitar a integração no seu projeto Web
 const styles: { [key: string]: React.CSSProperties } = {
-  container: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    minHeight: '100vh',
-    backgroundColor: '#f4f7f6',
-    fontFamily: 'system-ui, -apple-system, sans-serif'
-  },
-  card: {
-    backgroundColor: 'white',
-    padding: '40px',
-    borderRadius: '12px',
-    boxShadow: '0 10px 25px rgba(0,0,0,0.05)',
-    width: '100%',
-    maxWidth: '400px',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center'
-  },
-  logoContainer: { textAlign: 'center', marginBottom: '30px' },
-  titulo: { color: '#0288D1', fontSize: '36px', margin: '0 0 5px 0', fontWeight: 'bold' },
-  subtitulo: { color: '#7f8c8d', margin: 0, textTransform: 'uppercase', letterSpacing: '1px', fontSize: '12px', fontWeight: 'bold' },
-  form: { display: 'flex', flexDirection: 'column', width: '100%', gap: '15px' },
-  input: {
-    padding: '12px 15px',
-    borderRadius: '8px',
-    border: '1px solid #ddd',
-    fontSize: '15px',
-    outline: 'none',
-    backgroundColor: '#fafafa',
-    width: '100%',
-    boxSizing: 'border-box'
-  },
-  btnPrincipal: {
-    backgroundColor: '#0288D1',
-    color: 'white',
-    padding: '14px',
-    borderRadius: '8px',
-    border: 'none',
-    fontSize: '16px',
-    fontWeight: 'bold',
-    cursor: 'pointer',
-    marginTop: '10px',
-    transition: 'background 0.3s'
-  },
-  btnSecundario: {
-    background: 'none',
-    border: 'none',
-    color: '#7f8c8d',
-    marginTop: '20px',
-    cursor: 'pointer',
-    fontWeight: 'bold',
-    fontSize: '14px'
-  }
+  input: { padding: '15px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '15px', outline: 'none', backgroundColor: '#f9fbfb' },
+  btn: { backgroundColor: '#0288D1', color: 'white', padding: '15px', borderRadius: '8px', border: 'none', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px', transition: '0.2s' }
 };

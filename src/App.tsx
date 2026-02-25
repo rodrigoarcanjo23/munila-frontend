@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import Login from './pages/Login';
-import Dashboard from './pages/Dashboard'; // Vamos criar este a seguir!
+import Dashboard from './pages/Dashboard'; 
 import Estoque from './pages/Estoque';
 import Produtos from './pages/Produtos';
 import Historico from './pages/Historico';
@@ -10,6 +10,9 @@ import Fornecedores from './pages/Fornecedores';
 import Compras from './pages/Compras';
 import { Locais } from './pages/Locais';
 
+// IMPORTAÇÕES DO TOASTIFY
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 // Componente do Menu Lateral para ficar organizado
 function Sidebar({ usuarioLogado, fazerLogout }: any) {
@@ -31,15 +34,12 @@ function Sidebar({ usuarioLogado, fazerLogout }: any) {
   return (
     <div style={{ width: '250px', backgroundColor: '#2c3e50', color: 'white', display: 'flex', flexDirection: 'column', height: '100vh', position: 'fixed', top: 0, left: 0 }}>
       <div style={{ padding: '20px', borderBottom: '1px solid #34495e', marginBottom: '20px' }}>
-<img 
-  src="/favicon.png" 
-  alt="Logo ViaPro" 
-  style={{ 
-    width: '130px', 
-    display: 'block', 
-    margin: '0 auto' 
-  }} 
-/>        <p style={{ margin: '5px 0 0 0', fontSize: '13px', color: '#95a5a6' }}>Versão Desktop</p>
+        <img 
+          src="/favicon.png" 
+          alt="Logo ViaPro" 
+          style={{ width: '130px', display: 'block', margin: '0 auto' }} 
+        />        
+        <p style={{ margin: '5px 0 0 0', fontSize: '13px', color: '#95a5a6', textAlign: 'center' }}>Versão Desktop</p>
       </div>
 
       <nav style={{ flex: 1, padding: '0 15px' }}>
@@ -80,7 +80,8 @@ export default function App() {
   }, []);
 
   function fazerLogout() {
-    if (window.confirm("Deseja mesmo sair do sistema Munila?")) {
+    // Atualizado para ViaPro
+    if (window.confirm("Deseja mesmo sair do sistema ViaPro?")) {
       localStorage.removeItem('@Munila:user');
       setUsuarioLogado(null);
     }
@@ -92,15 +93,14 @@ export default function App() {
   return (
     <BrowserRouter>
       <div style={{ display: 'flex', fontFamily: 'system-ui, sans-serif', backgroundColor: '#f4f7f6', minHeight: '100vh' }}>
+        
         {/* MENU LATERAL FIXO */}
         <Sidebar usuarioLogado={usuarioLogado} fazerLogout={fazerLogout} />
 
-        {/* ÁREA DE CONTEÚDO (Com margem para não ficar por baixo do menu) */}
+        {/* ÁREA DE CONTEÚDO */}
         <div style={{ marginLeft: '250px', flex: 1, padding: '30px' }}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            
-            {/* Telas provisórias para os botões do menu não darem erro */}
             <Route path="/estoque" element={<Estoque />} />
             <Route path="/produtos" element={<Produtos />} />
             <Route path="/historico" element={<Historico />} />
@@ -108,13 +108,13 @@ export default function App() {
             <Route path="/fornecedores" element={<Fornecedores />} />
             <Route path="/compras" element={<Compras />} />
             <Route path="/locais" element={<Locais />} />
-            
-            
-
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
       </div>
+      
+      {/* CONTAINER DO TOASTIFY (Notificações Globais) */}
+      <ToastContainer position="top-right" autoClose={3000} theme="colored" />
     </BrowserRouter>
   );
 }
