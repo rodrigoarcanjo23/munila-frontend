@@ -110,15 +110,32 @@ export default function Produtos() {
     setModalVisivel(true);
   }
 
-  async function apagarProduto(id: string) {
-    if (window.confirm("Deseja mesmo excluir este produto?")) {
-      try {
-        await api.delete(`/produtos/${id}`);
-        toast.success("Produto excluído com sucesso!"); 
-        carregarDados();
-      } catch (err) { 
-        toast.warn("Ação bloqueada: Este produto possui histórico no armazém."); 
-      }
+async function apagarProduto(id: string) {
+    // 1. Pede o motivo para o usuário (Ação Auditável)
+    const motivo = window.prompt("⚠️ AÇÃO AUDITÁVEL ⚠️\nPara excluir este produto e todo o seu histórico no armazém, digite o motivo da exclusão:");
+
+    // Se o usuário clicar em "Cancelar" no prompt, paramos a ação
+    if (motivo === null) return; 
+
+    // Se ele der OK mas deixar vazio, barramos também
+    if (motivo.trim() === '') {
+      toast.warn("O motivo é obrigatório para registrar a exclusão na Auditoria.");
+      return;
+    }
+
+    // 2. Dispara a exclusão em cascata enviando os dados para a Caixa Preta
+    try {
+      await api.delete(`/produtos/${id}`, {
+        data: {
+          motivo: motivo,
+          usuarioId: usuarioLogado?.id // Puxa o ID de quem está logado
+        }
+      });
+      toast.success("Produto e histórico excluídos com sucesso!"); 
+      carregarDados();
+    } catch (err: any) { 
+      // Agora pegamos o erro real que o back-end mandar
+      toast.error("Erro ao excluir: " + (err.response?.data?.error || "Falha na comunicação com o servidor.")); 
     }
   }
 
