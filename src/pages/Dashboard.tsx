@@ -7,30 +7,35 @@ import autoTable from 'jspdf-autotable';
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [visaoAtiva, setVisaoAtiva] = useState<'estoque' | 'vendas'>('estoque');
+  const [visaoAtiva, setVisaoAtiva] = useState<'estoque' | 'financeiro'>('estoque');
   const [dadosEstoque, setDadosEstoque] = useState<any>({ total: 0, criticos: 0, topProdutos: [] });
-  const [dadosVendas, setDadosVendas] = useState<any>({ topClientes: [] });
-  const [dadosResumo, setDadosResumo] = useState({ totalItensCadastrados: 0, custoTotal: 0 }); // <-- NOVO ESTADO
+  const [dadosResumo, setDadosResumo] = useState({ totalItensCadastrados: 0, custoTotal: 0 });
+  
+  // NOVO ESTADO FINANCEIRO FOCADO EM ARMAZÉM
+  const [dadosFinanceiros, setDadosFinanceiros] = useState<any>({ 
+    potencialReceita: 0, 
+    entradasMes: 0, 
+    saidasMes: 0, 
+    topImobilizado: [] 
+  });
+  
   const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
     async function carregarDashboard() {
       try {
-        // ADICIONAMOS A NOVA ROTA AQUI
         const [resEstoque, resMovimentacoes, resProdutos, resResumo] = await Promise.all([
           api.get('/estoque'), api.get('/movimentacoes'), api.get('/produtos'), api.get('/dashboard/resumo')
         ]);
         
         const estoque = resEstoque.data;
         const historico = resMovimentacoes.data;
-        const produtos = resProdutos.data;
         
-        // SALVAMOS OS DADOS DO NOVO ENDPOINT NO ESTADO
         setDadosResumo(resResumo.data);
 
-        const precosMap: Record<string, number> = {};
-        produtos.forEach((p: any) => { precosMap[p.id] = p.precoVenda || 0; });
-
+        // ==========================================
+        // LÓGICA DO ARMAZÉM
+        // ==========================================
         let total = 0; let criticos = 0;
         estoque.forEach((i: any) => {
           if (i.status === 'Disponível') {
@@ -41,32 +46,54 @@ export default function Dashboard() {
         const topProd = [...estoque].filter(i => i.status === 'Disponível').sort((a, b) => b.quantidade - a.quantidade).slice(0, 5);
         setDadosEstoque({ total, criticos, topProdutos: topProd });
 
+        // ==========================================
+        // NOVA LÓGICA DE INTELIGÊNCIA FINANCEIRA
+        // ==========================================
         const agora = new Date();
-        const mapaClientes: Record<string, number> = {};
+        const mesAtual = agora.getMonth();
+        const anoAtual = agora.getFullYear();
 
-        historico.forEach((mov: any) => {
-          if (mov.tipoAcao === 'Saida_Venda') {
-            const dataMov = new Date(mov.dataHora);
-            if (dataMov.getMonth() === agora.getMonth() && dataMov.getFullYear() === agora.getFullYear()) {
-              const precoVendaItem = precosMap[mov.produtoId] || 0;
-              const valorDaVenda = mov.quantidade * precoVendaItem;
+        let potencialReceita = 0;
+        let entradasMes = 0;
+        let saidasMes = 0;
+        const imobilizadoMap: Record<string, { nome: string, valor: number }> = {};
 
-              let nomeCliente = "Balcão";
-              if (mov.observacao && mov.observacao.startsWith("Cliente: ")) {
-                nomeCliente = mov.observacao.split(" | ")[0].replace("Cliente: ", "").trim();
-              }
-              if (!mapaClientes[nomeCliente]) mapaClientes[nomeCliente] = 0;
-              mapaClientes[nomeCliente] += valorDaVenda;
+        // 1. Calcula o Potencial de Receita e o Capital Imobilizado por Produto
+        estoque.forEach((i: any) => {
+          if (i.status === 'Disponível') {
+            const precoVenda = i.produto?.precoVenda || 0;
+            const precoCusto = i.produto?.precoCusto || 0;
+            
+            potencialReceita += (i.quantidade * precoVenda);
+            
+            const valorImobilizado = i.quantidade * precoCusto;
+            if (imobilizadoMap[i.produtoId]) {
+              imobilizadoMap[i.produtoId].valor += valorImobilizado;
+            } else {
+              imobilizadoMap[i.produtoId] = { nome: i.produto?.nome || 'Desconhecido', valor: valorImobilizado };
             }
           }
         });
+
+        // 2. Calcula as Entradas e Saídas do Mês Atual (Giro de Estoque)
+        historico.forEach((mov: any) => {
+          const dataMov = new Date(mov.dataHora);
+          if (dataMov.getMonth() === mesAtual && dataMov.getFullYear() === anoAtual) {
+            const custoUn = mov.produto?.precoCusto || 0;
+            const valorAcao = mov.quantidade * custoUn;
+            const isEntrada = ['Entrada de mercadoria', 'Devolução VIAPRO', 'Ajuste de Entrada de Inventário'].includes(mov.tipoAcao);
+            
+            if (isEntrada) entradasMes += valorAcao;
+            else saidasMes += valorAcao;
+          }
+        });
         
-        const topCli = Object.keys(mapaClientes)
-          .map(nome => ({ nome, valorGasto: mapaClientes[nome] }))
-          .sort((a, b) => b.valorGasto - a.valorGasto)
+        // 3. Ordena os produtos que mais prendem capital
+        const topImobilizado = Object.values(imobilizadoMap)
+          .sort((a, b) => b.valor - a.valor)
           .slice(0, 5);
           
-        setDadosVendas({ topClientes: topCli });
+        setDadosFinanceiros({ potencialReceita, entradasMes, saidasMes, topImobilizado });
 
       } catch (error) { console.error("Erro ao carregar dashboard", error); } 
       finally { setCarregando(false); }
@@ -74,7 +101,7 @@ export default function Dashboard() {
     carregarDashboard();
   }, []);
 
-  const formatarReal = (valor: number) => Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
+  const formatarReal = (valor: number) => Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor || 0);
 
   const exportarExcel = () => {
     const workbook = XLSX.utils.book_new();
@@ -83,20 +110,23 @@ export default function Dashboard() {
       { Indicador: 'Produtos Únicos Cadastrados', Valor: dadosResumo.totalItensCadastrados },
       { Indicador: 'Itens em Estoque Crítico', Valor: dadosEstoque.criticos },
       { Indicador: '', Valor: '' },
-      { Indicador: 'TOP 5 PRODUTOS', Valor: 'QUANTIDADE' },
+      { Indicador: 'TOP 5 PRODUTOS (VOLUME)', Valor: 'QUANTIDADE' },
       ...dadosEstoque.topProdutos.map((p: any) => ({ Indicador: p.produto.nome, Valor: p.quantidade }))
     ];
     const wsEstoque = XLSX.utils.json_to_sheet(dadosE);
     XLSX.utils.book_append_sheet(workbook, wsEstoque, "Resumo Armazém");
 
     const dadosF = [
-      { Indicador: 'Custo Total Investido', Valor: formatarReal(dadosResumo.custoTotal) },
+      { Indicador: 'Custo Total Imobilizado', Valor: formatarReal(dadosResumo.custoTotal) },
+      { Indicador: 'Faturamento Potencial', Valor: formatarReal(dadosFinanceiros.potencialReceita) },
+      { Indicador: 'Giro do Mês (Entradas)', Valor: formatarReal(dadosFinanceiros.entradasMes) },
+      { Indicador: 'Giro do Mês (Saídas)', Valor: formatarReal(dadosFinanceiros.saidasMes) },
       { Indicador: '', Valor: '' },
-      { Indicador: 'TOP CLIENTES', Valor: 'VALOR GASTO' },
-      ...dadosVendas.topClientes.map((c: any) => ({ Indicador: c.nome, Valor: formatarReal(c.valorGasto) }))
+      { Indicador: 'TOP 5 - MAIOR CAPITAL IMOBILIZADO', Valor: 'VALOR' },
+      ...dadosFinanceiros.topImobilizado.map((p: any) => ({ Indicador: p.nome, Valor: formatarReal(p.valor) }))
     ];
     const wsFinanceiro = XLSX.utils.json_to_sheet(dadosF);
-    XLSX.utils.book_append_sheet(workbook, wsFinanceiro, "Resumo Financeiro");
+    XLSX.utils.book_append_sheet(workbook, wsFinanceiro, "Inteligência Financeira");
     XLSX.writeFile(workbook, "Relatorio_Gerencial_ViaPro.xlsx");
   };
 
@@ -118,12 +148,14 @@ export default function Dashboard() {
     });
 
     const finalY = (doc as any).lastAutoTable.finalY || 75;
-    doc.setFontSize(14); doc.setTextColor(39, 174, 96); doc.text("2. Resumo Financeiro (Custos)", 14, finalY + 20);
-    doc.setFontSize(11); doc.setTextColor(44, 62, 80); doc.text(`Custo Total Imobilizado: ${formatarReal(dadosResumo.custoTotal)}`, 14, finalY + 30);
+    doc.setFontSize(14); doc.setTextColor(39, 174, 96); doc.text("2. Inteligência Financeira e Custos", 14, finalY + 20);
+    doc.setFontSize(11); doc.setTextColor(44, 62, 80); 
+    doc.text(`Custo Total Imobilizado: ${formatarReal(dadosResumo.custoTotal)}`, 14, finalY + 30);
+    doc.text(`Faturamento Potencial: ${formatarReal(dadosFinanceiros.potencialReceita)}`, 14, finalY + 37);
 
     autoTable(doc, {
-      startY: finalY + 36, head: [["Top 5 Clientes", "Valor Gasto"]],
-      body: dadosVendas.topClientes.map((c: any) => [c.nome, formatarReal(c.valorGasto)]),
+      startY: finalY + 45, head: [["Top 5 - Maior Capital Imobilizado", "Valor Preso"]],
+      body: dadosFinanceiros.topImobilizado.map((p: any) => [p.nome, formatarReal(p.valor)]),
       styles: { fontSize: 10, cellPadding: 4 }, headStyles: { fillColor: [39, 174, 96] }
     });
 
@@ -144,24 +176,20 @@ export default function Dashboard() {
 
       <div style={{ display: 'flex', backgroundColor: '#e0e6ed', padding: '4px', borderRadius: '8px', marginBottom: '25px', width: 'fit-content' }}>
         <button onClick={() => setVisaoAtiva('estoque')} style={{ ...styles.toggleBtn, backgroundColor: visaoAtiva === 'estoque' ? '#0288D1' : 'transparent', color: visaoAtiva === 'estoque' ? 'white' : '#7f8c8d' }}>Armazém</button>
-        <button onClick={() => setVisaoAtiva('vendas')} style={{ ...styles.toggleBtn, backgroundColor: visaoAtiva === 'vendas' ? '#27ae60' : 'transparent', color: visaoAtiva === 'vendas' ? 'white' : '#7f8c8d' }}>Financeiro</button>
+        <button onClick={() => setVisaoAtiva('financeiro')} style={{ ...styles.toggleBtn, backgroundColor: visaoAtiva === 'financeiro' ? '#27ae60' : 'transparent', color: visaoAtiva === 'financeiro' ? 'white' : '#7f8c8d' }}>Financeiro</button>
       </div>
 
       {visaoAtiva === 'estoque' && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '40px' }}>
-            
-            {/* NOVO CARD: PRODUTOS CADASTRADOS */}
             <div style={{ ...styles.card, borderLeft: '5px solid #8e44ad' }}>
               <h3 style={styles.cardTitulo}>Produtos Cadastrados</h3>
               <p style={{ ...styles.cardValor, color: '#8e44ad' }}>{dadosResumo.totalItensCadastrados}</p>
             </div>
-
             <div style={{ ...styles.card, borderLeft: '5px solid #0288D1' }}>
               <h3 style={styles.cardTitulo}>Volume no Armazém</h3>
               <p style={{ ...styles.cardValor, color: '#0288D1' }}>{dadosEstoque.total}</p>
             </div>
-            
             <div 
               onClick={() => navigate('/estoque', { state: { filtrarCriticos: true } })}
               style={{ ...styles.card, borderLeft: '5px solid #e74c3c', cursor: 'pointer', position: 'relative' }}
@@ -187,22 +215,34 @@ export default function Dashboard() {
         </>
       )}
 
-      {visaoAtiva === 'vendas' && (
+      {visaoAtiva === 'financeiro' && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '40px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '40px' }}>
             <div style={{ ...styles.card, borderLeft: '5px solid #27ae60' }}>
-              {/* NOME ALTERADO E VALOR PUXADO DO RESUMO */}
               <h3 style={styles.cardTitulo}>Custo Total (Investido)</h3>
               <p style={{ ...styles.cardValor, color: '#27ae60' }}>{formatarReal(dadosResumo.custoTotal)}</p>
+            </div>
+            <div style={{ ...styles.card, borderLeft: '5px solid #2980b9' }}>
+              <h3 style={styles.cardTitulo}>Faturamento Potencial</h3>
+              <p style={{ ...styles.cardValor, color: '#2980b9', fontSize: '28px' }}>{formatarReal(dadosFinanceiros.potencialReceita)}</p>
+            </div>
+            <div style={{ ...styles.card, borderLeft: '5px solid #f39c12' }}>
+              <h3 style={styles.cardTitulo}>Giro Mês (Entradas)</h3>
+              <p style={{ ...styles.cardValor, color: '#f39c12', fontSize: '28px' }}>{formatarReal(dadosFinanceiros.entradasMes)}</p>
+            </div>
+            <div style={{ ...styles.card, borderLeft: '5px solid #e74c3c' }}>
+              <h3 style={styles.cardTitulo}>Giro Mês (Saídas)</h3>
+              <p style={{ ...styles.cardValor, color: '#e74c3c', fontSize: '28px' }}>{formatarReal(dadosFinanceiros.saidasMes)}</p>
             </div>
           </div>
 
           <div style={styles.card}>
-            <h3 style={{ borderBottom: '1px solid #eee', paddingBottom: '10px', color: '#2c3e50' }}>Top Clientes (Por Faturamento)</h3>
-            {dadosVendas.topClientes.length === 0 ? <p>Sem vendas registadas.</p> : dadosVendas.topClientes.map((cliente: any) => (
-              <div key={cliente.nome} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid #f4f7f6' }}>
-                <span style={{ fontWeight: 'bold', color: '#34495e' }}>{cliente.nome}</span>
-                <span style={{ color: '#27ae60', fontWeight: 'bold' }}>{formatarReal(cliente.valorGasto)}</span>
+            <h3 style={{ borderBottom: '1px solid #eee', paddingBottom: '10px', color: '#2c3e50' }}>Top 5 - Maior Capital Imobilizado</h3>
+            <p style={{ fontSize: '12px', color: '#7f8c8d', marginTop: '-5px', marginBottom: '15px' }}>Produtos com maior volume de dinheiro de custo "preso" no armazém atualmente.</p>
+            {dadosFinanceiros.topImobilizado.length === 0 ? <p>Adicione preços de custo no catálogo para gerar este relatório.</p> : dadosFinanceiros.topImobilizado.map((item: any) => (
+              <div key={item.nome} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid #f4f7f6' }}>
+                <span style={{ fontWeight: 'bold', color: '#34495e' }}>{item.nome}</span>
+                <span style={{ color: '#27ae60', fontWeight: 'bold' }}>{formatarReal(item.valor)}</span>
               </div>
             ))}
           </div>
@@ -214,8 +254,8 @@ export default function Dashboard() {
 
 const styles: { [key: string]: React.CSSProperties } = {
   card: { backgroundColor: 'white', padding: '25px', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' },
-  cardTitulo: { margin: 0, fontSize: '14px', color: '#7f8c8d', textTransform: 'uppercase' as const, letterSpacing: '1px' },
-  cardValor: { margin: '10px 0 0 0', fontSize: '36px', fontWeight: '900' },
+  cardTitulo: { margin: 0, fontSize: '13px', color: '#7f8c8d', textTransform: 'uppercase' as const, letterSpacing: '1px' },
+  cardValor: { margin: '10px 0 0 0', fontSize: '32px', fontWeight: '900' },
   toggleBtn: { padding: '8px 20px', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s', fontSize: '14px' },
   btnExcel: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 5px rgba(39, 174, 96, 0.3)' },
   btnPDF: { backgroundColor: '#e74c3c', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 5px rgba(231, 76, 60, 0.3)' }
