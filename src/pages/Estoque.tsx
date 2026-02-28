@@ -4,7 +4,7 @@ import { api } from '../api';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { toast } from 'react-toastify'; // <-- IMPORTAÇÃO
+import { toast } from 'react-toastify'; 
 
 export default function Estoque() {
   const location = useLocation();
@@ -23,6 +23,11 @@ export default function Estoque() {
   const [formQuantidade, setFormQuantidade] = useState('1');
   const [formObservacao, setFormObservacao] = useState('');
   const [enviando, setEnviando] = useState(false);
+
+  // ==========================================
+  // FUNÇÃO DE FORMATAÇÃO FINANCEIRA
+  // ==========================================
+  const formatarReal = (valor: number) => Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor || 0);
 
   async function carregarDados() {
     setCarregando(true);
@@ -47,7 +52,7 @@ export default function Estoque() {
       const userSalvo = localStorage.getItem('@Munila:user');
       if (userSalvo) setUsuarioLogado(JSON.parse(userSalvo));
     } catch (error) { 
-      toast.error("Erro ao conectar com o servidor."); // TOAST
+      toast.error("Erro ao conectar com o servidor."); 
     } 
     finally { setCarregando(false); }
   }
@@ -68,7 +73,7 @@ export default function Estoque() {
     
     const qtdNum = Number(formQuantidade);
     if (qtdNum <= 0 || isNaN(qtdNum)) {
-      return toast.warn("Aviso: Digite uma quantidade válida."); // TOAST
+      return toast.warn("Aviso: Digite uma quantidade válida."); 
     }
 
     setEnviando(true);
@@ -82,11 +87,11 @@ export default function Estoque() {
         observacao: formObservacao
       });
       
-      toast.success("Operação registada com sucesso no Armazém!"); // TOAST
+      toast.success("Operação registada com sucesso no Armazém!"); 
       setModalVisivel(false);
       carregarDados();
     } catch (error: any) { 
-      toast.error("Erro ao registar: " + (error.response?.data?.error || "Verifique o saldo no armazém.")); // TOAST
+      toast.error("Erro ao registar: " + (error.response?.data?.error || "Verifique o saldo no armazém.")); 
     } 
     finally { setEnviando(false); }
   }
@@ -102,10 +107,16 @@ export default function Estoque() {
   inventarioFiltrado.sort((a, b) => a.produto.nome.localeCompare(b.produto.nome));
 
   const exportarExcel = () => {
-    if (inventarioFiltrado.length === 0) return toast.warn("Não há dados para exportar."); // TOAST
+    if (inventarioFiltrado.length === 0) return toast.warn("Não há dados para exportar."); 
     const dadosFormatados = inventarioFiltrado.map(item => ({
-      'Produto': item.produto.nome, 'SKU': item.produto.sku, 'Endereço': item.produto.enderecoLocalizacao || '-',
-      'Lote': item.produto.lote || '-', 'Fornecedor': item.produto.fornecedor?.nomeEmpresa || '-', 'Saldo em Estoque': item.quantidade
+      'Produto': item.produto.nome, 
+      'SKU': item.produto.sku, 
+      'Endereço': item.produto.enderecoLocalizacao || '-',
+      'Lote': item.produto.lote || '-', 
+      'Fornecedor': item.produto.fornecedor?.nomeEmpresa || '-', 
+      'Custo Unitário': formatarReal(item.produto.precoCusto),
+      'Saldo em Estoque': item.quantidade,
+      'Custo Total Imobilizado': formatarReal((item.produto.precoCusto || 0) * item.quantidade)
     }));
     const worksheet = XLSX.utils.json_to_sheet(dadosFormatados);
     const workbook = XLSX.utils.book_new();
@@ -114,14 +125,18 @@ export default function Estoque() {
   };
 
   const exportarPDF = () => {
-    if (inventarioFiltrado.length === 0) return toast.warn("Não há dados para exportar."); // TOAST
+    if (inventarioFiltrado.length === 0) return toast.warn("Não há dados para exportar."); 
     const doc = new jsPDF();
     doc.setFontSize(18); doc.setTextColor(44, 62, 80); doc.text("Relatório de Posição de Estoque", 14, 22);
     doc.setFontSize(10); doc.setTextColor(127, 140, 141); doc.text(`Emitido em: ${new Date().toLocaleString('pt-BR')}`, 14, 30);
-    const colunas = ["Produto", "SKU", "Endereço", "Lote", "Fornecedor", "Saldo"];
+    const colunas = ["Produto", "SKU", "Endereço", "Lote", "Custo Un.", "Saldo"];
     const linhas = inventarioFiltrado.map(item => [
-      item.produto.nome, item.produto.sku, item.produto.enderecoLocalizacao || '-',
-      item.produto.lote || '-', item.produto.fornecedor?.nomeEmpresa || '-', item.quantidade.toString()
+      item.produto.nome, 
+      item.produto.sku, 
+      item.produto.enderecoLocalizacao || '-',
+      item.produto.lote || '-', 
+      formatarReal(item.produto.precoCusto),
+      item.quantidade.toString()
     ]);
     autoTable(doc, {
       head: [colunas], body: linhas, startY: 35, styles: { fontSize: 8, cellPadding: 3 },
@@ -169,13 +184,14 @@ export default function Estoque() {
               <th style={styles.th}>Endereço</th>
               <th style={styles.th}>Lote</th>
               <th style={styles.th}>Fornecedor</th>
+              <th style={{...styles.th, textAlign: 'right'}}>Custo Un.</th>
               <th style={{...styles.th, textAlign: 'center'}}>Saldo</th>
               <th style={{...styles.th, textAlign: 'center'}}>Ação</th>
             </tr>
           </thead>
           <tbody>
             {inventarioFiltrado.length === 0 && (
-              <tr><td colSpan={7} style={{textAlign: 'center', padding: '20px', color: '#7f8c8d'}}>Nenhum produto encontrado.</td></tr>
+              <tr><td colSpan={8} style={{textAlign: 'center', padding: '20px', color: '#7f8c8d'}}>Nenhum produto encontrado.</td></tr>
             )}
             {inventarioFiltrado.map((item) => {
               const ehCritico = item.quantidade < 10;
@@ -186,8 +202,11 @@ export default function Estoque() {
                   <td style={styles.td}>{item.produto.enderecoLocalizacao || '-'}</td>
                   <td style={styles.td}>{item.produto.lote || '-'}</td>
                   <td style={styles.td}>{item.produto.fornecedor?.nomeEmpresa || '-'}</td>
+                  <td style={{...styles.td, color: '#27ae60', fontWeight: 'bold', textAlign: 'right'}}>
+                    {formatarReal(item.produto.precoCusto)}
+                  </td>
                   <td style={{...styles.td, textAlign: 'center'}}>
-                    <span style={{ fontSize: '18px', fontWeight: 'bold', color: ehCritico ? '#e74c3c' : '#27ae60' }}>{item.quantidade}</span>
+                    <span style={{ fontSize: '18px', fontWeight: 'bold', color: ehCritico ? '#e74c3c' : '#2c3e50' }}>{item.quantidade}</span>
                   </td>
                   <td style={{...styles.td, textAlign: 'center'}}>
                     <button onClick={() => abrirModal(item)} style={styles.btnAcao}>Gerenciar</button>

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../api';
-import { toast } from 'react-toastify'; // <-- IMPORTAÇÃO DO TOASTY!
+import { toast } from 'react-toastify';
 
 export default function Produtos() {
   const [produtos, setProdutos] = useState<any[]>([]);
@@ -8,6 +8,12 @@ export default function Produtos() {
   const [localizacoes, setLocalizacoes] = useState<any[]>([]);
   const [fornecedores, setFornecedores] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
+
+  // ==========================================
+  // NOVOS ESTADOS PARA A BUSCA INTELIGENTE
+  // ==========================================
+  const [termoBusca, setTermoBusca] = useState('');
+  const [filtroCategoria, setFiltroCategoria] = useState('');
 
   const [usuarioLogado, setUsuarioLogado] = useState<any>(null);
   const [modalVisivel, setModalVisivel] = useState(false);
@@ -50,7 +56,7 @@ export default function Produtos() {
       if (userSalvo) setUsuarioLogado(JSON.parse(userSalvo));
 
     } catch (error) { 
-      toast.error("Erro ao carregar o catálogo de produtos."); // TOAST
+      toast.error("Erro ao carregar o catálogo de produtos."); 
     } 
     finally { setCarregando(false); }
   }
@@ -60,6 +66,27 @@ export default function Produtos() {
   const cargoLower = usuarioLogado?.cargo?.toLowerCase() || '';
   const isVendedor = cargoLower.includes('vendedor');
   const isAdmin = cargoLower.includes('admin') || cargoLower.includes('gestor');
+
+  // ==========================================
+  // LÓGICA DE FILTRAGEM INSTANTÂNEA
+  // ==========================================
+  const produtosFiltrados = useMemo(() => {
+    return produtos.filter(p => {
+      // 1. Filtro por Categoria
+      const passaCategoria = filtroCategoria === '' || p.categoriaId === filtroCategoria;
+      
+      // 2. Filtro por Busca Inteligente (Nome, SKU, Lote ou Endereço)
+      const termo = termoBusca.toLowerCase();
+      const passaBusca = 
+        p.nome.toLowerCase().includes(termo) || 
+        p.sku.toLowerCase().includes(termo) ||
+        (p.lote && p.lote.toLowerCase().includes(termo)) ||
+        (p.enderecoLocalizacao && p.enderecoLocalizacao.toLowerCase().includes(termo));
+        
+      return passaCategoria && passaBusca;
+    });
+  }, [produtos, termoBusca, filtroCategoria]);
+
 
   function abrirModalNovo() {
     setIdEdicao(null);
@@ -87,10 +114,10 @@ export default function Produtos() {
     if (window.confirm("Deseja mesmo excluir este produto?")) {
       try {
         await api.delete(`/produtos/${id}`);
-        toast.success("Produto excluído com sucesso!"); // TOAST
+        toast.success("Produto excluído com sucesso!"); 
         carregarDados();
       } catch (err) { 
-        toast.warn("Ação bloqueada: Este produto possui histórico no armazém."); // TOAST
+        toast.warn("Ação bloqueada: Este produto possui histórico no armazém."); 
       }
     }
   }
@@ -98,27 +125,27 @@ export default function Produtos() {
   async function salvarNovaCategoria(e: React.FormEvent) {
     e.preventDefault();
     if (!novaCategoriaNome.trim()) {
-      toast.warn("Digite o nome da categoria."); // TOAST
+      toast.warn("Digite o nome da categoria."); 
       return;
     }
     try {
       const res = await api.post('/categorias', { nome: novaCategoriaNome, descricao: "Criada via Desktop" });
       setCategorias([...categorias, res.data]); setCategoriaId(res.data.id);
       setModalCategoriaVisivel(false); setNovaCategoriaNome('');
-      toast.success("Categoria criada com sucesso!"); // TOAST
+      toast.success("Categoria/Subcategoria criada com sucesso!"); 
     } catch (error) { 
-      toast.error("Erro ao criar a categoria."); // TOAST
+      toast.error("Erro ao criar a categoria."); 
     }
   }
 
   async function salvarProduto(e: React.FormEvent) {
     e.preventDefault();
     if (!nome || !sku) {
-      toast.warn("Preencha o Nome e o SKU do produto."); // TOAST
+      toast.warn("Preencha o Nome e o SKU do produto."); 
       return;
     }
     if (!categoriaId) {
-      toast.warn("Crie ou selecione uma Categoria."); // TOAST
+      toast.warn("Crie ou selecione uma Categoria."); 
       return;
     }
 
@@ -135,16 +162,16 @@ export default function Produtos() {
     try {
       if (idEdicao) {
         await api.put(`/produtos/${idEdicao}`, payload);
-        toast.success("Produto atualizado com sucesso!"); // TOAST
+        toast.success("Produto atualizado com sucesso!"); 
       } else {
         const res = await api.post('/produtos', payload);
         await api.post('/estoque', { produtoId: res.data.id, quantidade: Number(quantidadeInicial) || 0, status: 'Disponível', localizacaoId });
-        toast.success("Novo produto registado no catálogo!"); // TOAST
+        toast.success("Novo produto registado no catálogo!"); 
       }
       setModalVisivel(false);
       carregarDados();
     } catch (error: any) { 
-      toast.error("Erro: " + (error.response?.data?.error || "Verifique os dados preenchidos.")); // TOAST
+      toast.error("Erro: " + (error.response?.data?.error || "Verifique os dados preenchidos.")); 
     }
   }
 
@@ -157,12 +184,38 @@ export default function Produtos() {
         {!isVendedor && <button onClick={abrirModalNovo} style={styles.btnPrincipal}>+ Novo Produto</button>}
       </div>
 
+      {/* ==========================================
+          BARRA DE BUSCA E FILTROS 
+          ========================================== */}
+      <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', backgroundColor: 'white', padding: '15px', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
+        <div style={{ flex: 2 }}>
+          <input 
+            type="text" 
+            placeholder="Buscar por Nome, SKU, Lote ou Endereço..." 
+            style={styles.inputBusca} 
+            value={termoBusca}
+            onChange={(e) => setTermoBusca(e.target.value)}
+          />
+        </div>
+        <div style={{ flex: 1 }}>
+          <select 
+            style={styles.selectBusca} 
+            value={filtroCategoria}
+            onChange={(e) => setFiltroCategoria(e.target.value)}
+          >
+            <option value="">Todas as Categorias</option>
+            {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          </select>
+        </div>
+      </div>
+
       <div style={styles.tableContainer}>
         <table style={styles.table}>
           <thead>
             <tr>
               <th style={styles.th}>Nome do Produto</th>
               <th style={styles.th}>SKU</th>
+              <th style={styles.th}>Categoria</th>
               <th style={styles.th}>Endereço</th>
               <th style={styles.th}>Lote</th>
               <th style={styles.th}>Fornecedor</th>
@@ -170,11 +223,12 @@ export default function Produtos() {
             </tr>
           </thead>
           <tbody>
-            {produtos.length === 0 && <tr><td colSpan={6} style={{textAlign: 'center', padding: '20px', color: '#7f8c8d'}}>Nenhum produto cadastrado.</td></tr>}
-            {produtos.map((item) => (
+            {produtosFiltrados.length === 0 && <tr><td colSpan={7} style={{textAlign: 'center', padding: '20px', color: '#7f8c8d'}}>Nenhum produto encontrado na busca.</td></tr>}
+            {produtosFiltrados.map((item) => (
               <tr key={item.id} style={styles.tr}>
                 <td style={styles.td}><strong>{item.nome}</strong></td>
                 <td style={styles.td}><span style={styles.badgeCinza}>{item.sku}</span></td>
+                <td style={styles.td}>{item.categoria?.nome || '-'}</td>
                 <td style={styles.td}>{item.enderecoLocalizacao || '-'}</td>
                 <td style={styles.td}>{item.lote || '-'}</td>
                 <td style={styles.td}>{item.fornecedor?.nomeEmpresa || '-'}</td>
@@ -200,7 +254,7 @@ export default function Produtos() {
             </div>
 
             <form onSubmit={salvarProduto} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              {/* BLOCO: DADOS BÁSICOS */}
+              
               <div style={styles.formGroupTitle}>Dados Essenciais</div>
               <div style={{ display: 'flex', gap: '15px' }}>
                 <div style={{ flex: 2 }}>
@@ -223,7 +277,7 @@ export default function Produtos() {
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
-                    <label style={{...styles.label, marginBottom: 0}}>Categoria</label>
+                    <label style={{...styles.label, marginBottom: 0}}>Categoria / Subcategoria</label>
                     <button type="button" onClick={() => setModalCategoriaVisivel(true)} style={styles.btnLink}>+ Nova</button>
                   </div>
                   <select style={styles.input} value={categoriaId} onChange={e => setCategoriaId(e.target.value)}>
@@ -232,7 +286,6 @@ export default function Produtos() {
                 </div>
               </div>
 
-              {/* BLOCO: RASTREABILIDADE */}
               <div style={styles.formGroupTitle}>Logística e Rastreabilidade</div>
               <div style={{ display: 'flex', gap: '15px' }}>
                 <div style={{ flex: 1 }}>
@@ -253,7 +306,6 @@ export default function Produtos() {
                 </select>
               </div>
 
-              {/* BLOCO: FINANCEIRO E INÍCIO */}
               <div style={styles.formGroupTitle}>Financeiro</div>
               <div style={{ display: 'flex', gap: '15px' }}>
                 <div style={{ flex: 1 }}>
@@ -291,9 +343,9 @@ export default function Produtos() {
       {modalCategoriaVisivel && (
         <div style={{...styles.modalOverlay, zIndex: 1100}}>
           <div style={{...styles.modalContent, maxWidth: '400px'}}>
-            <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>Nova Categoria</h3>
+            <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>Nova Categoria/Subcategoria</h3>
             <form onSubmit={salvarNovaCategoria} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <input type="text" style={styles.input} value={novaCategoriaNome} onChange={e => setNovaCategoriaNome(e.target.value)} placeholder="Nome da Categoria" autoFocus required />
+              <input type="text" style={styles.input} value={novaCategoriaNome} onChange={e => setNovaCategoriaNome(e.target.value)} placeholder="Ex: Lupas Femininas..." autoFocus required />
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                 <button type="button" onClick={() => setModalCategoriaVisivel(false)} style={styles.btnCancelar}>Cancelar</button>
                 <button type="submit" style={styles.btnSalvarPequeno}>Criar</button>
@@ -321,6 +373,11 @@ const styles: { [key: string]: React.CSSProperties } = {
   btnFechar: { background: 'none', border: 'none', fontSize: '20px', color: '#e74c3c', cursor: 'pointer' },
   label: { display: 'block', fontSize: '13px', fontWeight: 'bold', color: '#34495e', marginBottom: '5px' },
   input: { width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '15px', boxSizing: 'border-box', backgroundColor: '#fafafa' },
+  
+  // NOVOS ESTILOS DA BARRA DE BUSCA
+  inputBusca: { width: '100%', padding: '12px 15px', borderRadius: '8px', border: '1px solid #ecf0f1', fontSize: '14px', boxSizing: 'border-box', backgroundColor: '#f9fbfb', color: '#2c3e50' },
+  selectBusca: { width: '100%', padding: '12px 15px', borderRadius: '8px', border: '1px solid #ecf0f1', fontSize: '14px', boxSizing: 'border-box', backgroundColor: '#f9fbfb', color: '#2c3e50', cursor: 'pointer' },
+  
   btnSalvar: { backgroundColor: '#27ae60', color: 'white', padding: '15px', borderRadius: '8px', border: 'none', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
   btnLink: { background: 'none', border: 'none', color: '#27ae60', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px', padding: 0 },
   btnCancelar: { backgroundColor: '#f1f2f6', color: '#7f8c8d', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' },

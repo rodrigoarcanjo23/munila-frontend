@@ -1,27 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom'; // <-- IMPORTAÇÃO NOVA
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 export default function Dashboard() {
-  const navigate = useNavigate(); // <-- FERRAMENTA DE NAVEGAÇÃO
+  const navigate = useNavigate();
   const [visaoAtiva, setVisaoAtiva] = useState<'estoque' | 'vendas'>('estoque');
   const [dadosEstoque, setDadosEstoque] = useState<any>({ total: 0, criticos: 0, topProdutos: [] });
-  const [dadosVendas, setDadosVendas] = useState<any>({ faturamentoMes: 0, topClientes: [] });
+  const [dadosVendas, setDadosVendas] = useState<any>({ topClientes: [] });
+  const [dadosResumo, setDadosResumo] = useState({ totalItensCadastrados: 0, custoTotal: 0 }); // <-- NOVO ESTADO
   const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
     async function carregarDashboard() {
       try {
-        const [resEstoque, resMovimentacoes, resProdutos] = await Promise.all([
-          api.get('/estoque'), api.get('/movimentacoes'), api.get('/produtos')
+        // ADICIONAMOS A NOVA ROTA AQUI
+        const [resEstoque, resMovimentacoes, resProdutos, resResumo] = await Promise.all([
+          api.get('/estoque'), api.get('/movimentacoes'), api.get('/produtos'), api.get('/dashboard/resumo')
         ]);
         
         const estoque = resEstoque.data;
         const historico = resMovimentacoes.data;
         const produtos = resProdutos.data;
+        
+        // SALVAMOS OS DADOS DO NOVO ENDPOINT NO ESTADO
+        setDadosResumo(resResumo.data);
 
         const precosMap: Record<string, number> = {};
         produtos.forEach((p: any) => { precosMap[p.id] = p.precoVenda || 0; });
@@ -37,7 +42,6 @@ export default function Dashboard() {
         setDadosEstoque({ total, criticos, topProdutos: topProd });
 
         const agora = new Date();
-        let faturamentoMes = 0;
         const mapaClientes: Record<string, number> = {};
 
         historico.forEach((mov: any) => {
@@ -46,7 +50,6 @@ export default function Dashboard() {
             if (dataMov.getMonth() === agora.getMonth() && dataMov.getFullYear() === agora.getFullYear()) {
               const precoVendaItem = precosMap[mov.produtoId] || 0;
               const valorDaVenda = mov.quantidade * precoVendaItem;
-              faturamentoMes += valorDaVenda;
 
               let nomeCliente = "Balcão";
               if (mov.observacao && mov.observacao.startsWith("Cliente: ")) {
@@ -63,7 +66,7 @@ export default function Dashboard() {
           .sort((a, b) => b.valorGasto - a.valorGasto)
           .slice(0, 5);
           
-        setDadosVendas({ faturamentoMes, topClientes: topCli });
+        setDadosVendas({ topClientes: topCli });
 
       } catch (error) { console.error("Erro ao carregar dashboard", error); } 
       finally { setCarregando(false); }
@@ -77,6 +80,7 @@ export default function Dashboard() {
     const workbook = XLSX.utils.book_new();
     const dadosE = [
       { Indicador: 'Total de Itens no Armazém', Valor: dadosEstoque.total },
+      { Indicador: 'Produtos Únicos Cadastrados', Valor: dadosResumo.totalItensCadastrados },
       { Indicador: 'Itens em Estoque Crítico', Valor: dadosEstoque.criticos },
       { Indicador: '', Valor: '' },
       { Indicador: 'TOP 5 PRODUTOS', Valor: 'QUANTIDADE' },
@@ -86,7 +90,7 @@ export default function Dashboard() {
     XLSX.utils.book_append_sheet(workbook, wsEstoque, "Resumo Armazém");
 
     const dadosF = [
-      { Indicador: 'Faturamento do Mês', Valor: formatarReal(dadosVendas.faturamentoMes) },
+      { Indicador: 'Custo Total Investido', Valor: formatarReal(dadosResumo.custoTotal) },
       { Indicador: '', Valor: '' },
       { Indicador: 'TOP CLIENTES', Valor: 'VALOR GASTO' },
       ...dadosVendas.topClientes.map((c: any) => ({ Indicador: c.nome, Valor: formatarReal(c.valorGasto) }))
@@ -104,17 +108,18 @@ export default function Dashboard() {
     doc.setFontSize(14); doc.setTextColor(2, 136, 209); doc.text("1. Resumo do Armazém", 14, 45);
     doc.setFontSize(11); doc.setTextColor(44, 62, 80);
     doc.text(`Itens Totais em Estoque: ${dadosEstoque.total}`, 14, 55);
-    doc.text(`Alerta de Estoque Crítico: ${dadosEstoque.criticos} produtos`, 14, 62);
+    doc.text(`Produtos Únicos Cadastrados: ${dadosResumo.totalItensCadastrados}`, 14, 62);
+    doc.text(`Alerta de Estoque Crítico: ${dadosEstoque.criticos} produtos`, 14, 69);
 
     autoTable(doc, {
-      startY: 68, head: [["Top 5 Produtos (Maior Volume)", "Quantidade"]],
+      startY: 75, head: [["Top 5 Produtos (Maior Volume)", "Quantidade"]],
       body: dadosEstoque.topProdutos.map((p: any) => [p.produto.nome, `${p.quantidade} un`]),
       styles: { fontSize: 10, cellPadding: 4 }, headStyles: { fillColor: [2, 136, 209] }
     });
 
-    const finalY = (doc as any).lastAutoTable.finalY || 68;
-    doc.setFontSize(14); doc.setTextColor(39, 174, 96); doc.text("2. Resumo Financeiro (Mês Atual)", 14, finalY + 20);
-    doc.setFontSize(11); doc.setTextColor(44, 62, 80); doc.text(`Faturamento Total: ${formatarReal(dadosVendas.faturamentoMes)}`, 14, finalY + 30);
+    const finalY = (doc as any).lastAutoTable.finalY || 75;
+    doc.setFontSize(14); doc.setTextColor(39, 174, 96); doc.text("2. Resumo Financeiro (Custos)", 14, finalY + 20);
+    doc.setFontSize(11); doc.setTextColor(44, 62, 80); doc.text(`Custo Total Imobilizado: ${formatarReal(dadosResumo.custoTotal)}`, 14, finalY + 30);
 
     autoTable(doc, {
       startY: finalY + 36, head: [["Top 5 Clientes", "Valor Gasto"]],
@@ -144,13 +149,19 @@ export default function Dashboard() {
 
       {visaoAtiva === 'estoque' && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '40px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '40px' }}>
+            
+            {/* NOVO CARD: PRODUTOS CADASTRADOS */}
+            <div style={{ ...styles.card, borderLeft: '5px solid #8e44ad' }}>
+              <h3 style={styles.cardTitulo}>Produtos Cadastrados</h3>
+              <p style={{ ...styles.cardValor, color: '#8e44ad' }}>{dadosResumo.totalItensCadastrados}</p>
+            </div>
+
             <div style={{ ...styles.card, borderLeft: '5px solid #0288D1' }}>
-              <h3 style={styles.cardTitulo}>Itens no Armazém</h3>
+              <h3 style={styles.cardTitulo}>Volume no Armazém</h3>
               <p style={{ ...styles.cardValor, color: '#0288D1' }}>{dadosEstoque.total}</p>
             </div>
             
-            {/* O CARD CRÍTICO AGORA É UM BOTÃO CLICÁVEL */}
             <div 
               onClick={() => navigate('/estoque', { state: { filtrarCriticos: true } })}
               style={{ ...styles.card, borderLeft: '5px solid #e74c3c', cursor: 'pointer', position: 'relative' }}
@@ -180,8 +191,9 @@ export default function Dashboard() {
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '40px' }}>
             <div style={{ ...styles.card, borderLeft: '5px solid #27ae60' }}>
-              <h3 style={styles.cardTitulo}>Faturamento (Mês Atual)</h3>
-              <p style={{ ...styles.cardValor, color: '#27ae60' }}>{formatarReal(dadosVendas.faturamentoMes)}</p>
+              {/* NOME ALTERADO E VALOR PUXADO DO RESUMO */}
+              <h3 style={styles.cardTitulo}>Custo Total (Investido)</h3>
+              <p style={{ ...styles.cardValor, color: '#27ae60' }}>{formatarReal(dadosResumo.custoTotal)}</p>
             </div>
           </div>
 
