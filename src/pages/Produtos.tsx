@@ -9,9 +9,6 @@ export default function Produtos() {
   const [fornecedores, setFornecedores] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
 
-  // ==========================================
-  // NOVOS ESTADOS PARA A BUSCA INTELIGENTE
-  // ==========================================
   const [termoBusca, setTermoBusca] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('');
 
@@ -34,6 +31,9 @@ export default function Produtos() {
   const [lote, setLote] = useState('');
   const [enderecoLocalizacao, setEnderecoLocalizacao] = useState('');
   const [fornecedorId, setFornecedorId] = useState('');
+  
+  // NOVO ESTADO: DATA DE CADASTRO
+  const [dataCadastro, setDataCadastro] = useState('');
 
   const [novaCategoriaNome, setNovaCategoriaNome] = useState('');
 
@@ -67,15 +67,9 @@ export default function Produtos() {
   const isVendedor = cargoLower.includes('vendedor');
   const isAdmin = cargoLower.includes('admin') || cargoLower.includes('gestor');
 
-  // ==========================================
-  // LÓGICA DE FILTRAGEM INSTANTÂNEA
-  // ==========================================
   const produtosFiltrados = useMemo(() => {
     return produtos.filter(p => {
-      // 1. Filtro por Categoria
       const passaCategoria = filtroCategoria === '' || p.categoriaId === filtroCategoria;
-      
-      // 2. Filtro por Busca Inteligente (Nome, SKU, Lote ou Endereço)
       const termo = termoBusca.toLowerCase();
       const passaBusca = 
         p.nome.toLowerCase().includes(termo) || 
@@ -93,6 +87,10 @@ export default function Produtos() {
     setNome(''); setSku(''); setTipo('ACABADO'); setDescricao(''); setQuantidadeInicial('0');
     setPrecoCusto(''); setPrecoVenda('');
     setLote(''); setEnderecoLocalizacao(''); setFornecedorId('');
+    
+    // Seta a data de hoje como padrão para novos cadastros
+    setDataCadastro(new Date().toISOString().substring(0, 10));
+
     if (categorias.length > 0) setCategoriaId(categorias[0].id);
     if (localizacoes.length > 0) setLocalizacaoId(localizacoes[0].id);
     setModalVisivel(true);
@@ -107,34 +105,27 @@ export default function Produtos() {
     setLote(p.lote || '');
     setEnderecoLocalizacao(p.enderecoLocalizacao || '');
     setFornecedorId(p.fornecedorId || '');
+    
+    // Carrega a data salva no banco ou usa a de hoje
+    setDataCadastro(p.dataCadastro ? new Date(p.dataCadastro).toISOString().substring(0, 10) : new Date().toISOString().substring(0, 10));
+    
     setModalVisivel(true);
   }
 
-async function apagarProduto(id: string) {
-    // 1. Pede o motivo para o usuário (Ação Auditável)
+  async function apagarProduto(id: string) {
     const motivo = window.prompt("⚠️ AÇÃO AUDITÁVEL ⚠️\nPara excluir este produto e todo o seu histórico no armazém, digite o motivo da exclusão:");
-
-    // Se o usuário clicar em "Cancelar" no prompt, paramos a ação
     if (motivo === null) return; 
-
-    // Se ele der OK mas deixar vazio, barramos também
     if (motivo.trim() === '') {
       toast.warn("O motivo é obrigatório para registrar a exclusão na Auditoria.");
       return;
     }
-
-    // 2. Dispara a exclusão em cascata enviando os dados para a Caixa Preta
     try {
       await api.delete(`/produtos/${id}`, {
-        data: {
-          motivo: motivo,
-          usuarioId: usuarioLogado?.id // Puxa o ID de quem está logado
-        }
+        data: { motivo: motivo, usuarioId: usuarioLogado?.id }
       });
       toast.success("Produto e histórico excluídos com sucesso!"); 
       carregarDados();
     } catch (err: any) { 
-      // Agora pegamos o erro real que o back-end mandar
       toast.error("Erro ao excluir: " + (err.response?.data?.error || "Falha na comunicação com o servidor.")); 
     }
   }
@@ -173,7 +164,8 @@ async function apagarProduto(id: string) {
       nome, sku, tipo, categoriaId, descricao, 
       precoCusto: custoNum, precoVenda: vendaNum,
       lote, enderecoLocalizacao, 
-      fornecedorId: fornecedorId || null
+      fornecedorId: fornecedorId || null,
+      dataCadastro // Envia a dataEscolhida para o back-end
     };
 
     try {
@@ -201,9 +193,6 @@ async function apagarProduto(id: string) {
         {!isVendedor && <button onClick={abrirModalNovo} style={styles.btnPrincipal}>+ Novo Produto</button>}
       </div>
 
-      {/* ==========================================
-          BARRA DE BUSCA E FILTROS 
-          ========================================== */}
       <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', backgroundColor: 'white', padding: '15px', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
         <div style={{ flex: 2 }}>
           <input 
@@ -234,7 +223,7 @@ async function apagarProduto(id: string) {
               <th style={styles.th}>SKU</th>
               <th style={styles.th}>Categoria</th>
               <th style={styles.th}>Endereço</th>
-              <th style={styles.th}>Lote</th>
+              <th style={styles.th}>Data Cad.</th>
               <th style={styles.th}>Fornecedor</th>
               {!isVendedor && <th style={{...styles.th, textAlign: 'center'}}>Ações</th>}
             </tr>
@@ -247,7 +236,7 @@ async function apagarProduto(id: string) {
                 <td style={styles.td}><span style={styles.badgeCinza}>{item.sku}</span></td>
                 <td style={styles.td}>{item.categoria?.nome || '-'}</td>
                 <td style={styles.td}>{item.enderecoLocalizacao || '-'}</td>
-                <td style={styles.td}>{item.lote || '-'}</td>
+                <td style={styles.td}>{item.dataCadastro ? new Date(item.dataCadastro).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '-'}</td>
                 <td style={styles.td}>{item.fornecedor?.nomeEmpresa || '-'}</td>
                 
                 {!isVendedor && (
@@ -281,6 +270,10 @@ async function apagarProduto(id: string) {
                 <div style={{ flex: 1 }}>
                   <label style={styles.label}>SKU (Código) *</label>
                   <input type="text" style={styles.input} value={sku} onChange={e => setSku(e.target.value)} required placeholder="Ex: MUN-099" />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={styles.label}>Data de Cadastro</label>
+                  <input type="date" style={styles.input} value={dataCadastro} onChange={e => setDataCadastro(e.target.value)} required />
                 </div>
               </div>
 
@@ -386,15 +379,12 @@ const styles: { [key: string]: React.CSSProperties } = {
   btnEditar: { backgroundColor: '#f1f2f6', color: '#f39c12', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px', marginRight: '8px' },
   btnApagar: { backgroundColor: '#fef5e7', color: '#e74c3c', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' },
   modalOverlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
-  modalContent: { backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '100%', maxWidth: '600px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' },
+  modalContent: { backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '100%', maxWidth: '700px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' },
   btnFechar: { background: 'none', border: 'none', fontSize: '20px', color: '#e74c3c', cursor: 'pointer' },
   label: { display: 'block', fontSize: '13px', fontWeight: 'bold', color: '#34495e', marginBottom: '5px' },
   input: { width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '15px', boxSizing: 'border-box', backgroundColor: '#fafafa' },
-  
-  // NOVOS ESTILOS DA BARRA DE BUSCA
   inputBusca: { width: '100%', padding: '12px 15px', borderRadius: '8px', border: '1px solid #ecf0f1', fontSize: '14px', boxSizing: 'border-box', backgroundColor: '#f9fbfb', color: '#2c3e50' },
   selectBusca: { width: '100%', padding: '12px 15px', borderRadius: '8px', border: '1px solid #ecf0f1', fontSize: '14px', boxSizing: 'border-box', backgroundColor: '#f9fbfb', color: '#2c3e50', cursor: 'pointer' },
-  
   btnSalvar: { backgroundColor: '#27ae60', color: 'white', padding: '15px', borderRadius: '8px', border: 'none', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
   btnLink: { background: 'none', border: 'none', color: '#27ae60', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px', padding: 0 },
   btnCancelar: { backgroundColor: '#f1f2f6', color: '#7f8c8d', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' },
