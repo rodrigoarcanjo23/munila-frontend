@@ -3,7 +3,7 @@ import { api } from '../api';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { toast } from 'react-toastify'; // <-- IMPORTAÇÃO
+import { toast } from 'react-toastify'; 
 
 export default function Compras() {
   const [fornecedores, setFornecedores] = useState<any[]>([]);
@@ -13,6 +13,9 @@ export default function Compras() {
 
   const [usuarioLogado, setUsuarioLogado] = useState<any>(null);
   const [modalVisivel, setModalVisivel] = useState(false);
+
+  // NOVO: Estado para saber se estamos editando
+  const [idEdicao, setIdEdicao] = useState<string | null>(null);
 
   const [fornecedorId, setFornecedorId] = useState('');
   const [produtoId, setProdutoId] = useState('');
@@ -29,18 +32,18 @@ export default function Compras() {
       try {
         const resFornecedores = await api.get('/fornecedores');
         setFornecedores(resFornecedores.data);
-      } catch (e) { toast.error("Erro ao carregar fornecedores"); } // TOAST
+      } catch (e) { toast.error("Erro ao carregar fornecedores"); } 
 
       try {
         const resProdutos = await api.get('/produtos');
         const materiasPrimas = resProdutos.data.filter((p: any) => p.tipo === 'MATERIA_PRIMA');
         setProdutos(materiasPrimas.length > 0 ? materiasPrimas : resProdutos.data);
-      } catch (e) { toast.error("Erro ao carregar produtos"); } // TOAST
+      } catch (e) { toast.error("Erro ao carregar produtos"); } 
 
       try {
         const resPedidos = await api.get('/pedidos-compra');
         setPedidos(resPedidos.data);
-      } catch (e) { toast.error("Erro ao carregar pedidos"); } // TOAST
+      } catch (e) { toast.error("Erro ao carregar pedidos"); } 
 
     } finally { setCarregando(false); }
   }
@@ -48,49 +51,81 @@ export default function Compras() {
   useEffect(() => { carregarDados(); }, []);
 
   function abrirModalNovo() {
+    setIdEdicao(null);
     setFornecedorId(''); setProdutoId(''); setQuantidade(''); setCustoEstimado(''); setPrevisaoEntrega('');
+    setModalVisivel(true);
+  }
+
+  // NOVO: Função para abrir o modal de edição
+  function abrirModalEdicao(pedido: any) {
+    setIdEdicao(pedido.id);
+    setFornecedorId(pedido.fornecedorId);
+    setProdutoId(pedido.produtoId);
+    setQuantidade(String(pedido.quantidade));
+    setCustoEstimado(String(pedido.custoTotal / pedido.quantidade)); // Calcula o preço unitário novamente
+    setPrevisaoEntrega(pedido.dataPrevisao ? pedido.dataPrevisao.substring(0, 10) : '');
     setModalVisivel(true);
   }
 
   async function salvarPedido(e: React.FormEvent) {
     e.preventDefault();
     if (!fornecedorId || !produtoId || !quantidade) {
-      return toast.warn("Por favor, selecione o Fornecedor, o Produto e a Quantidade."); // TOAST
+      return toast.warn("Por favor, selecione o Fornecedor, o Produto e a Quantidade."); 
     }
 
-    const custoTotal = Number(quantidade) * Number(custoEstimado.replace(',', '.') || 0);
+    const custoTotal = Number(quantidade) * Number(custoEstimado.toString().replace(',', '.') || 0);
+    const payload = {
+      fornecedorId, produtoId, quantidade, custoTotal,
+      dataPrevisao: previsaoEntrega ? previsaoEntrega + "T00:00:00.000Z" : undefined 
+    };
 
     try {
-      await api.post('/pedidos-compra', {
-        fornecedorId, produtoId, quantidade, custoTotal,
-        dataPrevisao: previsaoEntrega ? previsaoEntrega + "T00:00:00.000Z" : undefined 
-      });
+      if (idEdicao) {
+        await api.put(`/pedidos-compra/${idEdicao}`, payload);
+        toast.success("Pedido de Compra atualizado com sucesso!");
+      } else {
+        await api.post('/pedidos-compra', payload);
+        toast.success("Pedido de Compra emitido e e-mails disparados!"); 
+      }
       setModalVisivel(false);
       carregarDados();
-      toast.success("Pedido de Compra emitido e e-mails disparados com sucesso!"); // TOAST
     } catch (error: any) { 
       const erroReal = error.response?.data?.error || error.message;
-      toast.error(`Erro do Servidor: ${erroReal}`); // TOAST
+      toast.error(`Erro do Servidor: ${erroReal}`); 
+    }
+  }
+
+  // NOVO: Função de Exclusão
+  async function apagarPedido(id: string) {
+    if (window.confirm("Deseja mesmo excluir este pedido de compra? Esta ação não pode ser desfeita.")) {
+      try {
+        await api.delete(`/pedidos-compra/${id}`);
+        toast.success("Pedido excluído com sucesso.");
+        carregarDados();
+      } catch (error: any) {
+        const erroReal = error.response?.data?.error || "Erro ao excluir o pedido.";
+        toast.error(erroReal);
+      }
     }
   }
 
   async function marcarComoRecebido(id: string) {
-    if (!usuarioLogado) return toast.error("Erro de segurança: A sua sessão expirou."); // TOAST
+    if (!usuarioLogado) return toast.error("Erro de segurança: A sua sessão expirou."); 
 
-    if (window.confirm("Confirmar a receção? O estoque do Armazém vai ser atualizado automaticamente!")) {
+    if (window.confirm("Confirmar a recepção? O estoque do Armazém vai ser atualizado automaticamente!")) {
       try {
         await api.put(`/pedidos-compra/${id}/receber`, { usuarioId: usuarioLogado.id });
         carregarDados();
-        toast.success("Mercadoria recebida e estoque atualizado com sucesso!"); // TOAST
+        toast.success("Mercadoria recebida e estoque atualizado com sucesso!"); 
       } catch (error: any) { 
         const erroReal = error.response?.data?.error || error.message;
-        toast.error(`Erro ao receber mercadoria: ${erroReal}`); // TOAST
+        toast.error(`Erro ao receber mercadoria: ${erroReal}`); 
       }
     }
   }
 
   const exportarExcel = () => {
-    if (pedidos.length === 0) return toast.warn("Não há dados para exportar."); // TOAST
+    if (pedidos.length === 0) return toast.warn("Não há dados para exportar."); 
     const dadosFormatados = pedidos.map(item => ({
       'Código': item.codigo || '-', 'Data do Pedido': new Date(item.createdAt).toLocaleDateString('pt-BR'),
       'Fornecedor': item.fornecedor?.nomeEmpresa || 'Desconhecido', 'Produto/Insumo': item.produto?.nome || 'Desconhecido',
@@ -103,7 +138,7 @@ export default function Compras() {
   };
 
   const exportarPDF = () => {
-    if (pedidos.length === 0) return toast.warn("Não há dados para exportar."); // TOAST
+    if (pedidos.length === 0) return toast.warn("Não há dados para exportar."); 
     const doc = new jsPDF();
     doc.setFontSize(18); doc.setTextColor(44, 62, 80); doc.text("Relatório de Pedidos de Compra", 14, 22);
     doc.setFontSize(10); doc.setTextColor(127, 140, 141); doc.text(`Emitido em: ${new Date().toLocaleString('pt-BR')}`, 14, 30);
@@ -160,9 +195,14 @@ export default function Compras() {
                 <td style={{...styles.td, textAlign: 'center', fontWeight: 'bold'}}>{item.quantidade}</td>
                 <td style={{...styles.td, color: '#e74c3c', fontWeight: 'bold'}}>R$ {item.custoTotal.toFixed(2).replace('.', ',')}</td>
                 <td style={styles.td}><span style={item.status === 'Pendente' ? styles.badgeAmarelo : styles.badgeVerde}>{item.status}</span></td>
+                
                 <td style={{...styles.td, textAlign: 'center'}}>
                   {item.status === 'Pendente' ? (
-                    <button onClick={() => marcarComoRecebido(item.id)} style={styles.btnAcao}>Receber Mercadoria</button>
+                    <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
+                      <button onClick={() => marcarComoRecebido(item.id)} style={styles.btnAcao}>📥 Receber</button>
+                      <button onClick={() => abrirModalEdicao(item)} style={styles.btnEditar}>✏️ Editar</button>
+                      <button onClick={() => apagarPedido(item.id)} style={styles.btnApagar}>🗑️ Excluir</button>
+                    </div>
                   ) : (
                     <span style={{ color: '#7f8c8d', fontSize: '12px', fontWeight: 'bold' }}>✓ Concluído</span>
                   )}
@@ -177,7 +217,7 @@ export default function Compras() {
         <div style={styles.modalOverlay}>
           <div style={styles.modalContent}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '15px', marginBottom: '20px' }}>
-              <h2 style={{ margin: 0, color: '#2c3e50' }}>Emitir Pedido de Compra</h2>
+              <h2 style={{ margin: 0, color: '#2c3e50' }}>{idEdicao ? 'Editar Pedido de Compra' : 'Emitir Pedido de Compra'}</h2>
               <button onClick={() => setModalVisivel(false)} style={styles.btnFechar}>✖</button>
             </div>
             <form onSubmit={salvarPedido} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
@@ -209,7 +249,9 @@ export default function Compras() {
                 <label style={styles.label}>Data de Entrega (Previsão)</label>
                 <input type="date" style={styles.input} value={previsaoEntrega} onChange={e => setPrevisaoEntrega(e.target.value)} />
               </div>
-              <button type="submit" style={styles.btnSalvar}>Gerar Pedido</button>
+              <button type="submit" style={styles.btnSalvar}>
+                {idEdicao ? 'Salvar Alterações' : 'Gerar Pedido'}
+              </button>
             </form>
           </div>
         </div>
@@ -228,7 +270,9 @@ const styles: { [key: string]: React.CSSProperties } = {
   badgeVerde: { backgroundColor: '#eafaf1', color: '#27ae60', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' },
   badgeCodigo: { backgroundColor: '#f1f2f6', color: '#2c3e50', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', border: '1px solid #ddd' },
   btnPrincipal: { backgroundColor: '#e67e22', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' },
-  btnAcao: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' },
+  btnAcao: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' },
+  btnEditar: { backgroundColor: '#f1c40f', color: 'white', border: 'none', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' },
+  btnApagar: { backgroundColor: '#e74c3c', color: 'white', border: 'none', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' },
   btnExcel: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 5px rgba(39, 174, 96, 0.3)' },
   btnPDF: { backgroundColor: '#e74c3c', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 5px rgba(231, 76, 60, 0.3)' },
   modalOverlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },

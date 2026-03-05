@@ -9,9 +9,12 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [visaoAtiva, setVisaoAtiva] = useState<'estoque' | 'financeiro'>('estoque');
   const [dadosEstoque, setDadosEstoque] = useState<any>({ total: 0, criticos: 0, topProdutos: [] });
-  const [dadosResumo, setDadosResumo] = useState({ totalItensCadastrados: 0, custoTotal: 0 });
   
-  // NOVO ESTADO FINANCEIRO FOCADO EM ARMAZÉM
+  // ==========================================
+  // NOVO ESTADO: totalRupturas ADICIONADO AQUI
+  // ==========================================
+  const [dadosResumo, setDadosResumo] = useState({ totalItensCadastrados: 0, custoTotal: 0, totalRupturas: 0 });
+  
   const [dadosFinanceiros, setDadosFinanceiros] = useState<any>({ 
     potencialReceita: 0, 
     entradasMes: 0, 
@@ -31,11 +34,9 @@ export default function Dashboard() {
         const estoque = resEstoque.data;
         const historico = resMovimentacoes.data;
         
+        // Salva os dados resumidos, que agora incluem totalRupturas
         setDadosResumo(resResumo.data);
 
-        // ==========================================
-        // LÓGICA DO ARMAZÉM
-        // ==========================================
         let total = 0; let criticos = 0;
         estoque.forEach((i: any) => {
           if (i.status === 'Disponível') {
@@ -46,9 +47,6 @@ export default function Dashboard() {
         const topProd = [...estoque].filter(i => i.status === 'Disponível').sort((a, b) => b.quantidade - a.quantidade).slice(0, 5);
         setDadosEstoque({ total, criticos, topProdutos: topProd });
 
-        // ==========================================
-        // NOVA LÓGICA DE INTELIGÊNCIA FINANCEIRA
-        // ==========================================
         const agora = new Date();
         const mesAtual = agora.getMonth();
         const anoAtual = agora.getFullYear();
@@ -58,7 +56,6 @@ export default function Dashboard() {
         let saidasMes = 0;
         const imobilizadoMap: Record<string, { nome: string, valor: number }> = {};
 
-        // 1. Calcula o Potencial de Receita e o Capital Imobilizado por Produto
         estoque.forEach((i: any) => {
           if (i.status === 'Disponível') {
             const precoVenda = i.produto?.precoVenda || 0;
@@ -75,7 +72,6 @@ export default function Dashboard() {
           }
         });
 
-        // 2. Calcula as Entradas e Saídas do Mês Atual (Giro de Estoque)
         historico.forEach((mov: any) => {
           const dataMov = new Date(mov.dataHora);
           if (dataMov.getMonth() === mesAtual && dataMov.getFullYear() === anoAtual) {
@@ -88,7 +84,6 @@ export default function Dashboard() {
           }
         });
         
-        // 3. Ordena os produtos que mais prendem capital
         const topImobilizado = Object.values(imobilizadoMap)
           .sort((a, b) => b.valor - a.valor)
           .slice(0, 5);
@@ -109,6 +104,7 @@ export default function Dashboard() {
       { Indicador: 'Total de Itens no Armazém', Valor: dadosEstoque.total },
       { Indicador: 'Produtos Únicos Cadastrados', Valor: dadosResumo.totalItensCadastrados },
       { Indicador: 'Itens em Estoque Crítico', Valor: dadosEstoque.criticos },
+      { Indicador: 'Itens Perdidos/Avariados (Ruptura)', Valor: dadosResumo.totalRupturas },
       { Indicador: '', Valor: '' },
       { Indicador: 'TOP 5 PRODUTOS (VOLUME)', Valor: 'QUANTIDADE' },
       ...dadosEstoque.topProdutos.map((p: any) => ({ Indicador: p.produto.nome, Valor: p.quantidade }))
@@ -140,14 +136,15 @@ export default function Dashboard() {
     doc.text(`Itens Totais em Estoque: ${dadosEstoque.total}`, 14, 55);
     doc.text(`Produtos Únicos Cadastrados: ${dadosResumo.totalItensCadastrados}`, 14, 62);
     doc.text(`Alerta de Estoque Crítico: ${dadosEstoque.criticos} produtos`, 14, 69);
+    doc.text(`Itens em Ruptura (Perdas/Avarias): ${dadosResumo.totalRupturas}`, 14, 76);
 
     autoTable(doc, {
-      startY: 75, head: [["Top 5 Produtos (Maior Volume)", "Quantidade"]],
+      startY: 82, head: [["Top 5 Produtos (Maior Volume)", "Quantidade"]],
       body: dadosEstoque.topProdutos.map((p: any) => [p.produto.nome, `${p.quantidade} un`]),
       styles: { fontSize: 10, cellPadding: 4 }, headStyles: { fillColor: [2, 136, 209] }
     });
 
-    const finalY = (doc as any).lastAutoTable.finalY || 75;
+    const finalY = (doc as any).lastAutoTable.finalY || 82;
     doc.setFontSize(14); doc.setTextColor(39, 174, 96); doc.text("2. Inteligência Financeira e Custos", 14, finalY + 20);
     doc.setFontSize(11); doc.setTextColor(44, 62, 80); 
     doc.text(`Custo Total Imobilizado: ${formatarReal(dadosResumo.custoTotal)}`, 14, finalY + 30);
@@ -186,10 +183,12 @@ export default function Dashboard() {
               <h3 style={styles.cardTitulo}>Produtos Cadastrados</h3>
               <p style={{ ...styles.cardValor, color: '#8e44ad' }}>{dadosResumo.totalItensCadastrados}</p>
             </div>
+            
             <div style={{ ...styles.card, borderLeft: '5px solid #0288D1' }}>
               <h3 style={styles.cardTitulo}>Volume no Armazém</h3>
               <p style={{ ...styles.cardValor, color: '#0288D1' }}>{dadosEstoque.total}</p>
             </div>
+            
             <div 
               onClick={() => navigate('/estoque', { state: { filtrarCriticos: true } })}
               style={{ ...styles.card, borderLeft: '5px solid #e74c3c', cursor: 'pointer', position: 'relative' }}
@@ -198,6 +197,21 @@ export default function Dashboard() {
               <h3 style={styles.cardTitulo}>Estoque Crítico</h3>
               <p style={{ ...styles.cardValor, color: '#e74c3c' }}>{dadosEstoque.criticos}</p>
               <div style={{ position: 'absolute', bottom: '15px', right: '20px', fontSize: '11px', color: '#e74c3c', fontWeight: 'bold' }}>
+                ➔ VER LISTA
+              </div>
+            </div>
+
+            {/* ==========================================
+                NOVO CARD DE RUPTURAS/PERDAS
+                ========================================== */}
+            <div 
+              onClick={() => navigate('/rupturas')}
+              style={{ ...styles.card, borderLeft: '5px solid #f39c12', cursor: 'pointer', position: 'relative' }}
+              title="Clique para ver o relatório de avarias e perdas"
+            >
+              <h3 style={styles.cardTitulo}>Perdas e Avarias</h3>
+              <p style={{ ...styles.cardValor, color: '#f39c12' }}>{dadosResumo.totalRupturas}</p>
+              <div style={{ position: 'absolute', bottom: '15px', right: '20px', fontSize: '11px', color: '#f39c12', fontWeight: 'bold' }}>
                 ➔ VER LISTA
               </div>
             </div>

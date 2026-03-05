@@ -10,11 +10,12 @@ import Fornecedores from './pages/Fornecedores';
 import Compras from './pages/Compras';
 import { Locais } from './pages/Locais';
 
-// IMPORTAÇÕES DO TOASTIFY
+// IMPORTAÇÃO DA NOVA TELA
+import Rupturas from './pages/Rupturas';
+
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-// Componente do Menu Lateral para ficar organizado
 function Sidebar({ usuarioLogado, fazerLogout }: any) {
   const location = useLocation();
   const isAdmin = usuarioLogado.cargo.toLowerCase().includes('admin') || usuarioLogado.cargo.toLowerCase().includes('gestor');
@@ -42,9 +43,13 @@ function Sidebar({ usuarioLogado, fazerLogout }: any) {
         <p style={{ margin: '5px 0 0 0', fontSize: '13px', color: '#95a5a6', textAlign: 'center' }}>Versão Desktop</p>
       </div>
 
-      <nav style={{ flex: 1, padding: '0 15px' }}>
+      <nav style={{ flex: 1, padding: '0 15px', overflowY: 'auto' }}>
         <Link to="/" style={navItemStyle('/')}>📊 Dashboard</Link>
         <Link to="/estoque" style={navItemStyle('/estoque')}>📦 Armazém</Link>
+        
+        {/* NOVO BOTÃO NO MENU LATERAL */}
+        <Link to="/rupturas" style={navItemStyle('/rupturas')}>⚠️ Rupturas (Perdas)</Link>
+        
         <Link to="/produtos" style={navItemStyle('/produtos')}>🏷️ Catálogo</Link>
         <Link to="/historico" style={navItemStyle('/historico')}>🕒 Auditoria</Link>
         <Link to="/fornecedores" style={navItemStyle('/fornecedores')}>🏭 Fornecedores</Link>
@@ -80,7 +85,6 @@ export default function App() {
   }, []);
 
   function fazerLogout() {
-    // Atualizado para ViaPro
     if (window.confirm("Deseja mesmo sair do sistema ViaPro?")) {
       localStorage.removeItem('@Munila:user');
       setUsuarioLogado(null);
@@ -94,14 +98,16 @@ export default function App() {
     <BrowserRouter>
       <div style={{ display: 'flex', fontFamily: 'system-ui, sans-serif', backgroundColor: '#f4f7f6', minHeight: '100vh' }}>
         
-        {/* MENU LATERAL FIXO */}
         <Sidebar usuarioLogado={usuarioLogado} fazerLogout={fazerLogout} />
 
-        {/* ÁREA DE CONTEÚDO */}
         <div style={{ marginLeft: '250px', flex: 1, padding: '30px' }}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/estoque" element={<Estoque />} />
+            
+            {/* ROTA DA NOVA TELA DE RUPTURAS */}
+            <Route path="/rupturas" element={<Rupturas />} />
+
             <Route path="/produtos" element={<Produtos />} />
             <Route path="/historico" element={<Historico />} />
             <Route path="/gestores" element={<Gestores />} />
@@ -113,7 +119,6 @@ export default function App() {
         </div>
       </div>
       
-      {/* CONTAINER DO TOASTIFY (Notificações Globais) */}
       <ToastContainer position="top-right" autoClose={3000} theme="colored" />
     </BrowserRouter>
   );

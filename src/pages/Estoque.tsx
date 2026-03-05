@@ -238,6 +238,8 @@ export default function Estoque() {
                   <option value="Ajuste de Saída de Inventário">📉 Ajuste de Saída de Inventário</option>
                   <option value="Ajuste de Entrada de Inventário">📈 Ajuste de Entrada de Inventário</option>
                   <option value="Saída para demonstração">🛍️ Saída para demonstração</option>
+                  {/* NOVA AÇÃO ADICIONADA AQUI */}
+                  <option value="Perdas/Avarias">⚠️ Perdas/Avarias</option> 
                 </select>
               </div>
 
