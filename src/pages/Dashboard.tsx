@@ -16,8 +16,6 @@ export default function Dashboard() {
   const [categorias, setCategorias] = useState<any[]>([]);
   const [caixaComprometido, setCaixaComprometido] = useState(0);
   const [prejuizoMes, setPrejuizoMes] = useState(0);
-  const [giroEntradas, setGiroEntradas] = useState(0);
-  const [giroSaidas, setGiroSaidas] = useState(0);
   
   const [buscaFinanceiro, setBuscaFinanceiro] = useState('');
   const [categoriaFinanceiro, setCategoriaFinanceiro] = useState('');
@@ -36,10 +34,23 @@ export default function Dashboard() {
           api.get('/categorias'), api.get('/pedidos-compra')
         ]);
         
-        const estoque = resEstoque.data;
+        let estoque = resEstoque.data;
         const historico = resMovimentacoes.data;
         const produtos = resProdutos.data;
         
+        // ✨ MÁGICA DA AUTO-CURA ✨
+        const produtosFaltantes = produtos.filter((p: any) => 
+          !estoque.some((e: any) => e.produtoId === p.id && e.status === 'Disponível')
+        );
+
+        if (produtosFaltantes.length > 0) {
+          await Promise.all(produtosFaltantes.map((p: any) => 
+            api.post('/estoque', { produtoId: p.id, quantidade: 0, status: 'Disponível' })
+          ));
+          const resEstoqueAtualizado = await api.get('/estoque');
+          estoque = resEstoqueAtualizado.data;
+        }
+
         setCategorias(resCategorias.data);
         setDadosResumo(resResumo.data);
 
@@ -48,14 +59,11 @@ export default function Dashboard() {
         estoque.forEach((i: any) => {
           if (i.status === 'Disponível') {
             totalEstoque += i.quantidade;
-            
-            // Lê o estoque mínimo da descrição ou usa 10 como padrão
             let minEstoque = 10;
             const desc = i.produto?.descricao || '';
             const match = desc.match(/\[MIN:(\d+)\]/);
             if (match) minEstoque = parseInt(match[1], 10);
             
-            // Compara com o mínimo exclusivo do produto
             if (i.quantidade <= minEstoque) criticos++;
           }
         });
@@ -94,28 +102,18 @@ export default function Dashboard() {
 
         // 3. INTELIGÊNCIA MENSAL (Movimentações)
         const agora = new Date();
-        let entradasMes = 0; let saidasMes = 0; let perdasMes = 0;
+        let perdasMes = 0;
 
         historico.forEach((mov: any) => {
           const dataMov = new Date(mov.dataHora);
           if (dataMov.getMonth() === agora.getMonth() && dataMov.getFullYear() === agora.getFullYear()) {
             const custoUn = mov.produto?.precoCusto || 0;
-            const valorAcao = mov.quantidade * custoUn;
-            
-            if (['Entrada de mercadoria', 'Devolução VIAPRO', 'Ajuste de Entrada de Inventário'].includes(mov.tipoAcao)) {
-              entradasMes += valorAcao;
-            } else if (['Saída de mercadoria', 'Ajuste de Saída de Inventário', 'Saída para demonstração'].includes(mov.tipoAcao)) {
-              saidasMes += valorAcao;
-            } else if (mov.tipoAcao === 'Perdas/Avarias') {
-              perdasMes += valorAcao; 
-            }
+            if (mov.tipoAcao === 'Perdas/Avarias') perdasMes += (mov.quantidade * custoUn); 
           }
         });
-        setGiroEntradas(entradasMes);
-        setGiroSaidas(saidasMes);
         setPrejuizoMes(perdasMes);
 
-        // 4. CAIXA COMPROMETIDO (Pedidos Pendentes)
+        // 4. CAIXA COMPROMETIDO
         const totalPendente = resPedidos.data
           .filter((ped: any) => ped.status === 'Pendente')
           .reduce((acc: number, ped: any) => acc + ped.custoTotal, 0);
@@ -212,9 +210,35 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', backgroundColor: '#e0e6ed', padding: '4px', borderRadius: '8px', marginBottom: '25px', width: 'fit-content' }}>
-        <button onClick={() => setVisaoAtiva('estoque')} style={{ ...styles.toggleBtn, backgroundColor: visaoAtiva === 'estoque' ? '#0288D1' : 'transparent', color: visaoAtiva === 'estoque' ? 'white' : '#7f8c8d' }}>Armazém</button>
-        <button onClick={() => setVisaoAtiva('financeiro')} style={{ ...styles.toggleBtn, backgroundColor: visaoAtiva === 'financeiro' ? '#27ae60' : 'transparent', color: visaoAtiva === 'financeiro' ? 'white' : '#7f8c8d' }}>Financeiro (Novo)</button>
+      <div style={{ display: 'flex', gap: '15px', marginBottom: '25px' }}>
+        <button 
+          onClick={() => setVisaoAtiva('estoque')} 
+          style={{ 
+            ...styles.toggleBtn, 
+            backgroundColor: visaoAtiva === 'estoque' ? '#0288D1' : 'white', 
+            color: visaoAtiva === 'estoque' ? 'white' : '#0288D1',
+            border: '2px solid #0288D1',
+            padding: '12px 25px',
+            fontSize: '15px',
+            boxShadow: visaoAtiva === 'estoque' ? '0 4px 10px rgba(2, 136, 209, 0.3)' : 'none'
+          }}
+        >
+          📦 Armazém
+        </button>
+        <button 
+          onClick={() => setVisaoAtiva('financeiro')} 
+          style={{ 
+            ...styles.toggleBtn, 
+            backgroundColor: visaoAtiva === 'financeiro' ? '#27ae60' : 'white', 
+            color: visaoAtiva === 'financeiro' ? 'white' : '#27ae60',
+            border: '2px solid #27ae60',
+            padding: '12px 25px',
+            fontSize: '15px',
+            boxShadow: visaoAtiva === 'financeiro' ? '0 4px 10px rgba(39, 174, 96, 0.3)' : 'none'
+          }}
+        >
+          💰 Financeiro
+        </button>
       </div>
 
       {visaoAtiva === 'estoque' && (
@@ -279,13 +303,7 @@ export default function Dashboard() {
               <h2 style={{ margin: '0 0 15px 0', color: '#2c3e50', fontSize: '18px' }}>Relatório Detalhado de Capital Imobilizado</h2>
               
               <div style={{ display: 'flex', gap: '15px' }}>
-                <input 
-                  type="text" 
-                  placeholder="Buscar produto por Nome ou SKU..." 
-                  style={styles.inputFiltro} 
-                  value={buscaFinanceiro} 
-                  onChange={(e) => setBuscaFinanceiro(e.target.value)} 
-                />
+                <input type="text" placeholder="Buscar produto por Nome ou SKU..." style={styles.inputFiltro} value={buscaFinanceiro} onChange={(e) => setBuscaFinanceiro(e.target.value)} />
                 <select style={styles.selectFiltro} value={categoriaFinanceiro} onChange={(e) => setCategoriaFinanceiro(e.target.value)}>
                   <option value="">Todas as Categorias</option>
                   {categorias.map(cat => <option key={cat.id} value={cat.id}>{cat.nome}</option>)}
@@ -362,7 +380,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   inputFiltro: { flex: 2, padding: '12px 15px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '14px', outline: 'none', backgroundColor: '#f9fbfb' },
   selectFiltro: { flex: 1, padding: '12px 15px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '14px', outline: 'none', backgroundColor: '#f9fbfb', cursor: 'pointer' },
   th: { padding: '15px 20px', backgroundColor: '#f9fbfb', color: '#7f8c8d', borderBottom: '2px solid #ecf0f1', textTransform: 'uppercase', fontSize: '12px', letterSpacing: '1px' },
-  tr: { borderBottom: '1px solid #ecf0f1' },
+  tr: { borderBottom: '1px solid #ecf0f1', transition: '0.2s' },
   td: { padding: '15px 20px', color: '#2c3e50', fontSize: '14px', verticalAlign: 'middle' },
   badge: { backgroundColor: '#f1f2f6', color: '#7f8c8d', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase' }
 };

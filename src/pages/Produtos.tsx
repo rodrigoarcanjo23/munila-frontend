@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../api';
 import { toast } from 'react-toastify';
+import { IoPencilSharp, IoTrashSharp, IoAddOutline } from 'react-icons/io5';
 
 export default function Produtos() {
   const [produtos, setProdutos] = useState<any[]>([]);
@@ -36,7 +37,6 @@ export default function Produtos() {
   const [dataCadastro, setDataCadastro] = useState('');
   const [novaCategoriaNome, setNovaCategoriaNome] = useState('');
 
-  // FUNÇÕES INTERNAS (Substituindo o utils)
   const formatarDataBR = (dataString: string) => {
     if (!dataString) return '-';
     const data = new Date(dataString);
@@ -186,7 +186,11 @@ export default function Produtos() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <h1 style={{ color: '#2c3e50', margin: 0 }}>Catálogo de Produtos</h1>
-        {!isVendedor && <button onClick={abrirModalNovo} style={styles.btnPrincipal}>+ Novo Produto</button>}
+        {!isVendedor && (
+          <button onClick={abrirModalNovo} style={styles.btnPrincipal}>
+            <IoAddOutline size={20} /> Novo Produto
+          </button>
+        )}
       </div>
 
       <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', backgroundColor: 'white', padding: '15px', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
@@ -226,8 +230,24 @@ export default function Produtos() {
                 <td style={styles.td}>{item.fornecedor?.nomeEmpresa || '-'}</td>
                 {!isVendedor && (
                   <td style={{...styles.td, textAlign: 'center'}}>
-                    <button onClick={() => abrirModalEdicao(item)} style={styles.btnEditar}>Editar</button>
-                    {isAdmin && <button onClick={() => apagarProduto(item.id)} style={styles.btnApagar}>Excluir</button>}
+                    <div style={styles.acoesContainer}>
+                      <button 
+                        onClick={() => abrirModalEdicao(item)} 
+                        style={styles.btnAcaoEditar}
+                        title="Editar Produto"
+                      >
+                        <IoPencilSharp size={16} /> Editar
+                      </button>
+                      {isAdmin && (
+                        <button 
+                          onClick={() => apagarProduto(item.id)} 
+                          style={styles.btnAcaoApagar}
+                          title="Excluir Produto"
+                        >
+                          <IoTrashSharp size={16} /> Excluir
+                        </button>
+                      )}
+                    </div>
                   </td>
                 )}
               </tr>
@@ -355,7 +375,6 @@ export default function Produtos() {
   );
 }
 
-// ESTILOS LOCAIS RECONSTRUÍDOS SEM DEPENDER DO GLOBALSTYLES
 const styles: { [key: string]: React.CSSProperties } = {
   tableContainer: { backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)', overflow: 'hidden' },
   table: { width: '100%', borderCollapse: 'collapse', textAlign: 'left' },
@@ -363,15 +382,60 @@ const styles: { [key: string]: React.CSSProperties } = {
   tr: { borderBottom: '1px solid #ecf0f1', transition: '0.2s' },
   td: { padding: '15px 20px', color: '#2c3e50', fontSize: '14px', verticalAlign: 'middle' },
   badgeCinza: { backgroundColor: '#f1f2f6', color: '#7f8c8d', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' },
-  btnEditar: { backgroundColor: '#f39c12', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px', marginRight: '5px' },
-  btnApagar: { backgroundColor: '#e74c3c', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' },
+  
+  acoesContainer: {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: '8px', 
+  },
+  btnAcaoEditar: {
+    border: 'none',
+    borderRadius: '6px',
+    padding: '6px 12px',
+    fontSize: '12px',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    transition: 'background-color 0.2s',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '5px',
+    backgroundColor: '#f39c12',
+    color: 'white',
+  },
+  btnAcaoApagar: {
+    border: 'none',
+    borderRadius: '6px',
+    padding: '6px 12px',
+    fontSize: '12px',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    transition: 'background-color 0.2s',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '5px',
+    backgroundColor: '#e74c3c',
+    color: 'white',
+  },
+
   modalOverlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
   modalContent: { backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '100%', maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' },
   btnFechar: { background: 'none', border: 'none', fontSize: '20px', color: '#e74c3c', cursor: 'pointer' },
   label: { display: 'block', fontSize: '13px', fontWeight: 'bold', color: '#34495e', marginBottom: '5px' },
   input: { width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '15px', boxSizing: 'border-box', backgroundColor: '#fafafa' },
   btnSalvar: { backgroundColor: '#27ae60', color: 'white', padding: '15px', borderRadius: '8px', border: 'none', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
-  btnPrincipal: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' },
+  btnPrincipal: { 
+    backgroundColor: '#27ae60', 
+    color: 'white', 
+    border: 'none', 
+    padding: '12px 20px', 
+    borderRadius: '8px', 
+    cursor: 'pointer', 
+    fontWeight: 'bold', 
+    fontSize: '14px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
+  },
   inputBusca: { width: '100%', padding: '12px 15px', borderRadius: '8px', border: '1px solid #ecf0f1', fontSize: '14px', boxSizing: 'border-box', backgroundColor: '#f9fbfb', color: '#2c3e50' },
   selectBusca: { width: '100%', padding: '12px 15px', borderRadius: '8px', border: '1px solid #ecf0f1', fontSize: '14px', boxSizing: 'border-box', backgroundColor: '#f9fbfb', color: '#2c3e50', cursor: 'pointer' },
   btnLink: { background: 'none', border: 'none', color: '#27ae60', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px', padding: 0 },
