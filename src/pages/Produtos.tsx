@@ -25,17 +25,23 @@ export default function Produtos() {
   const [descricao, setDescricao] = useState('');
   const [quantidadeInicial, setQuantidadeInicial] = useState('0');
   
+  const [estoqueMinimo, setEstoqueMinimo] = useState('10'); 
+  
   const [precoCusto, setPrecoCusto] = useState('');
   const [precoVenda, setPrecoVenda] = useState('');
 
   const [lote, setLote] = useState('');
   const [enderecoLocalizacao, setEnderecoLocalizacao] = useState('');
   const [fornecedorId, setFornecedorId] = useState('');
-  
-  // NOVO ESTADO: DATA DE CADASTRO
   const [dataCadastro, setDataCadastro] = useState('');
-
   const [novaCategoriaNome, setNovaCategoriaNome] = useState('');
+
+  // FUNÇÕES INTERNAS (Substituindo o utils)
+  const formatarDataBR = (dataString: string) => {
+    if (!dataString) return '-';
+    const data = new Date(dataString);
+    return data.toLocaleDateString('pt-BR');
+  };
 
   async function carregarDados() {
     setCarregando(true);
@@ -55,9 +61,7 @@ export default function Produtos() {
       const userSalvo = localStorage.getItem('@Munila:user');
       if (userSalvo) setUsuarioLogado(JSON.parse(userSalvo));
 
-    } catch (error) { 
-      toast.error("Erro ao carregar o catálogo de produtos."); 
-    } 
+    } catch (error) { toast.error("Erro ao carregar o catálogo de produtos."); } 
     finally { setCarregando(false); }
   }
 
@@ -81,14 +85,11 @@ export default function Produtos() {
     });
   }, [produtos, termoBusca, filtroCategoria]);
 
-
   function abrirModalNovo() {
     setIdEdicao(null);
     setNome(''); setSku(''); setTipo('ACABADO'); setDescricao(''); setQuantidadeInicial('0');
-    setPrecoCusto(''); setPrecoVenda('');
+    setPrecoCusto(''); setPrecoVenda(''); setEstoqueMinimo('10');
     setLote(''); setEnderecoLocalizacao(''); setFornecedorId('');
-    
-    // Seta a data de hoje como padrão para novos cadastros
     setDataCadastro(new Date().toISOString().substring(0, 10));
 
     if (categorias.length > 0) setCategoriaId(categorias[0].id);
@@ -99,73 +100,68 @@ export default function Produtos() {
   function abrirModalEdicao(p: any) {
     setIdEdicao(p.id);
     setNome(p.nome); setSku(p.sku); setTipo(p.tipo || 'ACABADO'); setCategoriaId(p.categoriaId);
-    setDescricao(p.descricao || '');
+    
+    let descReal = p.descricao || '';
+    let min = '10';
+    const match = descReal.match(/\[MIN:(\d+)\]/);
+    if (match) {
+      min = match[1];
+      descReal = descReal.replace(match[0], '').trim(); 
+    }
+    
+    setDescricao(descReal);
+    setEstoqueMinimo(min);
+    
     setPrecoCusto(p.precoCusto ? String(p.precoCusto) : '');
     setPrecoVenda(p.precoVenda ? String(p.precoVenda) : '');
     setLote(p.lote || '');
     setEnderecoLocalizacao(p.enderecoLocalizacao || '');
     setFornecedorId(p.fornecedorId || '');
-    
-    // Carrega a data salva no banco ou usa a de hoje
     setDataCadastro(p.dataCadastro ? new Date(p.dataCadastro).toISOString().substring(0, 10) : new Date().toISOString().substring(0, 10));
-    
     setModalVisivel(true);
   }
 
   async function apagarProduto(id: string) {
-    const motivo = window.prompt("⚠️ AÇÃO AUDITÁVEL ⚠️\nPara excluir este produto e todo o seu histórico no armazém, digite o motivo da exclusão:");
+    const motivo = window.prompt("⚠️ AÇÃO AUDITÁVEL ⚠️\nPara excluir este produto, digite o motivo:");
     if (motivo === null) return; 
-    if (motivo.trim() === '') {
-      toast.warn("O motivo é obrigatório para registrar a exclusão na Auditoria.");
-      return;
-    }
+    if (motivo.trim() === '') return toast.warn("O motivo é obrigatório.");
+    
     try {
-      await api.delete(`/produtos/${id}`, {
-        data: { motivo: motivo, usuarioId: usuarioLogado?.id }
-      });
+      await api.delete(`/produtos/${id}`, { data: { motivo: motivo, usuarioId: usuarioLogado?.id } });
       toast.success("Produto e histórico excluídos com sucesso!"); 
       carregarDados();
     } catch (err: any) { 
-      toast.error("Erro ao excluir: " + (err.response?.data?.error || "Falha na comunicação com o servidor.")); 
+      toast.error("Erro ao excluir: " + (err.response?.data?.error || "Falha na comunicação.")); 
     }
   }
 
   async function salvarNovaCategoria(e: React.FormEvent) {
     e.preventDefault();
-    if (!novaCategoriaNome.trim()) {
-      toast.warn("Digite o nome da categoria."); 
-      return;
-    }
+    if (!novaCategoriaNome.trim()) return toast.warn("Digite o nome da categoria."); 
     try {
       const res = await api.post('/categorias', { nome: novaCategoriaNome, descricao: "Criada via Desktop" });
       setCategorias([...categorias, res.data]); setCategoriaId(res.data.id);
       setModalCategoriaVisivel(false); setNovaCategoriaNome('');
       toast.success("Categoria/Subcategoria criada com sucesso!"); 
-    } catch (error) { 
-      toast.error("Erro ao criar a categoria."); 
-    }
+    } catch (error) { toast.error("Erro ao criar a categoria."); }
   }
 
   async function salvarProduto(e: React.FormEvent) {
     e.preventDefault();
-    if (!nome || !sku) {
-      toast.warn("Preencha o Nome e o SKU do produto."); 
-      return;
-    }
-    if (!categoriaId) {
-      toast.warn("Crie ou selecione uma Categoria."); 
-      return;
-    }
+    if (!nome || !sku) return toast.warn("Preencha o Nome e o SKU do produto."); 
+    if (!categoriaId) return toast.warn("Crie ou selecione uma Categoria."); 
 
     const custoNum = Number(precoCusto.toString().replace(',', '.')) || 0;
     const vendaNum = Number(precoVenda.toString().replace(',', '.')) || 0;
+    const minNum = Number(estoqueMinimo) || 10;
+
+    const descricaoComTag = `${descricao.trim()} [MIN:${minNum}]`.trim();
 
     const payload = { 
-      nome, sku, tipo, categoriaId, descricao, 
+      nome, sku, tipo, categoriaId, descricao: descricaoComTag, 
       precoCusto: custoNum, precoVenda: vendaNum,
       lote, enderecoLocalizacao, 
-      fornecedorId: fornecedorId || null,
-      dataCadastro // Envia a dataEscolhida para o back-end
+      fornecedorId: fornecedorId || null, dataCadastro 
     };
 
     try {
@@ -195,20 +191,10 @@ export default function Produtos() {
 
       <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', backgroundColor: 'white', padding: '15px', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
         <div style={{ flex: 2 }}>
-          <input 
-            type="text" 
-            placeholder="Buscar por Nome, SKU, Lote ou Endereço..." 
-            style={styles.inputBusca} 
-            value={termoBusca}
-            onChange={(e) => setTermoBusca(e.target.value)}
-          />
+          <input type="text" placeholder="Buscar por Nome, SKU, Lote ou Endereço..." style={styles.inputBusca} value={termoBusca} onChange={(e) => setTermoBusca(e.target.value)} />
         </div>
         <div style={{ flex: 1 }}>
-          <select 
-            style={styles.selectBusca} 
-            value={filtroCategoria}
-            onChange={(e) => setFiltroCategoria(e.target.value)}
-          >
+          <select style={styles.selectBusca} value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}>
             <option value="">Todas as Categorias</option>
             {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
           </select>
@@ -236,9 +222,8 @@ export default function Produtos() {
                 <td style={styles.td}><span style={styles.badgeCinza}>{item.sku}</span></td>
                 <td style={styles.td}>{item.categoria?.nome || '-'}</td>
                 <td style={styles.td}>{item.enderecoLocalizacao || '-'}</td>
-                <td style={styles.td}>{item.dataCadastro ? new Date(item.dataCadastro).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '-'}</td>
+                <td style={styles.td}>{formatarDataBR(item.dataCadastro)}</td>
                 <td style={styles.td}>{item.fornecedor?.nomeEmpresa || '-'}</td>
-                
                 {!isVendedor && (
                   <td style={{...styles.td, textAlign: 'center'}}>
                     <button onClick={() => abrirModalEdicao(item)} style={styles.btnEditar}>Editar</button>
@@ -253,14 +238,13 @@ export default function Produtos() {
 
       {modalVisivel && (
         <div style={styles.modalOverlay}>
-          <div style={{...styles.modalContent, maxHeight: '90vh', overflowY: 'auto'}}>
+          <div style={styles.modalContent}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '15px', marginBottom: '20px' }}>
               <h2 style={{ margin: 0, color: '#2c3e50' }}>{idEdicao ? 'Editar Produto' : 'Novo Produto'}</h2>
               <button onClick={() => setModalVisivel(false)} style={styles.btnFechar}>✖</button>
             </div>
 
             <form onSubmit={salvarProduto} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              
               <div style={styles.formGroupTitle}>Dados Essenciais</div>
               <div style={{ display: 'flex', gap: '15px' }}>
                 <div style={{ flex: 2 }}>
@@ -272,7 +256,7 @@ export default function Produtos() {
                   <input type="text" style={styles.input} value={sku} onChange={e => setSku(e.target.value)} required placeholder="Ex: MUN-099" />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label style={styles.label}>Data de Cadastro</label>
+                  <label style={styles.label}>Data Cad.</label>
                   <input type="date" style={styles.input} value={dataCadastro} onChange={e => setDataCadastro(e.target.value)} required />
                 </div>
               </div>
@@ -287,7 +271,7 @@ export default function Produtos() {
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
-                    <label style={{...styles.label, marginBottom: 0}}>Categoria / Subcategoria</label>
+                    <label style={{...styles.label, marginBottom: 0}}>Categoria</label>
                     <button type="button" onClick={() => setModalCategoriaVisivel(true)} style={styles.btnLink}>+ Nova</button>
                   </div>
                   <select style={styles.input} value={categoriaId} onChange={e => setCategoriaId(e.target.value)}>
@@ -296,15 +280,19 @@ export default function Produtos() {
                 </div>
               </div>
 
-              <div style={styles.formGroupTitle}>Logística e Rastreabilidade</div>
+              <div style={styles.formGroupTitle}>Logística e Alertas</div>
               <div style={{ display: 'flex', gap: '15px' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={styles.label}>Endereço Físico (Ex: R-01-P02-C01)</label>
+                <div style={{ flex: 2 }}>
+                  <label style={styles.label}>Endereço Físico</label>
                   <input type="text" style={styles.input} value={enderecoLocalizacao} onChange={e => setEnderecoLocalizacao(e.target.value)} placeholder="Rua - Prateleira - Célula" />
                 </div>
                 <div style={{ flex: 1 }}>
                   <label style={styles.label}>Nº do Lote</label>
                   <input type="text" style={styles.input} value={lote} onChange={e => setLote(e.target.value)} placeholder="Ex: L2026B" />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{...styles.label, color: '#e74c3c'}}>Estoque Mínimo *</label>
+                  <input type="number" style={{...styles.input, borderColor: '#fadbd8', backgroundColor: '#fdf2e9'}} value={estoqueMinimo} onChange={e => setEstoqueMinimo(e.target.value)} min="1" required />
                 </div>
               </div>
 
@@ -349,11 +337,10 @@ export default function Produtos() {
         </div>
       )}
 
-      {/* Modal de Categoria */}
       {modalCategoriaVisivel && (
         <div style={{...styles.modalOverlay, zIndex: 1100}}>
           <div style={{...styles.modalContent, maxWidth: '400px'}}>
-            <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>Nova Categoria/Subcategoria</h3>
+            <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>Nova Categoria</h3>
             <form onSubmit={salvarNovaCategoria} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <input type="text" style={styles.input} value={novaCategoriaNome} onChange={e => setNovaCategoriaNome(e.target.value)} placeholder="Ex: Lupas Femininas..." autoFocus required />
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
@@ -368,24 +355,25 @@ export default function Produtos() {
   );
 }
 
+// ESTILOS LOCAIS RECONSTRUÍDOS SEM DEPENDER DO GLOBALSTYLES
 const styles: { [key: string]: React.CSSProperties } = {
   tableContainer: { backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)', overflow: 'hidden' },
   table: { width: '100%', borderCollapse: 'collapse', textAlign: 'left' },
   th: { padding: '15px 20px', backgroundColor: '#f9fbfb', color: '#7f8c8d', borderBottom: '2px solid #ecf0f1', textTransform: 'uppercase', fontSize: '12px', letterSpacing: '1px' },
-  tr: { borderBottom: '1px solid #ecf0f1' },
+  tr: { borderBottom: '1px solid #ecf0f1', transition: '0.2s' },
   td: { padding: '15px 20px', color: '#2c3e50', fontSize: '14px', verticalAlign: 'middle' },
   badgeCinza: { backgroundColor: '#f1f2f6', color: '#7f8c8d', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' },
-  btnPrincipal: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' },
-  btnEditar: { backgroundColor: '#f1f2f6', color: '#f39c12', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px', marginRight: '8px' },
-  btnApagar: { backgroundColor: '#fef5e7', color: '#e74c3c', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' },
+  btnEditar: { backgroundColor: '#f39c12', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px', marginRight: '5px' },
+  btnApagar: { backgroundColor: '#e74c3c', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' },
   modalOverlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
-  modalContent: { backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '100%', maxWidth: '700px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' },
+  modalContent: { backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '100%', maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' },
   btnFechar: { background: 'none', border: 'none', fontSize: '20px', color: '#e74c3c', cursor: 'pointer' },
   label: { display: 'block', fontSize: '13px', fontWeight: 'bold', color: '#34495e', marginBottom: '5px' },
   input: { width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '15px', boxSizing: 'border-box', backgroundColor: '#fafafa' },
+  btnSalvar: { backgroundColor: '#27ae60', color: 'white', padding: '15px', borderRadius: '8px', border: 'none', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
+  btnPrincipal: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' },
   inputBusca: { width: '100%', padding: '12px 15px', borderRadius: '8px', border: '1px solid #ecf0f1', fontSize: '14px', boxSizing: 'border-box', backgroundColor: '#f9fbfb', color: '#2c3e50' },
   selectBusca: { width: '100%', padding: '12px 15px', borderRadius: '8px', border: '1px solid #ecf0f1', fontSize: '14px', boxSizing: 'border-box', backgroundColor: '#f9fbfb', color: '#2c3e50', cursor: 'pointer' },
-  btnSalvar: { backgroundColor: '#27ae60', color: 'white', padding: '15px', borderRadius: '8px', border: 'none', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
   btnLink: { background: 'none', border: 'none', color: '#27ae60', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px', padding: 0 },
   btnCancelar: { backgroundColor: '#f1f2f6', color: '#7f8c8d', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' },
   btnSalvarPequeno: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' },

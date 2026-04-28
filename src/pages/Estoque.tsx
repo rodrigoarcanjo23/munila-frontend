@@ -24,10 +24,10 @@ export default function Estoque() {
   const [formObservacao, setFormObservacao] = useState('');
   const [enviando, setEnviando] = useState(false);
 
-  // ==========================================
-  // FUNÇÃO DE FORMATAÇÃO FINANCEIRA
-  // ==========================================
-  const formatarReal = (valor: number) => Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor || 0);
+  // FUNÇÃO INTERNA DE MOEDA (Substituindo o utils)
+  const formatarReal = (valor: number) => {
+    return Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor || 0);
+  };
 
   async function carregarDados() {
     setCarregando(true);
@@ -96,13 +96,22 @@ export default function Estoque() {
     finally { setEnviando(false); }
   }
 
+  const isCritico = (item: any) => {
+    let minEstoque = 10;
+    const desc = item.produto?.descricao || '';
+    const match = desc.match(/\[MIN:(\d+)\]/);
+    if (match) minEstoque = parseInt(match[1], 10);
+    return item.quantidade <= minEstoque;
+  };
+
   let inventarioFiltrado = inventario.filter(item => 
     item.produto.nome.toLowerCase().includes(busca.toLowerCase()) ||
     item.produto.sku.toLowerCase().includes(busca.toLowerCase())
   );
 
   if (categoriaSelecionada) inventarioFiltrado = inventarioFiltrado.filter(item => item.produto.categoriaId === categoriaSelecionada);
-  if (mostrarCriticos) inventarioFiltrado = inventarioFiltrado.filter(item => item.quantidade < 10);
+  
+  if (mostrarCriticos) inventarioFiltrado = inventarioFiltrado.filter(isCritico);
 
   inventarioFiltrado.sort((a, b) => a.produto.nome.localeCompare(b.produto.nome));
 
@@ -171,7 +180,7 @@ export default function Estoque() {
           color: mostrarCriticos ? '#e74c3c' : '#7f8c8d', fontWeight: 'bold', fontSize: '14px', transition: '0.2s' 
         }}>
           <input type="checkbox" checked={mostrarCriticos} onChange={e => setMostrarCriticos(e.target.checked)} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
-          Apenas Críticos (abaixo de 10)
+          Apenas Críticos (Abaixo do Mínimo Ideal)
         </label>
       </div>
 
@@ -194,7 +203,7 @@ export default function Estoque() {
               <tr><td colSpan={8} style={{textAlign: 'center', padding: '20px', color: '#7f8c8d'}}>Nenhum produto encontrado.</td></tr>
             )}
             {inventarioFiltrado.map((item) => {
-              const ehCritico = item.quantidade < 10;
+              const ehCritico = isCritico(item); 
               return (
                 <tr key={item.id} style={styles.tr}>
                   <td style={styles.td}><strong>{item.produto.nome}</strong></td>
@@ -238,7 +247,6 @@ export default function Estoque() {
                   <option value="Ajuste de Saída de Inventário">📉 Ajuste de Saída de Inventário</option>
                   <option value="Ajuste de Entrada de Inventário">📈 Ajuste de Entrada de Inventário</option>
                   <option value="Saída para demonstração">🛍️ Saída para demonstração</option>
-                  {/* NOVA AÇÃO ADICIONADA AQUI */}
                   <option value="Perdas/Avarias">⚠️ Perdas/Avarias</option> 
                 </select>
               </div>

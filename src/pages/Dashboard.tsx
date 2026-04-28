@@ -7,12 +7,11 @@ import autoTable from 'jspdf-autotable';
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [visaoAtiva, setVisaoAtiva] = useState<'estoque' | 'financeiro'>('financeiro'); // Já deixei a aba Financeiro como padrão para você testar!
+  const [visaoAtiva, setVisaoAtiva] = useState<'estoque' | 'financeiro'>('financeiro'); 
   
   const [dadosEstoque, setDadosEstoque] = useState<any>({ total: 0, criticos: 0, topProdutos: [] });
   const [dadosResumo, setDadosResumo] = useState({ totalItensCadastrados: 0, custoTotal: 0, totalRupturas: 0 });
   
-  // Novos Estados Financeiros
   const [listaImobilizado, setListaImobilizado] = useState<any[]>([]);
   const [categorias, setCategorias] = useState<any[]>([]);
   const [caixaComprometido, setCaixaComprometido] = useState(0);
@@ -20,7 +19,6 @@ export default function Dashboard() {
   const [giroEntradas, setGiroEntradas] = useState(0);
   const [giroSaidas, setGiroSaidas] = useState(0);
   
-  // Filtros
   const [buscaFinanceiro, setBuscaFinanceiro] = useState('');
   const [categoriaFinanceiro, setCategoriaFinanceiro] = useState('');
   
@@ -45,12 +43,20 @@ export default function Dashboard() {
         setCategorias(resCategorias.data);
         setDadosResumo(resResumo.data);
 
-        // 1. DADOS DE ESTOQUE (Top 5)
+        // 1. DADOS DE ESTOQUE (Top 5 e Cálculo Crítico Dinâmico)
         let totalEstoque = 0; let criticos = 0;
         estoque.forEach((i: any) => {
           if (i.status === 'Disponível') {
             totalEstoque += i.quantidade;
-            if (i.quantidade < 10) criticos++;
+            
+            // Lê o estoque mínimo da descrição ou usa 10 como padrão
+            let minEstoque = 10;
+            const desc = i.produto?.descricao || '';
+            const match = desc.match(/\[MIN:(\d+)\]/);
+            if (match) minEstoque = parseInt(match[1], 10);
+            
+            // Compara com o mínimo exclusivo do produto
+            if (i.quantidade <= minEstoque) criticos++;
           }
         });
         const topProd = [...estoque].filter(i => i.status === 'Disponível').sort((a, b) => b.quantidade - a.quantidade).slice(0, 5);
@@ -84,7 +90,6 @@ export default function Dashboard() {
           }
         });
 
-        // Converte o mapa para um array para podermos filtrar na tabela
         setListaImobilizado(Object.values(imobilizadoMap));
 
         // 3. INTELIGÊNCIA MENSAL (Movimentações)
@@ -102,7 +107,7 @@ export default function Dashboard() {
             } else if (['Saída de mercadoria', 'Ajuste de Saída de Inventário', 'Saída para demonstração'].includes(mov.tipoAcao)) {
               saidasMes += valorAcao;
             } else if (mov.tipoAcao === 'Perdas/Avarias') {
-              perdasMes += valorAcao; // Calcula o Prejuízo!
+              perdasMes += valorAcao; 
             }
           }
         });
@@ -122,9 +127,6 @@ export default function Dashboard() {
     carregarDashboard();
   }, []);
 
-  // ==========================================
-  // FILTRO DINÂMICO SOLICITADO PELO CLIENTE
-  // ==========================================
   const financeiroFiltrado = useMemo(() => {
     return listaImobilizado.filter(item => {
       const matchBusca = item.nome.toLowerCase().includes(buscaFinanceiro.toLowerCase()) || item.sku.toLowerCase().includes(buscaFinanceiro.toLowerCase());
@@ -133,7 +135,6 @@ export default function Dashboard() {
     }).sort((a, b) => b.valorImobilizado - a.valorImobilizado);
   }, [listaImobilizado, buscaFinanceiro, categoriaFinanceiro]);
 
-  // CALCULA OS TOTAIS DA BUSCA (O Pedido Específico do Cliente!)
   const totaisFiltrados = useMemo(() => {
     return financeiroFiltrado.reduce((acc, item) => {
       acc.quantidade += item.quantidade;
@@ -143,13 +144,9 @@ export default function Dashboard() {
     }, { quantidade: 0, custo: 0, potencial: 0 });
   }, [financeiroFiltrado]);
 
-  // ==========================================
-  // EXPORTAÇÕES (Usando a lista filtrada!)
-  // ==========================================
   const exportarExcel = () => {
     const workbook = XLSX.utils.book_new();
     
-    // Aba Estoque
     const dadosE = [
       { Indicador: 'Total de Itens no Armazém', Valor: dadosEstoque.total },
       { Indicador: 'Produtos Únicos Cadastrados', Valor: dadosResumo.totalItensCadastrados },
@@ -162,7 +159,6 @@ export default function Dashboard() {
     const wsEstoque = XLSX.utils.json_to_sheet(dadosE);
     XLSX.utils.book_append_sheet(workbook, wsEstoque, "Resumo Armazém");
 
-    // Aba Financeiro Dinâmica
     const dadosF = [
       { Produto: 'CUSTO TOTAL (FILTRO ATUAL)', Categoria: '', SKU: '', Qtd: totaisFiltrados.quantidade, Custo_Un: '', Custo_Total: formatarReal(totaisFiltrados.custo), Margem: '' },
       { Produto: '', Categoria: '', SKU: '', Qtd: '', Custo_Un: '', Custo_Total: '', Margem: '' },
@@ -218,7 +214,7 @@ export default function Dashboard() {
 
       <div style={{ display: 'flex', backgroundColor: '#e0e6ed', padding: '4px', borderRadius: '8px', marginBottom: '25px', width: 'fit-content' }}>
         <button onClick={() => setVisaoAtiva('estoque')} style={{ ...styles.toggleBtn, backgroundColor: visaoAtiva === 'estoque' ? '#0288D1' : 'transparent', color: visaoAtiva === 'estoque' ? 'white' : '#7f8c8d' }}>Armazém</button>
-        <button onClick={() => setVisaoAtiva('financeiro')} style={{ ...styles.toggleBtn, backgroundColor: visaoAtiva === 'financeiro' ? '#27ae60' : 'transparent', color: visaoAtiva === 'financeiro' ? 'white' : '#7f8c8d' }}>Financeiro</button>
+        <button onClick={() => setVisaoAtiva('financeiro')} style={{ ...styles.toggleBtn, backgroundColor: visaoAtiva === 'financeiro' ? '#27ae60' : 'transparent', color: visaoAtiva === 'financeiro' ? 'white' : '#7f8c8d' }}>Financeiro (Novo)</button>
       </div>
 
       {visaoAtiva === 'estoque' && (
@@ -282,7 +278,6 @@ export default function Dashboard() {
             <div style={{ padding: '20px', borderBottom: '1px solid #eee' }}>
               <h2 style={{ margin: '0 0 15px 0', color: '#2c3e50', fontSize: '18px' }}>Relatório Detalhado de Capital Imobilizado</h2>
               
-              {/* BARRA DE FILTROS E BUSCA */}
               <div style={{ display: 'flex', gap: '15px' }}>
                 <input 
                   type="text" 
@@ -297,7 +292,6 @@ export default function Dashboard() {
                 </select>
               </div>
 
-              {/* RESUMO DINÂMICO DA BUSCA (O QUE O CLIENTE PEDIU!) */}
               <div style={{ display: 'flex', gap: '20px', marginTop: '15px', padding: '15px', backgroundColor: '#f9fbfb', borderRadius: '8px', border: '1px solid #e0e6ed' }}>
                 <div>
                   <span style={{ fontSize: '12px', color: '#7f8c8d', fontWeight: 'bold', textTransform: 'uppercase' }}>Total de Itens na Busca</span>
@@ -357,7 +351,6 @@ export default function Dashboard() {
   );
 }
 
-// ESTILOS LOCAIS (Mantendo a estrutura segura e sem depender de arquivos externos)
 const styles: { [key: string]: React.CSSProperties } = {
   card: { backgroundColor: 'white', padding: '25px', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' },
   cardTitulo: { margin: 0, fontSize: '12px', color: '#7f8c8d', textTransform: 'uppercase', letterSpacing: '1px' },
@@ -365,8 +358,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   toggleBtn: { padding: '8px 20px', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s', fontSize: '14px' },
   btnExcel: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 5px rgba(39, 174, 96, 0.3)' },
   btnPDF: { backgroundColor: '#e74c3c', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 5px rgba(231, 76, 60, 0.3)' },
-  
-  // Estilos da Nova Tabela Financeira
   tabelaContainer: { backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)', overflow: 'hidden' },
   inputFiltro: { flex: 2, padding: '12px 15px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '14px', outline: 'none', backgroundColor: '#f9fbfb' },
   selectFiltro: { flex: 1, padding: '12px 15px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '14px', outline: 'none', backgroundColor: '#f9fbfb', cursor: 'pointer' },
