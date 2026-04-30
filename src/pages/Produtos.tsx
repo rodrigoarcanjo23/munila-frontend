@@ -223,7 +223,8 @@ export default function Produtos() {
             {produtosFiltrados.map((item) => (
               <tr key={item.id} style={styles.tr}>
                 <td style={styles.td}><strong>{item.nome}</strong></td>
-                <td style={styles.td}><span style={styles.badgeCinza}>{item.sku}</span></td>
+                {/* ✨ NOVA TAG DE SKU COM DESTAQUE VISUAL ✨ */}
+                <td style={styles.td}><span style={styles.badgeSku}>{item.sku}</span></td>
                 <td style={styles.td}>{item.categoria?.nome || '-'}</td>
                 <td style={styles.td}>{item.enderecoLocalizacao || '-'}</td>
                 <td style={styles.td}>{formatarDataBR(item.dataCadastro)}</td>
@@ -381,41 +382,22 @@ const styles: { [key: string]: React.CSSProperties } = {
   th: { padding: '15px 20px', backgroundColor: '#f9fbfb', color: '#7f8c8d', borderBottom: '2px solid #ecf0f1', textTransform: 'uppercase', fontSize: '12px', letterSpacing: '1px' },
   tr: { borderBottom: '1px solid #ecf0f1', transition: '0.2s' },
   td: { padding: '15px 20px', color: '#2c3e50', fontSize: '14px', verticalAlign: 'middle' },
-  badgeCinza: { backgroundColor: '#f1f2f6', color: '#7f8c8d', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' },
   
-  acoesContainer: {
-    display: 'flex',
-    justifyContent: 'center',
-    gap: '8px', 
+  // ✨ NOVO ESTILO DO SKU ✨
+  badgeSku: { 
+    backgroundColor: '#e1f5fe', // Fundo azul claro suave
+    color: '#0288D1',           // Azul principal do sistema
+    padding: '4px 10px', 
+    borderRadius: '6px', 
+    fontSize: '12px', 
+    fontWeight: '900',          // Deixa a fonte mais gordinha
+    letterSpacing: '0.5px',     // Dá um aspecto mais técnico/código
+    border: '1px solid #b3e5fc' // Bordinha super sutil para destacar
   },
-  btnAcaoEditar: {
-    border: 'none',
-    borderRadius: '6px',
-    padding: '6px 12px',
-    fontSize: '12px',
-    fontWeight: 'bold',
-    cursor: 'pointer',
-    transition: 'background-color 0.2s',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '5px',
-    backgroundColor: '#f39c12',
-    color: 'white',
-  },
-  btnAcaoApagar: {
-    border: 'none',
-    borderRadius: '6px',
-    padding: '6px 12px',
-    fontSize: '12px',
-    fontWeight: 'bold',
-    cursor: 'pointer',
-    transition: 'background-color 0.2s',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '5px',
-    backgroundColor: '#e74c3c',
-    color: 'white',
-  },
+  
+  acoesContainer: { display: 'flex', justifyContent: 'center', gap: '8px' },
+  btnAcaoEditar: { border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', transition: 'background-color 0.2s', display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: '#f39c12', color: 'white' },
+  btnAcaoApagar: { border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', transition: 'background-color 0.2s', display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: '#e74c3c', color: 'white' },
 
   modalOverlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
   modalContent: { backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '100%', maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' },
@@ -423,19 +405,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   label: { display: 'block', fontSize: '13px', fontWeight: 'bold', color: '#34495e', marginBottom: '5px' },
   input: { width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '15px', boxSizing: 'border-box', backgroundColor: '#fafafa' },
   btnSalvar: { backgroundColor: '#27ae60', color: 'white', padding: '15px', borderRadius: '8px', border: 'none', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
-  btnPrincipal: { 
-    backgroundColor: '#27ae60', 
-    color: 'white', 
-    border: 'none', 
-    padding: '12px 20px', 
-    borderRadius: '8px', 
-    cursor: 'pointer', 
-    fontWeight: 'bold', 
-    fontSize: '14px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px'
-  },
+  btnPrincipal: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' },
   inputBusca: { width: '100%', padding: '12px 15px', borderRadius: '8px', border: '1px solid #ecf0f1', fontSize: '14px', boxSizing: 'border-box', backgroundColor: '#f9fbfb', color: '#2c3e50' },
   selectBusca: { width: '100%', padding: '12px 15px', borderRadius: '8px', border: '1px solid #ecf0f1', fontSize: '14px', boxSizing: 'border-box', backgroundColor: '#f9fbfb', color: '#2c3e50', cursor: 'pointer' },
   btnLink: { background: 'none', border: 'none', color: '#27ae60', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px', padding: 0 },
