@@ -20,7 +20,7 @@ export default function Produtos() {
 
   const [nome, setNome] = useState('');
   const [sku, setSku] = useState('');
-  const [tipo, setTipo] = useState('ACABADO');
+  const [tipo, setTipo] = useState('ACABADO'); // Por baixo dos panos continua ACABADO/MATERIA_PRIMA
   const [categoriaId, setCategoriaId] = useState('');
   const [localizacaoId, setLocalizacaoId] = useState('');
   const [descricao, setDescricao] = useState('');
@@ -41,6 +41,14 @@ export default function Produtos() {
     if (!dataString) return '-';
     const data = new Date(dataString);
     return data.toLocaleDateString('pt-BR');
+  };
+
+  // ✨ TRADUTOR VISUAL DE PROCEDÊNCIA ✨
+  const renderProcedencia = (tipoBanco: string) => {
+    if (tipoBanco === 'MATERIA_PRIMA') {
+      return <span style={styles.badgeImportado}>Importado</span>;
+    }
+    return <span style={styles.badgeNacional}>Nacional</span>;
   };
 
   async function carregarDados() {
@@ -211,6 +219,8 @@ export default function Produtos() {
             <tr>
               <th style={styles.th}>Nome do Produto</th>
               <th style={styles.th}>SKU</th>
+              {/* ✨ NOVA COLUNA PROCEDÊNCIA ✨ */}
+              <th style={styles.th}>Procedência</th>
               <th style={styles.th}>Categoria</th>
               <th style={styles.th}>Endereço</th>
               <th style={styles.th}>Data Cad.</th>
@@ -219,12 +229,15 @@ export default function Produtos() {
             </tr>
           </thead>
           <tbody>
-            {produtosFiltrados.length === 0 && <tr><td colSpan={7} style={{textAlign: 'center', padding: '20px', color: '#7f8c8d'}}>Nenhum produto encontrado na busca.</td></tr>}
+            {produtosFiltrados.length === 0 && <tr><td colSpan={8} style={{textAlign: 'center', padding: '20px', color: '#7f8c8d'}}>Nenhum produto encontrado na busca.</td></tr>}
             {produtosFiltrados.map((item) => (
               <tr key={item.id} style={styles.tr}>
                 <td style={styles.td}><strong>{item.nome}</strong></td>
-                {/* ✨ NOVA TAG DE SKU COM DESTAQUE VISUAL ✨ */}
                 <td style={styles.td}><span style={styles.badgeSku}>{item.sku}</span></td>
+                
+                {/* ✨ EXIBINDO A PROCEDÊNCIA TRADUZIDA ✨ */}
+                <td style={styles.td}>{renderProcedencia(item.tipo)}</td>
+                
                 <td style={styles.td}>{item.categoria?.nome || '-'}</td>
                 <td style={styles.td}>{item.enderecoLocalizacao || '-'}</td>
                 <td style={styles.td}>{formatarDataBR(item.dataCadastro)}</td>
@@ -284,10 +297,11 @@ export default function Produtos() {
 
               <div style={{ display: 'flex', gap: '15px' }}>
                 <div style={{ flex: 1 }}>
-                  <label style={styles.label}>Classificação</label>
+                  {/* ✨ CAMPO RENOMEADO PARA PROCEDÊNCIA ✨ */}
+                  <label style={styles.label}>Procedência</label>
                   <select style={styles.input} value={tipo} onChange={e => setTipo(e.target.value)}>
-                    <option value="ACABADO">Acabado (Venda)</option>
-                    <option value="MATERIA_PRIMA">Matéria Prima</option>
+                    <option value="ACABADO">Nacional</option>
+                    <option value="MATERIA_PRIMA">Importado</option>
                   </select>
                 </div>
                 <div style={{ flex: 1 }}>
@@ -383,18 +397,12 @@ const styles: { [key: string]: React.CSSProperties } = {
   tr: { borderBottom: '1px solid #ecf0f1', transition: '0.2s' },
   td: { padding: '15px 20px', color: '#2c3e50', fontSize: '14px', verticalAlign: 'middle' },
   
-  // ✨ NOVO ESTILO DO SKU ✨
-  badgeSku: { 
-    backgroundColor: '#e1f5fe', // Fundo azul claro suave
-    color: '#0288D1',           // Azul principal do sistema
-    padding: '4px 10px', 
-    borderRadius: '6px', 
-    fontSize: '12px', 
-    fontWeight: '900',          // Deixa a fonte mais gordinha
-    letterSpacing: '0.5px',     // Dá um aspecto mais técnico/código
-    border: '1px solid #b3e5fc' // Bordinha super sutil para destacar
-  },
+  badgeSku: { backgroundColor: '#e1f5fe', color: '#0288D1', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: '900', letterSpacing: '0.5px', border: '1px solid #b3e5fc' },
   
+  // ✨ ESTILOS DAS NOVAS TAGS DE PROCEDÊNCIA ✨
+  badgeNacional: { backgroundColor: '#eafaf1', color: '#27ae60', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase' },
+  badgeImportado: { backgroundColor: '#fef5e7', color: '#f39c12', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase' },
+
   acoesContainer: { display: 'flex', justifyContent: 'center', gap: '8px' },
   btnAcaoEditar: { border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', transition: 'background-color 0.2s', display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: '#f39c12', color: 'white' },
   btnAcaoApagar: { border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', transition: 'background-color 0.2s', display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: '#e74c3c', color: 'white' },
