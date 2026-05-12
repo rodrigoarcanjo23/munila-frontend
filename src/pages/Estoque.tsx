@@ -1,187 +1,143 @@
-import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../api';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { toast } from 'react-toastify'; 
+import { toast } from 'react-toastify';
+import { IoAddOutline, IoConstructOutline, IoSwapVerticalOutline } from 'react-icons/io5';
 
 export default function Estoque() {
-  const location = useLocation();
   const [inventario, setInventario] = useState<any[]>([]);
-  const [categorias, setCategorias] = useState<any[]>([]);
+  const [produtos, setProdutos] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
-  
+  const [termoBusca, setTermoBusca] = useState('');
   const [usuarioLogado, setUsuarioLogado] = useState<any>(null);
-  const [busca, setBusca] = useState('');
-  const [categoriaSelecionada, setCategoriaSelecionada] = useState('');
-  const [mostrarCriticos, setMostrarCriticos] = useState(location.state?.filtrarCriticos || false);
 
-  const [modalVisivel, setModalVisivel] = useState(false);
-  const [itemSelecionado, setItemSelecionado] = useState<any>(null);
-  const [formTipo, setFormTipo] = useState('Entrada de mercadoria');
-  const [formQuantidade, setFormQuantidade] = useState('1');
-  const [formObservacao, setFormObservacao] = useState('');
-  const [enviando, setEnviando] = useState(false);
+  // Estados do Modal de Movimentação Normal (Entrada/Saída/Perda)
+  const [modalMovimentoVisivel, setModalMovimentoVisivel] = useState(false);
+  const [estoqueSelecionado, setEstoqueSelecionado] = useState<any>(null);
+  const [tipoAcao, setTipoAcao] = useState('Saída de mercadoria');
+  const [quantidadeMovimento, setQuantidadeMovimento] = useState('');
+  const [observacao, setObservacao] = useState('');
 
-  // FUNÇÃO INTERNA DE MOEDA (Substituindo o utils)
-  const formatarReal = (valor: number) => {
-    return Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor || 0);
-  };
+  // ✨ ESTADOS DO NOVO MODAL DE PRODUÇÃO INDUSTRIAL ✨
+  const [modalProducaoVisivel, setModalProducaoVisivel] = useState(false);
+  const [produtoFinalId, setProdutoFinalId] = useState('');
+  const [quantidadeProduzir, setQuantidadeProduzir] = useState('1');
 
   async function carregarDados() {
     setCarregando(true);
     try {
-      const [resEstoque, resCategorias, resProdutos] = await Promise.all([
-        api.get('/estoque'), api.get('/categorias'), api.get('/produtos')
+      const [resEstoque, resProd] = await Promise.all([
+        api.get('/estoque'),
+        api.get('/produtos')
       ]);
-      
-      const produtosMap: any = {};
-      resProdutos.data.forEach((p: any) => { produtosMap[p.id] = p; });
+      setInventario(resEstoque.data);
+      setProdutos(resProd.data);
 
-      const apenasDisponiveis = resEstoque.data
-        .filter((item: any) => item.status === 'Disponível')
-        .map((item: any) => ({
-          ...item,
-          produto: produtosMap[item.produtoId] || item.produto
-        }));
-
-      setInventario(apenasDisponiveis);
-      setCategorias(resCategorias.data);
-      
       const userSalvo = localStorage.getItem('@Munila:user');
       if (userSalvo) setUsuarioLogado(JSON.parse(userSalvo));
-    } catch (error) { 
-      toast.error("Erro ao conectar com o servidor."); 
-    } 
-    finally { setCarregando(false); }
+    } catch (error) {
+      toast.error("Erro ao carregar os dados do armazém.");
+    } finally {
+      setCarregando(false);
+    }
   }
 
   useEffect(() => { carregarDados(); }, []);
 
-  function abrirModal(item: any) {
-    setItemSelecionado(item);
-    setFormTipo('Entrada de mercadoria');
-    setFormQuantidade('1');
-    setFormObservacao('');
-    setModalVisivel(true);
+  const inventarioFiltrado = useMemo(() => {
+    return inventario.filter(i => {
+      const termo = termoBusca.toLowerCase();
+      const nomeProduto = i.produto?.nome?.toLowerCase() || '';
+      const skuProduto = i.produto?.sku?.toLowerCase() || '';
+      return nomeProduto.includes(termo) || skuProduto.includes(termo) || i.status.toLowerCase().includes(termo);
+    });
+  }, [inventario, termoBusca]);
+
+  // Filtra apenas produtos "Nacionais" (Acabados) para a tela de Produção
+  const produtosProduziveis = produtos.filter(p => p.tipo === 'ACABADO');
+
+  function abrirModalMovimento(item: any) {
+    setEstoqueSelecionado(item);
+    setTipoAcao('Saída de mercadoria');
+    setQuantidadeMovimento('');
+    setObservacao('');
+    setModalMovimentoVisivel(true);
   }
 
-  async function registrarMovimentacao(e: React.FormEvent) {
-    e.preventDefault();
-    if (!itemSelecionado || !usuarioLogado) return;
-    
-    const qtdNum = Number(formQuantidade);
-    if (qtdNum <= 0 || isNaN(qtdNum)) {
-      return toast.warn("Aviso: Digite uma quantidade válida."); 
-    }
+  function abrirModalProducao() {
+    setProdutoFinalId('');
+    setQuantidadeProduzir('1');
+    setModalProducaoVisivel(true);
+  }
 
-    setEnviando(true);
+  // Função para Movimentação Comum (Ajustes, Perdas, etc)
+  async function salvarMovimento(e: React.FormEvent) {
+    e.preventDefault();
+    if (!quantidadeMovimento || Number(quantidadeMovimento) <= 0) return toast.warn("Informe uma quantidade válida.");
+    if (!usuarioLogado) return toast.error("Sessão expirada. Faça login novamente.");
+
     try {
       await api.post('/movimentacoes/operacao', {
-        produtoId: itemSelecionado.produto.id,
+        produtoId: estoqueSelecionado.produtoId,
         usuarioId: usuarioLogado.id,
-        estoqueId: itemSelecionado.id,
-        quantidade: qtdNum,
-        tipoAcao: formTipo,
-        observacao: formObservacao
+        estoqueId: estoqueSelecionado.id,
+        quantidade: quantidadeMovimento,
+        tipoAcao: tipoAcao,
+        observacao: observacao
       });
-      
-      toast.success("Operação registada com sucesso no Armazém!"); 
-      setModalVisivel(false);
+      toast.success("Movimentação registada com sucesso!");
+      setModalMovimentoVisivel(false);
       carregarDados();
-    } catch (error: any) { 
-      toast.error("Erro ao registar: " + (error.response?.data?.error || "Verifique o saldo no armazém.")); 
-    } 
-    finally { setEnviando(false); }
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || "Erro ao movimentar estoque.");
+    }
   }
 
-  const isCritico = (item: any) => {
-    let minEstoque = 10;
-    const desc = item.produto?.descricao || '';
-    const match = desc.match(/\[MIN:(\d+)\]/);
-    if (match) minEstoque = parseInt(match[1], 10);
-    return item.quantidade <= minEstoque;
-  };
+  // ✨ FUNÇÃO MESTRE: DISPARA A ORDEM DE PRODUÇÃO ✨
+  async function executarProducao(e: React.FormEvent) {
+    e.preventDefault();
+    if (!produtoFinalId) return toast.warn("Selecione o produto que deseja fabricar.");
+    if (Number(quantidadeProduzir) <= 0) return toast.warn("A quantidade a produzir deve ser maior que zero.");
 
-  let inventarioFiltrado = inventario.filter(item => 
-    item.produto.nome.toLowerCase().includes(busca.toLowerCase()) ||
-    item.produto.sku.toLowerCase().includes(busca.toLowerCase())
-  );
+    try {
+      // Chama a nossa nova rota mestre do backend!
+      const res = await api.post('/producao/executar', {
+        produtoFinalId: produtoFinalId,
+        quantidadeProduzir: Number(quantidadeProduzir),
+        usuarioId: usuarioLogado.id
+      });
+      
+      toast.success(res.data.mensagem || "Lote produzido com sucesso! Matéria-prima baixada.");
+      setModalProducaoVisivel(false);
+      carregarDados();
+    } catch (error: any) {
+      // O backend avisa se faltar seringa ou ponteira!
+      toast.error(error.response?.data?.error || "Erro ao executar produção.");
+    }
+  }
 
-  if (categoriaSelecionada) inventarioFiltrado = inventarioFiltrado.filter(item => item.produto.categoriaId === categoriaSelecionada);
-  
-  if (mostrarCriticos) inventarioFiltrado = inventarioFiltrado.filter(isCritico);
-
-  inventarioFiltrado.sort((a, b) => a.produto.nome.localeCompare(b.produto.nome));
-
-  const exportarExcel = () => {
-    if (inventarioFiltrado.length === 0) return toast.warn("Não há dados para exportar."); 
-    const dadosFormatados = inventarioFiltrado.map(item => ({
-      'Produto': item.produto.nome, 
-      'SKU': item.produto.sku, 
-      'Endereço': item.produto.enderecoLocalizacao || '-',
-      'Lote': item.produto.lote || '-', 
-      'Fornecedor': item.produto.fornecedor?.nomeEmpresa || '-', 
-      'Custo Unitário': formatarReal(item.produto.precoCusto),
-      'Saldo em Estoque': item.quantidade,
-      'Custo Total Imobilizado': formatarReal((item.produto.precoCusto || 0) * item.quantidade)
-    }));
-    const worksheet = XLSX.utils.json_to_sheet(dadosFormatados);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Posição de Estoque");
-    XLSX.writeFile(workbook, "Relatorio_Armazem_ViaPro.xlsx");
-  };
-
-  const exportarPDF = () => {
-    if (inventarioFiltrado.length === 0) return toast.warn("Não há dados para exportar."); 
-    const doc = new jsPDF();
-    doc.setFontSize(18); doc.setTextColor(44, 62, 80); doc.text("Relatório de Posição de Estoque", 14, 22);
-    doc.setFontSize(10); doc.setTextColor(127, 140, 141); doc.text(`Emitido em: ${new Date().toLocaleString('pt-BR')}`, 14, 30);
-    const colunas = ["Produto", "SKU", "Endereço", "Lote", "Custo Un.", "Saldo"];
-    const linhas = inventarioFiltrado.map(item => [
-      item.produto.nome, 
-      item.produto.sku, 
-      item.produto.enderecoLocalizacao || '-',
-      item.produto.lote || '-', 
-      formatarReal(item.produto.precoCusto),
-      item.quantidade.toString()
-    ]);
-    autoTable(doc, {
-      head: [colunas], body: linhas, startY: 35, styles: { fontSize: 8, cellPadding: 3 },
-      headStyles: { fillColor: [2, 136, 209], textColor: [255, 255, 255] }, alternateRowStyles: { fillColor: [245, 247, 250] } 
-    });
-    doc.save("Relatorio_Armazem_ViaPro.pdf");
-  };
-
-  if (carregando) return <div>Atualizando armazém...</div>;
+  if (carregando) return <div>A carregar o armazém...</div>;
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h1 style={{ color: '#2c3e50', margin: 0 }}>Gestão de Armazém</h1>
+        <h1 style={{ color: '#2c3e50', margin: 0 }}>Armazém & Inventário</h1>
+        
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button onClick={exportarExcel} style={styles.btnExcel}>📊 Exportar Excel</button>
-          <button onClick={exportarPDF} style={styles.btnPDF}>📄 Exportar PDF</button>
+          {/* ✨ NOVO BOTÃO DE PRODUÇÃO ✨ */}
+          <button onClick={abrirModalProducao} style={{...styles.btnPrincipal, backgroundColor: '#8e44ad'}}>
+            <IoConstructOutline size={20} /> Produzir Lote
+          </button>
         </div>
       </div>
 
-      <div style={styles.toolbar}>
-        <input type="text" placeholder="Buscar por nome ou SKU..." style={styles.inputBusca} value={busca} onChange={(e) => setBusca(e.target.value)} />
-        <select style={styles.selectCategoria} value={categoriaSelecionada} onChange={(e) => setCategoriaSelecionada(e.target.value)}>
-          <option value="">Todas as Categorias</option>
-          {categorias.map(cat => <option key={cat.id} value={cat.id}>{cat.nome}</option>)}
-        </select>
-        
-        <label style={{ 
-          display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', 
-          backgroundColor: mostrarCriticos ? '#fdf2e9' : 'white', 
-          padding: '10px 15px', borderRadius: '8px', border: `1px solid ${mostrarCriticos ? '#e74c3c' : '#ddd'}`, 
-          color: mostrarCriticos ? '#e74c3c' : '#7f8c8d', fontWeight: 'bold', fontSize: '14px', transition: '0.2s' 
-        }}>
-          <input type="checkbox" checked={mostrarCriticos} onChange={e => setMostrarCriticos(e.target.checked)} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
-          Apenas Críticos (Abaixo do Mínimo Ideal)
-        </label>
+      <div style={{ marginBottom: '20px', backgroundColor: 'white', padding: '15px', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
+        <input 
+          type="text" 
+          placeholder="Pesquisar no armazém por Nome, SKU ou Status..." 
+          style={styles.inputBusca} 
+          value={termoBusca} 
+          onChange={(e) => setTermoBusca(e.target.value)} 
+        />
       </div>
 
       <div style={styles.tableContainer}>
@@ -190,105 +146,139 @@ export default function Estoque() {
             <tr>
               <th style={styles.th}>Produto</th>
               <th style={styles.th}>SKU</th>
-              <th style={styles.th}>Endereço</th>
-              <th style={styles.th}>Lote</th>
-              <th style={styles.th}>Fornecedor</th>
-              <th style={{...styles.th, textAlign: 'right'}}>Custo Un.</th>
-              <th style={{...styles.th, textAlign: 'center'}}>Saldo</th>
-              <th style={{...styles.th, textAlign: 'center'}}>Ação</th>
+              <th style={styles.th}>Qtd. Atual</th>
+              <th style={styles.th}>Status</th>
+              <th style={styles.th}>Endereço (Zona)</th>
+              <th style={{...styles.th, textAlign: 'center'}}>Ações</th>
             </tr>
           </thead>
           <tbody>
-            {inventarioFiltrado.length === 0 && (
-              <tr><td colSpan={8} style={{textAlign: 'center', padding: '20px', color: '#7f8c8d'}}>Nenhum produto encontrado.</td></tr>
-            )}
-            {inventarioFiltrado.map((item) => {
-              const ehCritico = isCritico(item); 
-              return (
-                <tr key={item.id} style={styles.tr}>
-                  <td style={styles.td}><strong>{item.produto.nome}</strong></td>
-                  <td style={styles.td}><span style={styles.badgeCinza}>{item.produto.sku}</span></td>
-                  <td style={styles.td}>{item.produto.enderecoLocalizacao || '-'}</td>
-                  <td style={styles.td}>{item.produto.lote || '-'}</td>
-                  <td style={styles.td}>{item.produto.fornecedor?.nomeEmpresa || '-'}</td>
-                  <td style={{...styles.td, color: '#27ae60', fontWeight: 'bold', textAlign: 'right'}}>
-                    {formatarReal(item.produto.precoCusto)}
-                  </td>
-                  <td style={{...styles.td, textAlign: 'center'}}>
-                    <span style={{ fontSize: '18px', fontWeight: 'bold', color: ehCritico ? '#e74c3c' : '#2c3e50' }}>{item.quantidade}</span>
-                  </td>
-                  <td style={{...styles.td, textAlign: 'center'}}>
-                    <button onClick={() => abrirModal(item)} style={styles.btnAcao}>Gerenciar</button>
-                  </td>
-                </tr>
-              );
-            })}
+            {inventarioFiltrado.length === 0 && <tr><td colSpan={6} style={{textAlign: 'center', padding: '20px', color: '#7f8c8d'}}>Nenhum item encontrado no armazém.</td></tr>}
+            {inventarioFiltrado.map((item) => (
+              <tr key={item.id} style={styles.tr}>
+                <td style={styles.td}><strong>{item.produto?.nome || 'Produto Desconhecido'}</strong></td>
+                <td style={styles.td}><span style={styles.badgeSku}>{item.produto?.sku || '-'}</span></td>
+                <td style={styles.td}>
+                  <strong style={{ fontSize: '16px', color: item.quantidade <= 10 ? '#e74c3c' : '#27ae60' }}>
+                    {item.quantidade} un
+                  </strong>
+                </td>
+                <td style={styles.td}>
+                  <span style={item.status === 'Disponível' ? styles.badgeNacional : styles.badgeImportado}>
+                    {item.status}
+                  </span>
+                </td>
+                <td style={styles.td}>{item.localizacao?.zona || item.produto?.enderecoLocalizacao || '-'}</td>
+                <td style={{...styles.td, textAlign: 'center'}}>
+                  <button onClick={() => abrirModalMovimento(item)} style={styles.btnAcaoEditar}>
+                    <IoSwapVerticalOutline size={16} /> Movimentar
+                  </button>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
 
-      {modalVisivel && (
+      {/* MODAL DE MOVIMENTAÇÃO COMUM */}
+      {modalMovimentoVisivel && estoqueSelecionado && (
         <div style={styles.modalOverlay}>
-          <div style={styles.modalContent}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '15px', marginBottom: '20px' }}>
-              <h2 style={{ margin: 0, color: '#2c3e50' }}>Movimentar Estoque</h2>
-              <button onClick={() => setModalVisivel(false)} style={styles.btnFechar}>✖</button>
-            </div>
-            
-            <p style={{ color: '#7f8c8d', marginBottom: '20px' }}><strong>Produto:</strong> {itemSelecionado?.produto.nome} (Saldo: {itemSelecionado?.quantidade})</p>
+          <div style={{...styles.modalContent, maxWidth: '500px'}}>
+            <h2 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>Movimentar Estoque</h2>
+            <p style={{ color: '#7f8c8d', marginBottom: '20px' }}>
+              Item: <strong>{estoqueSelecionado.produto?.nome}</strong> (Saldo Atual: {estoqueSelecionado.quantidade})
+            </p>
 
-            <form onSubmit={registrarMovimentacao} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            <form onSubmit={salvarMovimento} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <div>
-                <label style={styles.label}>Nova Ação de Inventário</label>
-                <select style={styles.input} value={formTipo} onChange={(e) => setFormTipo(e.target.value)}>
-                  <option value="Entrada de mercadoria">📥 Entrada de mercadoria</option>
-                  <option value="Saída de mercadoria">📤 Saída de mercadoria</option>
-                  <option value="Devolução VIAPRO">🔄 Devolução VIAPRO</option>
-                  <option value="Ajuste de Saída de Inventário">📉 Ajuste de Saída de Inventário</option>
-                  <option value="Ajuste de Entrada de Inventário">📈 Ajuste de Entrada de Inventário</option>
-                  <option value="Saída para demonstração">🛍️ Saída para demonstração</option>
-                  <option value="Perdas/Avarias">⚠️ Perdas/Avarias</option> 
+                <label style={styles.label}>Tipo de Ação</label>
+                <select style={styles.input} value={tipoAcao} onChange={e => setTipoAcao(e.target.value)}>
+                  <option value="Entrada de mercadoria">Entrada de mercadoria (Ajuste)</option>
+                  <option value="Saída de mercadoria">Saída de mercadoria (Venda/Uso)</option>
+                  <option value="Perdas/Avarias">Perdas / Avarias</option>
+                  <option value="Saída para demonstração">Saída para demonstração</option>
                 </select>
               </div>
-
+              
               <div>
-                <label style={styles.label}>Quantidade de Itens</label>
-                <input type="number" style={styles.input} value={formQuantidade} onChange={e => setFormQuantidade(e.target.value)} required min="1" />
+                <label style={styles.label}>Quantidade</label>
+                <input type="number" style={styles.input} value={quantidadeMovimento} onChange={e => setQuantidadeMovimento(e.target.value)} min="1" required />
               </div>
 
               <div>
-                <label style={styles.label}>Observação (Motivo / Responsável Externo)</label>
-                <input type="text" style={styles.input} value={formObservacao} onChange={e => setFormObservacao(e.target.value)} placeholder="Detalhes da operação..." />
+                <label style={styles.label}>Observação (Motivo / Cliente)</label>
+                <input type="text" style={styles.input} value={observacao} onChange={e => setObservacao(e.target.value)} placeholder="Ex: Cliente João Silva ou Ajuste de Inventário" />
               </div>
 
-              <button type="submit" style={styles.btnConfirmar} disabled={enviando}>
-                {enviando ? 'Processando...' : 'Confirmar Movimentação'}
-              </button>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                <button type="button" onClick={() => setModalMovimentoVisivel(false)} style={styles.btnCancelar}>Cancelar</button>
+                <button type="submit" style={styles.btnSalvarPequeno}>Registrar</button>
+              </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* ✨ MODAL DE ORDEM DE PRODUÇÃO (ERP INDUSTRIAL) ✨ */}
+      {modalProducaoVisivel && (
+        <div style={styles.modalOverlay}>
+          <div style={{...styles.modalContent, maxWidth: '600px'}}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
+              <div style={{ backgroundColor: '#f4ecf7', padding: '10px', borderRadius: '50%' }}>
+                <IoConstructOutline size={24} color="#8e44ad" />
+              </div>
+              <h2 style={{ margin: 0, color: '#2c3e50' }}>Ordem de Produção Interna</h2>
+            </div>
+            
+            <p style={{ color: '#7f8c8d', marginBottom: '20px', fontSize: '14px', lineHeight: '1.5' }}>
+              Selecione um produto <strong>Nacional</strong> (Montado) para fabricar. O sistema irá automaticamente dar baixa nas matérias-primas necessárias de acordo com a Receita cadastrada no Catálogo.
+            </p>
+
+            <form onSubmit={executarProducao} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <div style={{ backgroundColor: '#f9fbfb', padding: '15px', borderRadius: '8px', border: '1px solid #ecf0f1' }}>
+                <label style={styles.label}>Produto Final a Fabricar</label>
+                <select style={styles.input} value={produtoFinalId} onChange={e => setProdutoFinalId(e.target.value)} required>
+                  <option value="">Selecione o produto final...</option>
+                  {produtosProduziveis.map(p => (
+                    <option key={p.id} value={p.id}>[{p.sku}] - {p.nome}</option>
+                  ))}
+                </select>
+
+                <div style={{ marginTop: '15px' }}>
+                  <label style={styles.label}>Quantidade de Lotes (Unidades Finais)</label>
+                  <input type="number" style={{...styles.input, fontSize: '18px', fontWeight: 'bold', color: '#8e44ad'}} value={quantidadeProduzir} onChange={e => setQuantidadeProduzir(e.target.value)} min="1" required />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                <button type="button" onClick={() => setModalProducaoVisivel(false)} style={styles.btnCancelar}>Cancelar</button>
+                <button type="submit" style={{...styles.btnSalvarPequeno, backgroundColor: '#8e44ad'}}>🛠️ Executar Produção</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
 
 const styles: { [key: string]: React.CSSProperties } = {
-  toolbar: { display: 'flex', gap: '15px', marginBottom: '20px' },
-  inputBusca: { flex: 2, padding: '12px 15px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '15px', outline: 'none' },
-  selectCategoria: { flex: 1, padding: '12px 15px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '15px', outline: 'none', backgroundColor: 'white', cursor: 'pointer' },
   tableContainer: { backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)', overflow: 'hidden' },
   table: { width: '100%', borderCollapse: 'collapse', textAlign: 'left' },
   th: { padding: '15px 20px', backgroundColor: '#f9fbfb', color: '#7f8c8d', borderBottom: '2px solid #ecf0f1', textTransform: 'uppercase', fontSize: '12px', letterSpacing: '1px' },
   tr: { borderBottom: '1px solid #ecf0f1', transition: '0.2s' },
   td: { padding: '15px 20px', color: '#2c3e50', fontSize: '14px', verticalAlign: 'middle' },
-  badgeCinza: { backgroundColor: '#f1f2f6', color: '#7f8c8d', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' },
-  btnAcao: { backgroundColor: '#0288D1', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' },
+  badgeSku: { backgroundColor: '#e1f5fe', color: '#0288D1', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: '900', letterSpacing: '0.5px', border: '1px solid #b3e5fc' },
+  badgeNacional: { backgroundColor: '#eafaf1', color: '#27ae60', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase' },
+  badgeImportado: { backgroundColor: '#fef5e7', color: '#f39c12', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase' },
+  btnAcaoEditar: { border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: '#3498db', color: 'white', margin: '0 auto' },
   modalOverlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
-  modalContent: { backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '100%', maxWidth: '500px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' },
-  btnFechar: { background: 'none', border: 'none', fontSize: '20px', color: '#e74c3c', cursor: 'pointer' },
+  modalContent: { backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' },
   label: { display: 'block', fontSize: '13px', fontWeight: 'bold', color: '#34495e', marginBottom: '5px' },
   input: { width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '15px', boxSizing: 'border-box', backgroundColor: '#fafafa' },
-  btnConfirmar: { backgroundColor: '#0288D1', color: 'white', padding: '15px', borderRadius: '8px', border: 'none', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
-  btnExcel: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 5px rgba(39, 174, 96, 0.3)' },
-  btnPDF: { backgroundColor: '#e74c3c', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 5px rgba(231, 76, 60, 0.3)' }
+  btnPrincipal: { color: 'white', border: 'none', padding: '12px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' },
+  inputBusca: { width: '100%', padding: '12px 15px', borderRadius: '8px', border: '1px solid #ecf0f1', fontSize: '14px', backgroundColor: '#f9fbfb', color: '#2c3e50', boxSizing: 'border-box' },
+  btnCancelar: { backgroundColor: '#f1f2f6', color: '#7f8c8d', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' },
+  btnSalvarPequeno: { color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', backgroundColor: '#27ae60' }
 };
