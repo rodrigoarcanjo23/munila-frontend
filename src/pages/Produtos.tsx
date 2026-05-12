@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../api';
 import { toast } from 'react-toastify';
-import { IoPencilSharp, IoTrashSharp, IoAddOutline } from 'react-icons/io5';
+import { IoPencilSharp, IoTrashSharp, IoAddOutline, IoCloseCircle } from 'react-icons/io5';
 
 export default function Produtos() {
   const [produtos, setProdutos] = useState<any[]>([]);
@@ -20,22 +20,24 @@ export default function Produtos() {
 
   const [nome, setNome] = useState('');
   const [sku, setSku] = useState('');
-  const [tipo, setTipo] = useState('ACABADO'); // Por baixo dos panos continua ACABADO/MATERIA_PRIMA
+  const [tipo, setTipo] = useState('ACABADO'); 
   const [categoriaId, setCategoriaId] = useState('');
   const [localizacaoId, setLocalizacaoId] = useState('');
   const [descricao, setDescricao] = useState('');
   const [quantidadeInicial, setQuantidadeInicial] = useState('0');
-  
   const [estoqueMinimo, setEstoqueMinimo] = useState('10'); 
-  
   const [precoCusto, setPrecoCusto] = useState('');
   const [precoVenda, setPrecoVenda] = useState('');
-
   const [lote, setLote] = useState('');
   const [enderecoLocalizacao, setEnderecoLocalizacao] = useState('');
   const [fornecedorId, setFornecedorId] = useState('');
   const [dataCadastro, setDataCadastro] = useState('');
   const [novaCategoriaNome, setNovaCategoriaNome] = useState('');
+
+  // ✨ NOVOS ESTADOS PARA A RECEITA DO PRODUTO ✨
+  const [ingredientesLista, setIngredientesLista] = useState<{produtoFilhoId: string, nome: string, quantidade: number}[]>([]);
+  const [ingredienteSelecionado, setIngredienteSelecionado] = useState('');
+  const [ingredienteQtd, setIngredienteQtd] = useState('1');
 
   const formatarDataBR = (dataString: string) => {
     if (!dataString) return '-';
@@ -43,11 +45,8 @@ export default function Produtos() {
     return data.toLocaleDateString('pt-BR');
   };
 
-  // ✨ TRADUTOR VISUAL DE PROCEDÊNCIA ✨
   const renderProcedencia = (tipoBanco: string) => {
-    if (tipoBanco === 'MATERIA_PRIMA') {
-      return <span style={styles.badgeImportado}>Importado</span>;
-    }
+    if (tipoBanco === 'MATERIA_PRIMA') return <span style={styles.badgeImportado}>Importado</span>;
     return <span style={styles.badgeNacional}>Nacional</span>;
   };
 
@@ -57,18 +56,14 @@ export default function Produtos() {
       const [resProd, resCat, resLoc, resForn] = await Promise.all([
         api.get('/produtos'), api.get('/categorias'), api.get('/localizacoes'), api.get('/fornecedores')
       ]);
-      
       setProdutos(resProd.data.sort((a: any, b: any) => a.nome.localeCompare(b.nome)));
       setCategorias(resCat.data);
       setLocalizacoes(resLoc.data);
       setFornecedores(resForn.data);
-      
       if (resCat.data.length > 0 && !categoriaId) setCategoriaId(resCat.data[0].id);
       if (resLoc.data.length > 0 && !localizacaoId) setLocalizacaoId(resLoc.data[0].id);
-
       const userSalvo = localStorage.getItem('@Munila:user');
       if (userSalvo) setUsuarioLogado(JSON.parse(userSalvo));
-
     } catch (error) { toast.error("Erro ao carregar o catálogo de produtos."); } 
     finally { setCarregando(false); }
   }
@@ -83,15 +78,13 @@ export default function Produtos() {
     return produtos.filter(p => {
       const passaCategoria = filtroCategoria === '' || p.categoriaId === filtroCategoria;
       const termo = termoBusca.toLowerCase();
-      const passaBusca = 
-        p.nome.toLowerCase().includes(termo) || 
-        p.sku.toLowerCase().includes(termo) ||
-        (p.lote && p.lote.toLowerCase().includes(termo)) ||
-        (p.enderecoLocalizacao && p.enderecoLocalizacao.toLowerCase().includes(termo));
-        
+      const passaBusca = p.nome.toLowerCase().includes(termo) || p.sku.toLowerCase().includes(termo) || (p.lote && p.lote.toLowerCase().includes(termo)) || (p.enderecoLocalizacao && p.enderecoLocalizacao.toLowerCase().includes(termo));
       return passaCategoria && passaBusca;
     });
   }, [produtos, termoBusca, filtroCategoria]);
+
+  // Lista de matérias-primas disponíveis para formar a receita
+  const materiasPrimas = produtos.filter(p => p.tipo === 'MATERIA_PRIMA');
 
   function abrirModalNovo() {
     setIdEdicao(null);
@@ -99,7 +92,7 @@ export default function Produtos() {
     setPrecoCusto(''); setPrecoVenda(''); setEstoqueMinimo('10');
     setLote(''); setEnderecoLocalizacao(''); setFornecedorId('');
     setDataCadastro(new Date().toISOString().substring(0, 10));
-
+    setIngredientesLista([]); // Limpa a receita
     if (categorias.length > 0) setCategoriaId(categorias[0].id);
     if (localizacoes.length > 0) setLocalizacaoId(localizacoes[0].id);
     setModalVisivel(true);
@@ -108,24 +101,15 @@ export default function Produtos() {
   function abrirModalEdicao(p: any) {
     setIdEdicao(p.id);
     setNome(p.nome); setSku(p.sku); setTipo(p.tipo || 'ACABADO'); setCategoriaId(p.categoriaId);
-    
     let descReal = p.descricao || '';
     let min = '10';
     const match = descReal.match(/\[MIN:(\d+)\]/);
-    if (match) {
-      min = match[1];
-      descReal = descReal.replace(match[0], '').trim(); 
-    }
-    
-    setDescricao(descReal);
-    setEstoqueMinimo(min);
-    
-    setPrecoCusto(p.precoCusto ? String(p.precoCusto) : '');
-    setPrecoVenda(p.precoVenda ? String(p.precoVenda) : '');
-    setLote(p.lote || '');
-    setEnderecoLocalizacao(p.enderecoLocalizacao || '');
-    setFornecedorId(p.fornecedorId || '');
+    if (match) { min = match[1]; descReal = descReal.replace(match[0], '').trim(); }
+    setDescricao(descReal); setEstoqueMinimo(min);
+    setPrecoCusto(p.precoCusto ? String(p.precoCusto) : ''); setPrecoVenda(p.precoVenda ? String(p.precoVenda) : '');
+    setLote(p.lote || ''); setEnderecoLocalizacao(p.enderecoLocalizacao || ''); setFornecedorId(p.fornecedorId || '');
     setDataCadastro(p.dataCadastro ? new Date(p.dataCadastro).toISOString().substring(0, 10) : new Date().toISOString().substring(0, 10));
+    setIngredientesLista([]); // Edição de receita ficará para uma próxima etapa
     setModalVisivel(true);
   }
 
@@ -133,25 +117,31 @@ export default function Produtos() {
     const motivo = window.prompt("⚠️ AÇÃO AUDITÁVEL ⚠️\nPara excluir este produto, digite o motivo:");
     if (motivo === null) return; 
     if (motivo.trim() === '') return toast.warn("O motivo é obrigatório.");
-    
     try {
       await api.delete(`/produtos/${id}`, { data: { motivo: motivo, usuarioId: usuarioLogado?.id } });
-      toast.success("Produto e histórico excluídos com sucesso!"); 
-      carregarDados();
-    } catch (err: any) { 
-      toast.error("Erro ao excluir: " + (err.response?.data?.error || "Falha na comunicação.")); 
-    }
+      toast.success("Produto e histórico excluídos com sucesso!"); carregarDados();
+    } catch (err: any) { toast.error("Erro ao excluir: " + (err.response?.data?.error || "Falha na comunicação.")); }
   }
 
-  async function salvarNovaCategoria(e: React.FormEvent) {
-    e.preventDefault();
-    if (!novaCategoriaNome.trim()) return toast.warn("Digite o nome da categoria."); 
-    try {
-      const res = await api.post('/categorias', { nome: novaCategoriaNome, descricao: "Criada via Desktop" });
-      setCategorias([...categorias, res.data]); setCategoriaId(res.data.id);
-      setModalCategoriaVisivel(false); setNovaCategoriaNome('');
-      toast.success("Categoria/Subcategoria criada com sucesso!"); 
-    } catch (error) { toast.error("Erro ao criar a categoria."); }
+  // ✨ FUNÇÃO PARA ADICIONAR ITEM NA RECEITA ✨
+  function adicionarIngrediente() {
+    if (!ingredienteSelecionado) return toast.warn("Selecione um item importado (matéria-prima).");
+    if (Number(ingredienteQtd) <= 0) return toast.warn("A quantidade deve ser maior que zero.");
+    
+    const mat = materiasPrimas.find(m => m.id === ingredienteSelecionado);
+    if (!mat) return;
+
+    if (ingredientesLista.find(i => i.produtoFilhoId === mat.id)) {
+      return toast.warn("Este item já está na receita!");
+    }
+
+    setIngredientesLista([...ingredientesLista, { produtoFilhoId: mat.id, nome: mat.nome, quantidade: Number(ingredienteQtd) }]);
+    setIngredienteSelecionado('');
+    setIngredienteQtd('1');
+  }
+
+  function removerIngrediente(id: string) {
+    setIngredientesLista(ingredientesLista.filter(i => i.produtoFilhoId !== id));
   }
 
   async function salvarProduto(e: React.FormEvent) {
@@ -162,14 +152,14 @@ export default function Produtos() {
     const custoNum = Number(precoCusto.toString().replace(',', '.')) || 0;
     const vendaNum = Number(precoVenda.toString().replace(',', '.')) || 0;
     const minNum = Number(estoqueMinimo) || 10;
-
     const descricaoComTag = `${descricao.trim()} [MIN:${minNum}]`.trim();
 
     const payload = { 
       nome, sku, tipo, categoriaId, descricao: descricaoComTag, 
       precoCusto: custoNum, precoVenda: vendaNum,
       lote, enderecoLocalizacao, 
-      fornecedorId: fornecedorId || null, dataCadastro 
+      fornecedorId: fornecedorId || null, dataCadastro,
+      ingredientes: tipo === 'ACABADO' ? ingredientesLista : [] // Envia a receita para o backend
     };
 
     try {
@@ -194,11 +184,7 @@ export default function Produtos() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <h1 style={{ color: '#2c3e50', margin: 0 }}>Catálogo de Produtos</h1>
-        {!isVendedor && (
-          <button onClick={abrirModalNovo} style={styles.btnPrincipal}>
-            <IoAddOutline size={20} /> Novo Produto
-          </button>
-        )}
+        {!isVendedor && (<button onClick={abrirModalNovo} style={styles.btnPrincipal}><IoAddOutline size={20} /> Novo Produto</button>)}
       </div>
 
       <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', backgroundColor: 'white', padding: '15px', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
@@ -219,7 +205,6 @@ export default function Produtos() {
             <tr>
               <th style={styles.th}>Nome do Produto</th>
               <th style={styles.th}>SKU</th>
-              {/* ✨ NOVA COLUNA PROCEDÊNCIA ✨ */}
               <th style={styles.th}>Procedência</th>
               <th style={styles.th}>Categoria</th>
               <th style={styles.th}>Endereço</th>
@@ -234,10 +219,7 @@ export default function Produtos() {
               <tr key={item.id} style={styles.tr}>
                 <td style={styles.td}><strong>{item.nome}</strong></td>
                 <td style={styles.td}><span style={styles.badgeSku}>{item.sku}</span></td>
-                
-                {/* ✨ EXIBINDO A PROCEDÊNCIA TRADUZIDA ✨ */}
                 <td style={styles.td}>{renderProcedencia(item.tipo)}</td>
-                
                 <td style={styles.td}>{item.categoria?.nome || '-'}</td>
                 <td style={styles.td}>{item.enderecoLocalizacao || '-'}</td>
                 <td style={styles.td}>{formatarDataBR(item.dataCadastro)}</td>
@@ -245,22 +227,8 @@ export default function Produtos() {
                 {!isVendedor && (
                   <td style={{...styles.td, textAlign: 'center'}}>
                     <div style={styles.acoesContainer}>
-                      <button 
-                        onClick={() => abrirModalEdicao(item)} 
-                        style={styles.btnAcaoEditar}
-                        title="Editar Produto"
-                      >
-                        <IoPencilSharp size={16} /> Editar
-                      </button>
-                      {isAdmin && (
-                        <button 
-                          onClick={() => apagarProduto(item.id)} 
-                          style={styles.btnAcaoApagar}
-                          title="Excluir Produto"
-                        >
-                          <IoTrashSharp size={16} /> Excluir
-                        </button>
-                      )}
+                      <button onClick={() => abrirModalEdicao(item)} style={styles.btnAcaoEditar} title="Editar Produto"><IoPencilSharp size={16} /> Editar</button>
+                      {isAdmin && (<button onClick={() => apagarProduto(item.id)} style={styles.btnAcaoApagar} title="Excluir Produto"><IoTrashSharp size={16} /> Excluir</button>)}
                     </div>
                   </td>
                 )}
@@ -281,27 +249,17 @@ export default function Produtos() {
             <form onSubmit={salvarProduto} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <div style={styles.formGroupTitle}>Dados Essenciais</div>
               <div style={{ display: 'flex', gap: '15px' }}>
-                <div style={{ flex: 2 }}>
-                  <label style={styles.label}>Nome do Produto *</label>
-                  <input type="text" style={styles.input} value={nome} onChange={e => setNome(e.target.value)} required placeholder="Ex: Lupa de Leitura" />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={styles.label}>SKU (Código) *</label>
-                  <input type="text" style={styles.input} value={sku} onChange={e => setSku(e.target.value)} required placeholder="Ex: MUN-099" />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={styles.label}>Data Cad.</label>
-                  <input type="date" style={styles.input} value={dataCadastro} onChange={e => setDataCadastro(e.target.value)} required />
-                </div>
+                <div style={{ flex: 2 }}><label style={styles.label}>Nome do Produto *</label><input type="text" style={styles.input} value={nome} onChange={e => setNome(e.target.value)} required placeholder="Ex: Lupa de Leitura" /></div>
+                <div style={{ flex: 1 }}><label style={styles.label}>SKU (Código) *</label><input type="text" style={styles.input} value={sku} onChange={e => setSku(e.target.value)} required placeholder="Ex: MUN-099" /></div>
+                <div style={{ flex: 1 }}><label style={styles.label}>Data Cad.</label><input type="date" style={styles.input} value={dataCadastro} onChange={e => setDataCadastro(e.target.value)} required /></div>
               </div>
 
               <div style={{ display: 'flex', gap: '15px' }}>
                 <div style={{ flex: 1 }}>
-                  {/* ✨ CAMPO RENOMEADO PARA PROCEDÊNCIA ✨ */}
                   <label style={styles.label}>Procedência</label>
                   <select style={styles.input} value={tipo} onChange={e => setTipo(e.target.value)}>
-                    <option value="ACABADO">Nacional</option>
-                    <option value="MATERIA_PRIMA">Importado</option>
+                    <option value="ACABADO">Nacional (Montado)</option>
+                    <option value="MATERIA_PRIMA">Importado (Matéria-Prima)</option>
                   </select>
                 </div>
                 <div style={{ flex: 1 }}>
@@ -315,24 +273,54 @@ export default function Produtos() {
                 </div>
               </div>
 
+              {/* ✨ NOVO MÓDULO DE CONSTRUÇÃO DE RECEITA ✨ */}
+              {tipo === 'ACABADO' && !idEdicao && (
+                <div style={{ backgroundColor: '#f0f4f8', padding: '15px', borderRadius: '8px', border: '1px solid #d9e2ec', marginTop: '5px' }}>
+                  <div style={{...styles.formGroupTitle, backgroundColor: 'transparent', padding: 0, marginTop: 0, marginBottom: '10px', color: '#0288D1'}}>Receita de Produção (Opcional)</div>
+                  <p style={{ fontSize: '12px', color: '#7f8c8d', marginBottom: '15px' }}>Se este produto for um "Kit", selecione abaixo as matérias-primas necessárias para montar 1 unidade dele.</p>
+                  
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end', marginBottom: '15px' }}>
+                    <div style={{ flex: 3 }}>
+                      <label style={styles.label}>Adicionar Item Importado</label>
+                      <select style={styles.input} value={ingredienteSelecionado} onChange={e => setIngredienteSelecionado(e.target.value)}>
+                        <option value="">Selecione uma matéria-prima...</option>
+                        {materiasPrimas.map(m => <option key={m.id} value={m.id}>{m.sku} - {m.nome}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={styles.label}>Qtd. Usada</label>
+                      <input type="number" style={styles.input} value={ingredienteQtd} onChange={e => setIngredienteQtd(e.target.value)} min="1" />
+                    </div>
+                    <button type="button" onClick={adicionarIngrediente} style={{...styles.btnPrincipal, backgroundColor: '#0288D1', padding: '12px 15px'}}>Adicionar</button>
+                  </div>
+
+                  {ingredientesLista.length > 0 && (
+                    <table style={{ width: '100%', backgroundColor: 'white', borderRadius: '6px', overflow: 'hidden', fontSize: '13px' }}>
+                      <thead style={{ backgroundColor: '#e2e8f0', color: '#334e68' }}>
+                        <tr><th style={{padding:'8px'}}>Item Componente</th><th style={{padding:'8px', textAlign:'center'}}>Qtd</th><th style={{padding:'8px', textAlign:'center'}}>Remover</th></tr>
+                      </thead>
+                      <tbody>
+                        {ingredientesLista.map(ing => (
+                          <tr key={ing.produtoFilhoId} style={{ borderBottom: '1px solid #f0f4f8' }}>
+                            <td style={{padding:'8px'}}>{ing.nome}</td>
+                            <td style={{padding:'8px', textAlign:'center', fontWeight: 'bold'}}>{ing.quantidade} un</td>
+                            <td style={{padding:'8px', textAlign:'center'}}><button type="button" onClick={() => removerIngrediente(ing.produtoFilhoId)} style={{background:'none', border:'none', color:'#e74c3c', cursor:'pointer'}}><IoCloseCircle size={18}/></button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+
               <div style={styles.formGroupTitle}>Logística e Alertas</div>
               <div style={{ display: 'flex', gap: '15px' }}>
-                <div style={{ flex: 2 }}>
-                  <label style={styles.label}>Endereço Físico</label>
-                  <input type="text" style={styles.input} value={enderecoLocalizacao} onChange={e => setEnderecoLocalizacao(e.target.value)} placeholder="Rua - Prateleira - Célula" />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={styles.label}>Nº do Lote</label>
-                  <input type="text" style={styles.input} value={lote} onChange={e => setLote(e.target.value)} placeholder="Ex: L2026B" />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{...styles.label, color: '#e74c3c'}}>Estoque Mínimo *</label>
-                  <input type="number" style={{...styles.input, borderColor: '#fadbd8', backgroundColor: '#fdf2e9'}} value={estoqueMinimo} onChange={e => setEstoqueMinimo(e.target.value)} min="1" required />
-                </div>
+                <div style={{ flex: 2 }}><label style={styles.label}>Endereço Físico</label><input type="text" style={styles.input} value={enderecoLocalizacao} onChange={e => setEnderecoLocalizacao(e.target.value)} placeholder="Rua - Prateleira - Célula" /></div>
+                <div style={{ flex: 1 }}><label style={styles.label}>Nº do Lote</label><input type="text" style={styles.input} value={lote} onChange={e => setLote(e.target.value)} placeholder="Ex: L2026B" /></div>
+                <div style={{ flex: 1 }}><label style={{...styles.label, color: '#e74c3c'}}>Estoque Mínimo *</label><input type="number" style={{...styles.input, borderColor: '#fadbd8', backgroundColor: '#fdf2e9'}} value={estoqueMinimo} onChange={e => setEstoqueMinimo(e.target.value)} min="1" required /></div>
               </div>
 
-              <div>
-                <label style={styles.label}>Fornecedor de Origem</label>
+              <div><label style={styles.label}>Fornecedor de Origem</label>
                 <select style={styles.input} value={fornecedorId} onChange={e => setFornecedorId(e.target.value)}>
                   <option value="">(Nenhum / Fabrico Próprio)</option>
                   {fornecedores.map(f => <option key={f.id} value={f.id}>{f.nomeEmpresa}</option>)}
@@ -341,47 +329,11 @@ export default function Produtos() {
 
               <div style={styles.formGroupTitle}>Financeiro</div>
               <div style={{ display: 'flex', gap: '15px' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={styles.label}>Preço de Custo (R$)</label>
-                  <input type="text" style={styles.input} value={precoCusto} onChange={e => setPrecoCusto(e.target.value)} placeholder="0,00" />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={styles.label}>Preço de Venda (R$)</label>
-                  <input type="text" style={styles.input} value={precoVenda} onChange={e => setPrecoVenda(e.target.value)} placeholder="0,00" />
-                </div>
+                <div style={{ flex: 1 }}><label style={styles.label}>Preço de Custo (R$)</label><input type="text" style={styles.input} value={precoCusto} onChange={e => setPrecoCusto(e.target.value)} placeholder="0,00" /></div>
+                <div style={{ flex: 1 }}><label style={styles.label}>Preço de Venda (R$)</label><input type="text" style={styles.input} value={precoVenda} onChange={e => setPrecoVenda(e.target.value)} placeholder="0,00" /></div>
               </div>
-
-              {!idEdicao && (
-                <div style={{ display: 'flex', gap: '15px', backgroundColor: '#f9fbfb', padding: '15px', borderRadius: '8px', border: '1px solid #ecf0f1', marginTop: '10px' }}>
-                  <div style={{ flex: 1 }}>
-                    <label style={styles.label}>Qtd. Inicial do Inventário</label>
-                    <input type="number" style={styles.input} value={quantidadeInicial} onChange={e => setQuantidadeInicial(e.target.value)} min="0" />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <label style={styles.label}>Zona Principal</label>
-                    <select style={styles.input} value={localizacaoId} onChange={e => setLocalizacaoId(e.target.value)}>
-                      {localizacoes.map(l => <option key={l.id} value={l.id}>{l.zona}</option>)}
-                    </select>
-                  </div>
-                </div>
-              )}
 
               <button type="submit" style={styles.btnSalvar}>Salvar Cadastro</button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {modalCategoriaVisivel && (
-        <div style={{...styles.modalOverlay, zIndex: 1100}}>
-          <div style={{...styles.modalContent, maxWidth: '400px'}}>
-            <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>Nova Categoria</h3>
-            <form onSubmit={salvarNovaCategoria} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <input type="text" style={styles.input} value={novaCategoriaNome} onChange={e => setNovaCategoriaNome(e.target.value)} placeholder="Ex: Lupas Femininas..." autoFocus required />
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                <button type="button" onClick={() => setModalCategoriaVisivel(false)} style={styles.btnCancelar}>Cancelar</button>
-                <button type="submit" style={styles.btnSalvarPequeno}>Criar</button>
-              </div>
             </form>
           </div>
         </div>
@@ -396,17 +348,12 @@ const styles: { [key: string]: React.CSSProperties } = {
   th: { padding: '15px 20px', backgroundColor: '#f9fbfb', color: '#7f8c8d', borderBottom: '2px solid #ecf0f1', textTransform: 'uppercase', fontSize: '12px', letterSpacing: '1px' },
   tr: { borderBottom: '1px solid #ecf0f1', transition: '0.2s' },
   td: { padding: '15px 20px', color: '#2c3e50', fontSize: '14px', verticalAlign: 'middle' },
-  
   badgeSku: { backgroundColor: '#e1f5fe', color: '#0288D1', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: '900', letterSpacing: '0.5px', border: '1px solid #b3e5fc' },
-  
-  // ✨ ESTILOS DAS NOVAS TAGS DE PROCEDÊNCIA ✨
   badgeNacional: { backgroundColor: '#eafaf1', color: '#27ae60', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase' },
   badgeImportado: { backgroundColor: '#fef5e7', color: '#f39c12', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase' },
-
   acoesContainer: { display: 'flex', justifyContent: 'center', gap: '8px' },
-  btnAcaoEditar: { border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', transition: 'background-color 0.2s', display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: '#f39c12', color: 'white' },
-  btnAcaoApagar: { border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', transition: 'background-color 0.2s', display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: '#e74c3c', color: 'white' },
-
+  btnAcaoEditar: { border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: '#f39c12', color: 'white' },
+  btnAcaoApagar: { border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: '#e74c3c', color: 'white' },
   modalOverlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
   modalContent: { backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '100%', maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' },
   btnFechar: { background: 'none', border: 'none', fontSize: '20px', color: '#e74c3c', cursor: 'pointer' },
@@ -414,8 +361,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   input: { width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '15px', boxSizing: 'border-box', backgroundColor: '#fafafa' },
   btnSalvar: { backgroundColor: '#27ae60', color: 'white', padding: '15px', borderRadius: '8px', border: 'none', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
   btnPrincipal: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' },
-  inputBusca: { width: '100%', padding: '12px 15px', borderRadius: '8px', border: '1px solid #ecf0f1', fontSize: '14px', boxSizing: 'border-box', backgroundColor: '#f9fbfb', color: '#2c3e50' },
-  selectBusca: { width: '100%', padding: '12px 15px', borderRadius: '8px', border: '1px solid #ecf0f1', fontSize: '14px', boxSizing: 'border-box', backgroundColor: '#f9fbfb', color: '#2c3e50', cursor: 'pointer' },
+  inputBusca: { width: '100%', padding: '12px 15px', borderRadius: '8px', border: '1px solid #ecf0f1', fontSize: '14px', backgroundColor: '#f9fbfb', color: '#2c3e50' },
+  selectBusca: { width: '100%', padding: '12px 15px', borderRadius: '8px', border: '1px solid #ecf0f1', fontSize: '14px', backgroundColor: '#f9fbfb', color: '#2c3e50', cursor: 'pointer' },
   btnLink: { background: 'none', border: 'none', color: '#27ae60', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px', padding: 0 },
   btnCancelar: { backgroundColor: '#f1f2f6', color: '#7f8c8d', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' },
   btnSalvarPequeno: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' },
