@@ -126,10 +126,10 @@ export default function Estoque() {
 
   // ✨ AS OPÇÕES VISUAIS DE MOVIMENTAÇÃO ✨
   const opcoesMovimentacao = [
-    { valor: 'Entrada de mercadoria', label: 'Entrada (Compra)', icon: '📦', cor: '#27ae60' },
-    { valor: 'Devolução VIAPRO', label: 'Devolução', icon: '🔄', cor: '#2980b9' },
+    { valor: 'Entrada de mercadoria', label: 'Entrada de Mercadoria', icon: '📦', cor: '#27ae60' },
+    { valor: 'Devolução VIAPRO', label: 'Devolução VIAPRO', icon: '🔄', cor: '#2980b9' },
     { valor: 'Ajuste de Entrada de Inventário', label: 'Ajuste (+)', icon: '➕', cor: '#27ae60' },
-    { valor: 'Saída de mercadoria', label: 'Saída (Venda)', icon: '📤', cor: '#e74c3c' },
+    { valor: 'Saída de mercadoria', label: 'Saída de mercadoria', icon: '📤', cor: '#e74c3c' },
     { valor: 'Saída para demonstração', label: 'Demonstração', icon: '🤝', cor: '#f39c12' },
     { valor: 'Ajuste de Saída de Inventário', label: 'Ajuste (-)', icon: '➖', cor: '#e74c3c' },
     { valor: 'Perdas/Avarias', label: 'Perdas/Avarias', icon: '⚠️', cor: '#c0392b' }
