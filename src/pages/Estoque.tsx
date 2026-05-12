@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { api } from '../api';
 import { toast } from 'react-toastify';
-import { IoAddOutline, IoConstructOutline, IoSwapVerticalOutline, IoCloseCircleOutline } from 'react-icons/io5';
+import { IoConstructOutline, IoSwapVerticalOutline, IoCloseCircleOutline } from 'react-icons/io5';
 
 export default function Estoque() {
   const location = useLocation();
@@ -12,13 +12,12 @@ export default function Estoque() {
   const [termoBusca, setTermoBusca] = useState('');
   const [usuarioLogado, setUsuarioLogado] = useState<any>(null);
 
-  // ✨ ESTADO DO FILTRO DE ESTOQUE CRÍTICO ✨
   const [mostrarApenasCritico, setMostrarApenasCritico] = useState(false);
 
   // Estados do Modal de Movimentação Normal
   const [modalMovimentoVisivel, setModalMovimentoVisivel] = useState(false);
   const [estoqueSelecionado, setEstoqueSelecionado] = useState<any>(null);
-  const [tipoAcao, setTipoAcao] = useState('Saída de mercadoria');
+  const [tipoAcao, setTipoAcao] = useState('Entrada de mercadoria');
   const [quantidadeMovimento, setQuantidadeMovimento] = useState('');
   const [observacao, setObservacao] = useState('');
 
@@ -27,7 +26,6 @@ export default function Estoque() {
   const [produtoFinalId, setProdutoFinalId] = useState('');
   const [quantidadeProduzir, setQuantidadeProduzir] = useState('1');
 
-  // ✨ VERIFICA SE O CLIQUE VEIO DO DASHBOARD ✨
   useEffect(() => {
     if (location.state?.filtro === 'critico' || location.search.includes('critico')) {
       setMostrarApenasCritico(true);
@@ -55,16 +53,12 @@ export default function Estoque() {
 
   useEffect(() => { carregarDados(); }, []);
 
-  // ✨ LÓGICA DE FILTRAGEM ATUALIZADA ✨
   const inventarioFiltrado = useMemo(() => {
     return inventario.filter(i => {
-      // 1. Aplica o Filtro de Estoque Crítico (se estiver ativado)
       if (mostrarApenasCritico) {
-        const minimo = i.produto?.estoqueMinimo || 10; // Usa 10 como margem de segurança caso não tenha cadastrado
-        if (i.quantidade > minimo) return false; // Esconde se estiver acima do mínimo
+        const minimo = i.produto?.estoqueMinimo || 10; 
+        if (i.quantidade > minimo) return false; 
       }
-
-      // 2. Aplica a Busca por Texto
       const termo = termoBusca.toLowerCase();
       const nomeProduto = i.produto?.nome?.toLowerCase() || '';
       const skuProduto = i.produto?.sku?.toLowerCase() || '';
@@ -76,7 +70,7 @@ export default function Estoque() {
 
   function abrirModalMovimento(item: any) {
     setEstoqueSelecionado(item);
-    setTipoAcao('Saída de mercadoria');
+    setTipoAcao('Entrada de mercadoria');
     setQuantidadeMovimento('');
     setObservacao('');
     setModalMovimentoVisivel(true);
@@ -130,6 +124,17 @@ export default function Estoque() {
     }
   }
 
+  // ✨ AS OPÇÕES VISUAIS DE MOVIMENTAÇÃO ✨
+  const opcoesMovimentacao = [
+    { valor: 'Entrada de mercadoria', label: 'Entrada (Compra)', icon: '📦', cor: '#27ae60' },
+    { valor: 'Devolução VIAPRO', label: 'Devolução', icon: '🔄', cor: '#2980b9' },
+    { valor: 'Ajuste de Entrada de Inventário', label: 'Ajuste (+)', icon: '➕', cor: '#27ae60' },
+    { valor: 'Saída de mercadoria', label: 'Saída (Venda)', icon: '📤', cor: '#e74c3c' },
+    { valor: 'Saída para demonstração', label: 'Demonstração', icon: '🤝', cor: '#f39c12' },
+    { valor: 'Ajuste de Saída de Inventário', label: 'Ajuste (-)', icon: '➖', cor: '#e74c3c' },
+    { valor: 'Perdas/Avarias', label: 'Perdas/Avarias', icon: '⚠️', cor: '#c0392b' }
+  ];
+
   if (carregando) return <div>A carregar o armazém...</div>;
 
   return (
@@ -144,7 +149,6 @@ export default function Estoque() {
         </div>
       </div>
 
-      {/* ✨ ALERTA VISUAL DE FILTRO ATIVADO ✨ */}
       {mostrarApenasCritico && (
         <div style={{ marginBottom: '20px', backgroundColor: '#feeceb', padding: '12px 15px', borderRadius: '8px', border: '1px solid #f5c6cb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ color: '#c0392b', fontWeight: 'bold', fontSize: '14px' }}>
@@ -189,7 +193,6 @@ export default function Estoque() {
                   <td style={styles.td}><strong>{item.produto?.nome || 'Produto Desconhecido'}</strong></td>
                   <td style={styles.td}><span style={styles.badgeSku}>{item.produto?.sku || '-'}</span></td>
                   <td style={styles.td}>
-                    {/* Altera a cor se estiver em nível crítico */}
                     <strong style={{ fontSize: '16px', color: isCritico ? '#e74c3c' : '#27ae60' }}>
                       {item.quantidade} un
                     </strong>
@@ -212,46 +215,70 @@ export default function Estoque() {
         </table>
       </div>
 
-      {/* MODAL DE MOVIMENTAÇÃO COMUM */}
+      {/* ✨ MODAL DE MOVIMENTAÇÃO RESTAURADO COM ÍCONES E GRID ✨ */}
       {modalMovimentoVisivel && estoqueSelecionado && (
         <div style={styles.modalOverlay}>
-          <div style={{...styles.modalContent, maxWidth: '500px'}}>
-            <h2 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>Movimentar Estoque</h2>
-            <p style={{ color: '#7f8c8d', marginBottom: '20px' }}>
-              Item: <strong>{estoqueSelecionado.produto?.nome}</strong> (Saldo Atual: {estoqueSelecionado.quantidade})
+          <div style={{...styles.modalContent, maxWidth: '600px'}}>
+            <h2 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>Gestão Rápida de Estoque</h2>
+            <p style={{ color: '#7f8c8d', marginBottom: '20px', borderBottom: '1px solid #eee', paddingBottom: '15px' }}>
+              Item: <strong style={{color: '#2c3e50'}}>{estoqueSelecionado.produto?.nome}</strong><br/>
+              Saldo Atual: <strong style={{color: '#0288D1'}}>{estoqueSelecionado.quantidade} unidades</strong>
             </p>
 
-            <form onSubmit={salvarMovimento} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <div>
-                <label style={styles.label}>Tipo de Ação</label>
-                <select style={styles.input} value={tipoAcao} onChange={e => setTipoAcao(e.target.value)}>
-                  <option value="Entrada de mercadoria">Entrada de mercadoria (Ajuste)</option>
-                  <option value="Saída de mercadoria">Saída de mercadoria (Venda/Uso)</option>
-                  <option value="Perdas/Avarias">Perdas / Avarias</option>
-                  <option value="Saída para demonstração">Saída para demonstração</option>
-                </select>
-              </div>
+            <form onSubmit={salvarMovimento} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               
               <div>
-                <label style={styles.label}>Quantidade</label>
-                <input type="number" style={styles.input} value={quantidadeMovimento} onChange={e => setQuantidadeMovimento(e.target.value)} min="1" required />
+                <label style={styles.label}>1. Selecione o Tipo de Movimentação</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '10px', marginTop: '10px' }}>
+                  {opcoesMovimentacao.map((opcao) => (
+                    <div 
+                      key={opcao.valor}
+                      onClick={() => setTipoAcao(opcao.valor)}
+                      style={{
+                        border: tipoAcao === opcao.valor ? `2px solid ${opcao.cor}` : '1px solid #ecf0f1',
+                        backgroundColor: tipoAcao === opcao.valor ? `${opcao.cor}10` : '#f9fbfb',
+                        padding: '12px 5px',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        textAlign: 'center',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '8px',
+                        transition: 'all 0.2s ease-in-out',
+                        transform: tipoAcao === opcao.valor ? 'scale(1.02)' : 'scale(1)'
+                      }}
+                    >
+                      <span style={{ fontSize: '24px' }}>{opcao.icon}</span>
+                      <span style={{ fontSize: '11px', fontWeight: tipoAcao === opcao.valor ? 'bold' : '600', color: tipoAcao === opcao.valor ? opcao.cor : '#7f8c8d', lineHeight: '1.2' }}>
+                        {opcao.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              <div style={{ display: 'flex', gap: '15px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={styles.label}>2. Quantidade</label>
+                  <input type="number" style={{...styles.input, fontSize: '18px', fontWeight: 'bold'}} value={quantidadeMovimento} onChange={e => setQuantidadeMovimento(e.target.value)} min="1" placeholder="0" required />
+                </div>
+                <div style={{ flex: 2 }}>
+                  <label style={styles.label}>3. Motivo / Observação</label>
+                  <input type="text" style={styles.input} value={observacao} onChange={e => setObservacao(e.target.value)} placeholder="Ex: Devolução cliente, Erro de contagem..." />
+                </div>
               </div>
 
-              <div>
-                <label style={styles.label}>Observação (Motivo / Cliente)</label>
-                <input type="text" style={styles.input} value={observacao} onChange={e => setObservacao(e.target.value)} placeholder="Ex: Cliente João Silva ou Ajuste de Inventário" />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px', paddingTop: '15px', borderTop: '1px solid #eee' }}>
                 <button type="button" onClick={() => setModalMovimentoVisivel(false)} style={styles.btnCancelar}>Cancelar</button>
-                <button type="submit" style={styles.btnSalvarPequeno}>Registrar</button>
+                <button type="submit" style={styles.btnSalvarPequeno}>Confirmar Operação</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL DE ORDEM DE PRODUÇÃO */}
+      {/* MODAL DE ORDEM DE PRODUÇÃO (MANTIDO INTACTO) */}
       {modalProducaoVisivel && (
         <div style={styles.modalOverlay}>
           <div style={{...styles.modalContent, maxWidth: '600px'}}>
