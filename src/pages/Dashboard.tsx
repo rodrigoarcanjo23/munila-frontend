@@ -252,7 +252,8 @@ export default function Dashboard() {
               <h3 style={styles.cardTitulo}>Volume no Armazém</h3>
               <p style={{ ...styles.cardValor, color: '#0288D1' }}>{dadosEstoque.total}</p>
             </div>
-            <div onClick={() => navigate('/estoque', { state: { filtrarCriticos: true } })} style={{ ...styles.card, borderLeft: '5px solid #e74c3c', cursor: 'pointer' }}>
+            {/* ✨ AQUI ESTÁ O AJUSTE CIRÚRGICO ✨ */}
+            <div onClick={() => navigate('/estoque?critico=true')} style={{ ...styles.card, borderLeft: '5px solid #e74c3c', cursor: 'pointer' }}>
               <h3 style={styles.cardTitulo}>Estoque Crítico</h3>
               <p style={{ ...styles.cardValor, color: '#e74c3c' }}>{dadosEstoque.criticos}</p>
             </div>

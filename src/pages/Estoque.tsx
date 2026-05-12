@@ -1,26 +1,38 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { api } from '../api';
 import { toast } from 'react-toastify';
-import { IoAddOutline, IoConstructOutline, IoSwapVerticalOutline } from 'react-icons/io5';
+import { IoAddOutline, IoConstructOutline, IoSwapVerticalOutline, IoCloseCircleOutline } from 'react-icons/io5';
 
 export default function Estoque() {
+  const location = useLocation();
   const [inventario, setInventario] = useState<any[]>([]);
   const [produtos, setProdutos] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [termoBusca, setTermoBusca] = useState('');
   const [usuarioLogado, setUsuarioLogado] = useState<any>(null);
 
-  // Estados do Modal de Movimentação Normal (Entrada/Saída/Perda)
+  // ✨ ESTADO DO FILTRO DE ESTOQUE CRÍTICO ✨
+  const [mostrarApenasCritico, setMostrarApenasCritico] = useState(false);
+
+  // Estados do Modal de Movimentação Normal
   const [modalMovimentoVisivel, setModalMovimentoVisivel] = useState(false);
   const [estoqueSelecionado, setEstoqueSelecionado] = useState<any>(null);
   const [tipoAcao, setTipoAcao] = useState('Saída de mercadoria');
   const [quantidadeMovimento, setQuantidadeMovimento] = useState('');
   const [observacao, setObservacao] = useState('');
 
-  // ✨ ESTADOS DO NOVO MODAL DE PRODUÇÃO INDUSTRIAL ✨
+  // Estados do Modal de Produção Industrial
   const [modalProducaoVisivel, setModalProducaoVisivel] = useState(false);
   const [produtoFinalId, setProdutoFinalId] = useState('');
   const [quantidadeProduzir, setQuantidadeProduzir] = useState('1');
+
+  // ✨ VERIFICA SE O CLIQUE VEIO DO DASHBOARD ✨
+  useEffect(() => {
+    if (location.state?.filtro === 'critico' || location.search.includes('critico')) {
+      setMostrarApenasCritico(true);
+    }
+  }, [location]);
 
   async function carregarDados() {
     setCarregando(true);
@@ -43,16 +55,23 @@ export default function Estoque() {
 
   useEffect(() => { carregarDados(); }, []);
 
+  // ✨ LÓGICA DE FILTRAGEM ATUALIZADA ✨
   const inventarioFiltrado = useMemo(() => {
     return inventario.filter(i => {
+      // 1. Aplica o Filtro de Estoque Crítico (se estiver ativado)
+      if (mostrarApenasCritico) {
+        const minimo = i.produto?.estoqueMinimo || 10; // Usa 10 como margem de segurança caso não tenha cadastrado
+        if (i.quantidade > minimo) return false; // Esconde se estiver acima do mínimo
+      }
+
+      // 2. Aplica a Busca por Texto
       const termo = termoBusca.toLowerCase();
       const nomeProduto = i.produto?.nome?.toLowerCase() || '';
       const skuProduto = i.produto?.sku?.toLowerCase() || '';
       return nomeProduto.includes(termo) || skuProduto.includes(termo) || i.status.toLowerCase().includes(termo);
     });
-  }, [inventario, termoBusca]);
+  }, [inventario, termoBusca, mostrarApenasCritico]);
 
-  // Filtra apenas produtos "Nacionais" (Acabados) para a tela de Produção
   const produtosProduziveis = produtos.filter(p => p.tipo === 'ACABADO');
 
   function abrirModalMovimento(item: any) {
@@ -69,7 +88,6 @@ export default function Estoque() {
     setModalProducaoVisivel(true);
   }
 
-  // Função para Movimentação Comum (Ajustes, Perdas, etc)
   async function salvarMovimento(e: React.FormEvent) {
     e.preventDefault();
     if (!quantidadeMovimento || Number(quantidadeMovimento) <= 0) return toast.warn("Informe uma quantidade válida.");
@@ -92,14 +110,12 @@ export default function Estoque() {
     }
   }
 
-  // ✨ FUNÇÃO MESTRE: DISPARA A ORDEM DE PRODUÇÃO ✨
   async function executarProducao(e: React.FormEvent) {
     e.preventDefault();
     if (!produtoFinalId) return toast.warn("Selecione o produto que deseja fabricar.");
     if (Number(quantidadeProduzir) <= 0) return toast.warn("A quantidade a produzir deve ser maior que zero.");
 
     try {
-      // Chama a nossa nova rota mestre do backend!
       const res = await api.post('/producao/executar', {
         produtoFinalId: produtoFinalId,
         quantidadeProduzir: Number(quantidadeProduzir),
@@ -110,7 +126,6 @@ export default function Estoque() {
       setModalProducaoVisivel(false);
       carregarDados();
     } catch (error: any) {
-      // O backend avisa se faltar seringa ou ponteira!
       toast.error(error.response?.data?.error || "Erro ao executar produção.");
     }
   }
@@ -123,12 +138,23 @@ export default function Estoque() {
         <h1 style={{ color: '#2c3e50', margin: 0 }}>Armazém & Inventário</h1>
         
         <div style={{ display: 'flex', gap: '10px' }}>
-          {/* ✨ NOVO BOTÃO DE PRODUÇÃO ✨ */}
           <button onClick={abrirModalProducao} style={{...styles.btnPrincipal, backgroundColor: '#8e44ad'}}>
             <IoConstructOutline size={20} /> Produzir Lote
           </button>
         </div>
       </div>
+
+      {/* ✨ ALERTA VISUAL DE FILTRO ATIVADO ✨ */}
+      {mostrarApenasCritico && (
+        <div style={{ marginBottom: '20px', backgroundColor: '#feeceb', padding: '12px 15px', borderRadius: '8px', border: '1px solid #f5c6cb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ color: '#c0392b', fontWeight: 'bold', fontSize: '14px' }}>
+            ⚠️ Exibindo apenas itens em Estoque Crítico (Abaixo do Mínimo)
+          </span>
+          <button onClick={() => setMostrarApenasCritico(false)} style={{ background: 'none', border: 'none', color: '#c0392b', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 'bold' }}>
+            <IoCloseCircleOutline size={18} /> Limpar Filtro
+          </button>
+        </div>
+      )}
 
       <div style={{ marginBottom: '20px', backgroundColor: 'white', padding: '15px', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
         <input 
@@ -154,28 +180,34 @@ export default function Estoque() {
           </thead>
           <tbody>
             {inventarioFiltrado.length === 0 && <tr><td colSpan={6} style={{textAlign: 'center', padding: '20px', color: '#7f8c8d'}}>Nenhum item encontrado no armazém.</td></tr>}
-            {inventarioFiltrado.map((item) => (
-              <tr key={item.id} style={styles.tr}>
-                <td style={styles.td}><strong>{item.produto?.nome || 'Produto Desconhecido'}</strong></td>
-                <td style={styles.td}><span style={styles.badgeSku}>{item.produto?.sku || '-'}</span></td>
-                <td style={styles.td}>
-                  <strong style={{ fontSize: '16px', color: item.quantidade <= 10 ? '#e74c3c' : '#27ae60' }}>
-                    {item.quantidade} un
-                  </strong>
-                </td>
-                <td style={styles.td}>
-                  <span style={item.status === 'Disponível' ? styles.badgeNacional : styles.badgeImportado}>
-                    {item.status}
-                  </span>
-                </td>
-                <td style={styles.td}>{item.localizacao?.zona || item.produto?.enderecoLocalizacao || '-'}</td>
-                <td style={{...styles.td, textAlign: 'center'}}>
-                  <button onClick={() => abrirModalMovimento(item)} style={styles.btnAcaoEditar}>
-                    <IoSwapVerticalOutline size={16} /> Movimentar
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {inventarioFiltrado.map((item) => {
+              const estoqueMin = item.produto?.estoqueMinimo || 10;
+              const isCritico = item.quantidade <= estoqueMin;
+
+              return (
+                <tr key={item.id} style={styles.tr}>
+                  <td style={styles.td}><strong>{item.produto?.nome || 'Produto Desconhecido'}</strong></td>
+                  <td style={styles.td}><span style={styles.badgeSku}>{item.produto?.sku || '-'}</span></td>
+                  <td style={styles.td}>
+                    {/* Altera a cor se estiver em nível crítico */}
+                    <strong style={{ fontSize: '16px', color: isCritico ? '#e74c3c' : '#27ae60' }}>
+                      {item.quantidade} un
+                    </strong>
+                  </td>
+                  <td style={styles.td}>
+                    <span style={item.status === 'Disponível' ? styles.badgeNacional : styles.badgeImportado}>
+                      {item.status}
+                    </span>
+                  </td>
+                  <td style={styles.td}>{item.localizacao?.zona || item.produto?.enderecoLocalizacao || '-'}</td>
+                  <td style={{...styles.td, textAlign: 'center'}}>
+                    <button onClick={() => abrirModalMovimento(item)} style={styles.btnAcaoEditar}>
+                      <IoSwapVerticalOutline size={16} /> Movimentar
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -219,7 +251,7 @@ export default function Estoque() {
         </div>
       )}
 
-      {/* ✨ MODAL DE ORDEM DE PRODUÇÃO (ERP INDUSTRIAL) ✨ */}
+      {/* MODAL DE ORDEM DE PRODUÇÃO */}
       {modalProducaoVisivel && (
         <div style={styles.modalOverlay}>
           <div style={{...styles.modalContent, maxWidth: '600px'}}>
