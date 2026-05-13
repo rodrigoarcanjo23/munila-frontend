@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { toast } from 'react-toastify';
-import { IoAddOutline, IoPrintOutline, IoCheckmarkCircleOutline, IoPlayOutline } from 'react-icons/io5';
+import { IoAddOutline, IoPrintOutline, IoCheckmarkCircleOutline, IoPlayOutline, IoTrashOutline } from 'react-icons/io5';
 
 export default function Separacao() {
   const [ordens, setOrdens] = useState<any[]>([]);
@@ -13,6 +13,7 @@ export default function Separacao() {
   const [modalNovaOrdem, setModalNovaOrdem] = useState(false);
   const [produtoSelecionado, setProdutoSelecionado] = useState('');
   const [quantidadeDesejada, setQuantidadeDesejada] = useState('1');
+  const [tipoOS, setTipoOS] = useState('SAIDA'); // ✨ NOVO ESTADO: ENTRADA, SAIDA ou DEVOLUCAO
   const [carrinho, setCarrinho] = useState<any[]>([]);
 
   async function carregarDados() {
@@ -26,7 +27,6 @@ export default function Separacao() {
         api.get('/produtos')
       ]);
       setOrdens(resOrdens.data);
-      // Filtra apenas produtos que a indústria envia para o armazém (ex: Acabados)
       setProdutos(resProdutos.data.filter((p: any) => p.tipo === 'ACABADO' || p.tipo === 'MATERIA_PRIMA'));
     } catch (error) {
       toast.error("Erro ao carregar os dados de separação.");
@@ -44,7 +44,6 @@ export default function Separacao() {
     const prodRef = produtos.find(p => p.id === produtoSelecionado);
     if (!prodRef) return;
 
-    // Verifica se já está no carrinho para somar
     const index = carrinho.findIndex(item => item.produtoId === produtoSelecionado);
     if (index >= 0) {
       const novoCarrinho = [...carrinho];
@@ -71,9 +70,10 @@ export default function Separacao() {
     try {
       await api.post('/wms/ordens', {
         solicitanteId: usuarioLogado.id,
+        tipo: tipoOS, // ✨ ENVIA O TIPO PARA O BACKEND
         itens: carrinho
       });
-      toast.success("Ordem de Serviço gerada com sucesso!");
+      toast.success(`Ordem de ${tipoOS} gerada com sucesso!`);
       setModalNovaOrdem(false);
       setCarrinho([]);
       carregarDados();
@@ -82,7 +82,19 @@ export default function Separacao() {
     }
   }
 
-  // === FUNÇÕES DO ESTOQUISTA ===
+  // === FUNÇÕES DE GESTÃO DA ORDEM ===
+  async function excluirOrdem(id: string) {
+    if (!window.confirm("Atenção: Deseja realmente cancelar e excluir esta Ordem de Serviço?")) return;
+
+    try {
+      await api.delete(`/wms/ordens/${id}`);
+      toast.success("Ordem excluída com sucesso.");
+      carregarDados();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || "Erro ao excluir a ordem.");
+    }
+  }
+
   async function iniciarSeparacao(id: string) {
     try {
       await api.put(`/wms/ordens/${id}/status`, { status: 'Em Separação', separadorId: usuarioLogado?.id });
@@ -94,7 +106,7 @@ export default function Separacao() {
   async function finalizarSeparacao(id: string) {
     try {
       await api.post(`/wms/ordens/${id}/concluir`, { usuarioId: usuarioLogado?.id });
-      toast.success("Separação concluída e estoque atualizado com sucesso!");
+      toast.success("Operação concluída e estoque atualizado com sucesso!");
       carregarDados();
     } catch (error: any) {
       toast.error(error.response?.data?.error || "Erro ao finalizar separação.");
@@ -103,11 +115,11 @@ export default function Separacao() {
 
   // ✨ A MÁGICA DA IMPRESSORA ZEBRA ✨
   function imprimirZebra(ordem: any) {
-    // Cria uma janela popup isolada
     const janela = window.open('', '', 'width=400,height=600');
     if (!janela) return toast.error("Pop-up bloqueado pelo navegador.");
 
-    // Monta um HTML limpo, focado em preto e branco, tamanho de etiqueta contínua (ex: 80mm ou 100mm)
+    const tituloDoc = ordem.tipo === 'ENTRADA' ? 'LISTA DE ENTRADA' : ordem.tipo === 'DEVOLUCAO' ? 'LISTA DE DEVOLUÇÃO' : 'LISTA DE PICKING';
+
     const htmlZebra = `
       <html>
         <head>
@@ -126,8 +138,8 @@ export default function Separacao() {
         </head>
         <body>
           <div class="header">
-            <p class="title">LISTA DE PICKING</p>
-            <p class="subtitle">ORDEM ${ordem.codigo}</p>
+            <p class="title">${tituloDoc}</p>
+            <p class="subtitle">ORDEM ${ordem.codigo} (${ordem.tipo})</p>
             <p class="subtitle">Solicitante: ${ordem.solicitante?.nome || 'Fábrica'}</p>
           </div>
           
@@ -166,69 +178,112 @@ export default function Separacao() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-        <h1 style={{ color: '#2c3e50', margin: 0 }}>Módulo de Separação (WMS)</h1>
+        <h1 style={{ color: '#2c3e50', margin: 0 }}>Gestão de Ordens e Retiradas</h1>
         <button onClick={() => setModalNovaOrdem(true)} style={styles.btnPrincipal}>
-          <IoAddOutline size={20} /> Nova Solicitação
+          <IoAddOutline size={20} /> Nova Ordem
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
-        {ordens.length === 0 && <p style={{ color: '#7f8c8d' }}>Nenhuma ordem de separação encontrada.</p>}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+        {ordens.length === 0 && <p style={{ color: '#7f8c8d' }}>Nenhuma ordem de serviço encontrada.</p>}
         
-        {ordens.map((ordem) => (
-          <div key={ordem.id} style={{ ...styles.card, borderTop: `5px solid ${ordem.status === 'Pendente' ? '#f39c12' : ordem.status === 'Em Separação' ? '#3498db' : '#27ae60'}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <h3 style={{ margin: 0, color: '#2c3e50', fontSize: '18px' }}>{ordem.codigo}</h3>
-              <span style={{ 
-                backgroundColor: ordem.status === 'Pendente' ? '#fef5e7' : ordem.status === 'Em Separação' ? '#ebf5fb' : '#eafaf1',
-                color: ordem.status === 'Pendente' ? '#f39c12' : ordem.status === 'Em Separação' ? '#2980b9' : '#27ae60',
-                padding: '5px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold'
-              }}>
-                {ordem.status}
-              </span>
+        {ordens.map((ordem) => {
+          // Define a cor da badge de TIPO
+          const corTipo = ordem.tipo === 'ENTRADA' ? { bg: '#eafaf1', text: '#27ae60' } 
+                        : ordem.tipo === 'SAIDA' ? { bg: '#fdedec', text: '#c0392b' } 
+                        : { bg: '#ebf5fb', text: '#2980b9' };
+
+          return (
+            <div key={ordem.id} style={{ ...styles.card, borderTop: `5px solid ${ordem.status === 'Pendente' ? '#f39c12' : ordem.status === 'Em Separação' ? '#3498db' : '#27ae60'}` }}>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <h3 style={{ margin: 0, color: '#2c3e50', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {ordem.codigo}
+                </h3>
+                <span style={{ 
+                  backgroundColor: ordem.status === 'Pendente' ? '#fef5e7' : ordem.status === 'Em Separação' ? '#ebf5fb' : '#eafaf1',
+                  color: ordem.status === 'Pendente' ? '#f39c12' : ordem.status === 'Em Separação' ? '#2980b9' : '#27ae60',
+                  padding: '5px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold'
+                }}>
+                  {ordem.status}
+                </span>
+              </div>
+              
+              {/* ✨ EXIBE O TIPO DA ORDEM ✨ */}
+              <div style={{ marginBottom: '15px' }}>
+                <span style={{ backgroundColor: corTipo.bg, color: corTipo.text, padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase' }}>
+                  {ordem.tipo} DE MATERIAL
+                </span>
+              </div>
+              
+              <p style={{ margin: '0 0 5px 0', fontSize: '13px', color: '#7f8c8d' }}><strong>Solicitante:</strong> {ordem.solicitante?.nome}</p>
+              <p style={{ margin: '0 0 15px 0', fontSize: '13px', color: '#7f8c8d' }}><strong>Itens:</strong> {ordem.itens.length} produtos diferentes</p>
+
+              {/* ✨ BOTÕES DO CARTÃO ✨ */}
+              {ordem.status === 'Pendente' && (
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button onClick={() => iniciarSeparacao(ordem.id)} style={{...styles.btnAcao, backgroundColor: '#3498db', flex: 1}}>
+                    <IoPlayOutline size={18} /> Iniciar Operação
+                  </button>
+                  <button onClick={() => excluirOrdem(ordem.id)} style={{...styles.btnAcao, backgroundColor: '#e74c3c', padding: '10px 15px'}} title="Excluir Ordem">
+                    <IoTrashOutline size={18} />
+                  </button>
+                </div>
+              )}
+
+              {ordem.status === 'Em Separação' && (
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button onClick={() => imprimirZebra(ordem)} style={{...styles.btnAcao, backgroundColor: '#34495e', flex: 1}}>
+                    <IoPrintOutline size={18} /> Zebra
+                  </button>
+                  <button onClick={() => finalizarSeparacao(ordem.id)} style={{...styles.btnAcao, backgroundColor: '#27ae60', flex: 2}}>
+                    <IoCheckmarkCircleOutline size={18} /> Finalizar
+                  </button>
+                </div>
+              )}
+              
+              {ordem.status === 'Concluída' && (
+                <div style={{ textAlign: 'center', color: '#27ae60', fontWeight: 'bold', fontSize: '14px', padding: '10px', backgroundColor: '#f9fbfb', borderRadius: '6px' }}>
+                  Concluído por {ordem.separador?.nome}
+                </div>
+              )}
             </div>
-            
-            <p style={{ margin: '0 0 5px 0', fontSize: '13px', color: '#7f8c8d' }}><strong>Solicitante:</strong> {ordem.solicitante?.nome}</p>
-            <p style={{ margin: '0 0 15px 0', fontSize: '13px', color: '#7f8c8d' }}><strong>Itens:</strong> {ordem.itens.length} produtos diferentes</p>
-
-            {ordem.status === 'Pendente' && (
-              <button onClick={() => iniciarSeparacao(ordem.id)} style={{...styles.btnAcao, backgroundColor: '#3498db', width: '100%'}}>
-                <IoPlayOutline size={18} /> Iniciar Separação
-              </button>
-            )}
-
-            {ordem.status === 'Em Separação' && (
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button onClick={() => imprimirZebra(ordem)} style={{...styles.btnAcao, backgroundColor: '#34495e', flex: 1}}>
-                  <IoPrintOutline size={18} /> Zebra
-                </button>
-                <button onClick={() => finalizarSeparacao(ordem.id)} style={{...styles.btnAcao, backgroundColor: '#27ae60', flex: 2}}>
-                  <IoCheckmarkCircleOutline size={18} /> Finalizar
-                </button>
-              </div>
-            )}
-            
-            {ordem.status === 'Concluída' && (
-              <div style={{ textAlign: 'center', color: '#27ae60', fontWeight: 'bold', fontSize: '14px', padding: '10px', backgroundColor: '#f9fbfb', borderRadius: '6px' }}>
-                Concluído por {ordem.separador?.nome}
-              </div>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* MODAL NOVA SOLICITAÇÃO */}
       {modalNovaOrdem && (
         <div style={styles.modalOverlay}>
-          <div style={{...styles.modalContent, maxWidth: '600px'}}>
-            <h2 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>Gerar Ordem de Serviço (Zebra)</h2>
-            <p style={{ color: '#7f8c8d', marginBottom: '20px' }}>Adicione os produtos que precisam ser transferidos da indústria para o estoque da ViaPro.</p>
+          <div style={{...styles.modalContent, maxWidth: '650px'}}>
+            <h2 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>Gerar Nova Ordem de Serviço</h2>
+            <p style={{ color: '#7f8c8d', marginBottom: '20px' }}>Monte a lista de produtos e escolha a direção da movimentação.</p>
+
+            {/* ✨ SELEÇÃO DO TIPO DE ORDEM ✨ */}
+            <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f9fbfb', borderRadius: '8px', border: '1px solid #ecf0f1' }}>
+              <label style={styles.label}>Finalidade da Ordem de Serviço</label>
+              <div style={{ display: 'flex', gap: '15px', marginTop: '10px' }}>
+                {['SAIDA', 'ENTRADA', 'DEVOLUCAO'].map(tipo => (
+                  <label key={tipo} style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontWeight: 'bold', color: tipoOS === tipo ? '#0288D1' : '#7f8c8d' }}>
+                    <input 
+                      type="radio" 
+                      name="tipoOS" 
+                      value={tipo} 
+                      checked={tipoOS === tipo} 
+                      onChange={() => setTipoOS(tipo)} 
+                      style={{ cursor: 'pointer' }}
+                    />
+                    {tipo === 'SAIDA' ? 'Saída (Retirada)' : tipo === 'ENTRADA' ? 'Entrada (Recebimento)' : 'Devolução (Retorno)'}
+                  </label>
+                ))}
+              </div>
+            </div>
 
             <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', alignItems: 'flex-end' }}>
               <div style={{ flex: 3 }}>
                 <label style={styles.label}>Produto</label>
                 <select style={styles.input} value={produtoSelecionado} onChange={e => setProdutoSelecionado(e.target.value)}>
-                  <option value="">Selecione...</option>
+                  <option value="">Selecione o item...</option>
                   {produtos.map(p => <option key={p.id} value={p.id}>[{p.sku}] - {p.nome}</option>)}
                 </select>
               </div>

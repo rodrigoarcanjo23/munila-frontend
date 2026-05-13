@@ -9,9 +9,7 @@ import Gestores from './pages/Gestores';
 import Fornecedores from './pages/Fornecedores';
 import Compras from './pages/Compras';
 import { Locais } from './pages/Locais';
-
 import Rupturas from './pages/Rupturas';
-// ✨ IMPORTAÇÃO DO NOVO MÓDULO WMS ✨
 import Separacao from './pages/Separacao';
 
 import { ToastContainer } from 'react-toastify';
@@ -50,8 +48,8 @@ function Sidebar({ usuarioLogado, fazerLogout }: any) {
         <Link to="/rupturas" style={navItemStyle('/rupturas')}>⚠️ Rupturas (Perdas)</Link>
         <Link to="/produtos" style={navItemStyle('/produtos')}>🏷️ Catálogo</Link>
         
-        {/* ✨ NOVO BOTÃO PARA O MÓDULO WMS ✨ */}
-        <Link to="/separacao" style={navItemStyle('/separacao')}>📋 OS (Zebra)</Link>
+        {/* ✨ NOME DO MENU ATUALIZADO ✨ */}
+        <Link to="/separacao" style={navItemStyle('/separacao')}>📋 Retirada de Material</Link>
         
         <Link to="/historico" style={navItemStyle('/historico')}>🕒 Auditoria</Link>
         <Link to="/fornecedores" style={navItemStyle('/fornecedores')}>🏭 Fornecedores</Link>
@@ -108,10 +106,7 @@ export default function App() {
             <Route path="/estoque" element={<Estoque />} />
             <Route path="/rupturas" element={<Rupturas />} />
             <Route path="/produtos" element={<Produtos />} />
-            
-            {/* ✨ ROTA DO NOVO MÓDULO WMS ✨ */}
             <Route path="/separacao" element={<Separacao />} />
-
             <Route path="/historico" element={<Historico />} />
             <Route path="/gestores" element={<Gestores />} />
             <Route path="/fornecedores" element={<Fornecedores />} />
