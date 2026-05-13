@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { toast } from 'react-toastify';
-import { IoAddOutline, IoPrintOutline, IoCheckmarkCircleOutline, IoPlayOutline, IoTrashOutline } from 'react-icons/io5';
+import { IoAddOutline, IoPrintOutline, IoCheckmarkCircleOutline, IoPlayOutline, IoTrashOutline, IoSearchOutline } from 'react-icons/io5';
 
 export default function Separacao() {
   const [ordens, setOrdens] = useState<any[]>([]);
@@ -11,10 +11,14 @@ export default function Separacao() {
 
   // Estados do Modal de Nova OS
   const [modalNovaOrdem, setModalNovaOrdem] = useState(false);
-  const [produtoSelecionado, setProdutoSelecionado] = useState('');
   const [quantidadeDesejada, setQuantidadeDesejada] = useState('1');
-  const [tipoOS, setTipoOS] = useState('SAIDA'); // ✨ NOVO ESTADO: ENTRADA, SAIDA ou DEVOLUCAO
+  const [tipoOS, setTipoOS] = useState('SAIDA'); 
   const [carrinho, setCarrinho] = useState<any[]>([]);
+
+  // ✨ NOVOS ESTADOS PARA A BUSCA INTELIGENTE (SMART SEARCH) ✨
+  const [produtoSelecionado, setProdutoSelecionado] = useState(''); // Guarda o ID oculto
+  const [buscaProduto, setBuscaProduto] = useState(''); // Guarda o texto que o utilizador digita
+  const [mostrarSugestoes, setMostrarSugestoes] = useState(false); // Controla a lista flutuante
 
   async function carregarDados() {
     setCarregando(true);
@@ -37,9 +41,21 @@ export default function Separacao() {
 
   useEffect(() => { carregarDados(); }, []);
 
+  // === LÓGICA DA BUSCA INTELIGENTE ===
+  const produtosFiltrados = produtos.filter(p => 
+    p.nome.toLowerCase().includes(buscaProduto.toLowerCase()) || 
+    p.sku.toLowerCase().includes(buscaProduto.toLowerCase())
+  );
+
+  function selecionarProdutoSugestao(produto: any) {
+    setProdutoSelecionado(produto.id);
+    setBuscaProduto(`[${produto.sku}] - ${produto.nome}`);
+    setMostrarSugestoes(false);
+  }
+
   // === FUNÇÕES DA NOVA ORDEM ===
   function adicionarAoCarrinho() {
-    if (!produtoSelecionado || Number(quantidadeDesejada) <= 0) return toast.warn("Selecione um produto e uma quantidade válida.");
+    if (!produtoSelecionado || Number(quantidadeDesejada) <= 0) return toast.warn("Selecione um produto válido da lista e uma quantidade.");
     
     const prodRef = produtos.find(p => p.id === produtoSelecionado);
     if (!prodRef) return;
@@ -53,7 +69,9 @@ export default function Separacao() {
       setCarrinho([...carrinho, { produtoId: prodRef.id, nome: prodRef.nome, sku: prodRef.sku, quantidade: Number(quantidadeDesejada) }]);
     }
 
+    // Limpa a barra de pesquisa para o próximo item
     setProdutoSelecionado('');
+    setBuscaProduto('');
     setQuantidadeDesejada('1');
   }
 
@@ -70,7 +88,7 @@ export default function Separacao() {
     try {
       await api.post('/wms/ordens', {
         solicitanteId: usuarioLogado.id,
-        tipo: tipoOS, // ✨ ENVIA O TIPO PARA O BACKEND
+        tipo: tipoOS, 
         itens: carrinho
       });
       toast.success(`Ordem de ${tipoOS} gerada com sucesso!`);
@@ -113,7 +131,6 @@ export default function Separacao() {
     }
   }
 
-  // ✨ A MÁGICA DA IMPRESSORA ZEBRA ✨
   function imprimirZebra(ordem: any) {
     const janela = window.open('', '', 'width=400,height=600');
     if (!janela) return toast.error("Pop-up bloqueado pelo navegador.");
@@ -188,7 +205,6 @@ export default function Separacao() {
         {ordens.length === 0 && <p style={{ color: '#7f8c8d' }}>Nenhuma ordem de serviço encontrada.</p>}
         
         {ordens.map((ordem) => {
-          // Define a cor da badge de TIPO
           const corTipo = ordem.tipo === 'ENTRADA' ? { bg: '#eafaf1', text: '#27ae60' } 
                         : ordem.tipo === 'SAIDA' ? { bg: '#fdedec', text: '#c0392b' } 
                         : { bg: '#ebf5fb', text: '#2980b9' };
@@ -209,7 +225,6 @@ export default function Separacao() {
                 </span>
               </div>
               
-              {/* ✨ EXIBE O TIPO DA ORDEM ✨ */}
               <div style={{ marginBottom: '15px' }}>
                 <span style={{ backgroundColor: corTipo.bg, color: corTipo.text, padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase' }}>
                   {ordem.tipo} DE MATERIAL
@@ -219,7 +234,6 @@ export default function Separacao() {
               <p style={{ margin: '0 0 5px 0', fontSize: '13px', color: '#7f8c8d' }}><strong>Solicitante:</strong> {ordem.solicitante?.nome}</p>
               <p style={{ margin: '0 0 15px 0', fontSize: '13px', color: '#7f8c8d' }}><strong>Itens:</strong> {ordem.itens.length} produtos diferentes</p>
 
-              {/* ✨ BOTÕES DO CARTÃO ✨ */}
               {ordem.status === 'Pendente' && (
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button onClick={() => iniciarSeparacao(ordem.id)} style={{...styles.btnAcao, backgroundColor: '#3498db', flex: 1}}>
@@ -252,14 +266,12 @@ export default function Separacao() {
         })}
       </div>
 
-      {/* MODAL NOVA SOLICITAÇÃO */}
       {modalNovaOrdem && (
         <div style={styles.modalOverlay}>
-          <div style={{...styles.modalContent, maxWidth: '650px'}}>
+          <div style={{...styles.modalContent, maxWidth: '650px', overflow: 'visible'}}> {/* overflow visible para a lista flutuante não cortar */}
             <h2 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>Gerar Nova Ordem de Serviço</h2>
             <p style={{ color: '#7f8c8d', marginBottom: '20px' }}>Monte a lista de produtos e escolha a direção da movimentação.</p>
 
-            {/* ✨ SELEÇÃO DO TIPO DE ORDEM ✨ */}
             <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f9fbfb', borderRadius: '8px', border: '1px solid #ecf0f1' }}>
               <label style={styles.label}>Finalidade da Ordem de Serviço</label>
               <div style={{ display: 'flex', gap: '15px', marginTop: '10px' }}>
@@ -279,14 +291,48 @@ export default function Separacao() {
               </div>
             </div>
 
+            {/* ✨ BARRA DE PESQUISA INTELIGENTE ✨ */}
             <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', alignItems: 'flex-end' }}>
-              <div style={{ flex: 3 }}>
-                <label style={styles.label}>Produto</label>
-                <select style={styles.input} value={produtoSelecionado} onChange={e => setProdutoSelecionado(e.target.value)}>
-                  <option value="">Selecione o item...</option>
-                  {produtos.map(p => <option key={p.id} value={p.id}>[{p.sku}] - {p.nome}</option>)}
-                </select>
+              <div style={{ flex: 3, position: 'relative' }}>
+                <label style={styles.label}>Produto (Nome ou SKU)</label>
+                <div style={{ position: 'relative' }}>
+                  <IoSearchOutline size={18} color="#7f8c8d" style={{ position: 'absolute', left: '10px', top: '12px' }} />
+                  <input 
+                    type="text" 
+                    style={{...styles.input, paddingLeft: '35px'}} 
+                    placeholder="Comece a digitar para pesquisar..."
+                    value={buscaProduto}
+                    onChange={(e) => {
+                      setBuscaProduto(e.target.value);
+                      setProdutoSelecionado(''); // Se alterar o texto, desmarca a seleção anterior
+                      setMostrarSugestoes(true);
+                    }}
+                    onFocus={() => setMostrarSugestoes(true)}
+                    onBlur={() => setTimeout(() => setMostrarSugestoes(false), 200)} // Delay para permitir o clique na lista
+                  />
+                </div>
+
+                {/* ✨ LISTA FLUTUANTE (DROPDOWN) ✨ */}
+                {mostrarSugestoes && buscaProduto.length > 0 && (
+                  <div style={styles.listaFlutuante}>
+                    {produtosFiltrados.length === 0 ? (
+                      <div style={{ padding: '15px', color: '#7f8c8d', textAlign: 'center', fontSize: '13px' }}>Nenhum produto encontrado.</div>
+                    ) : (
+                      produtosFiltrados.map((p) => (
+                        <div 
+                          key={p.id} 
+                          style={styles.itemFlutuante}
+                          onMouseDown={() => selecionarProdutoSugestao(p)} // onMouseDown executa antes do onBlur do input
+                        >
+                          <span style={{ fontWeight: 'bold', color: '#2c3e50', display: 'block' }}>{p.nome}</span>
+                          <span style={{ color: '#0288D1', fontSize: '11px', fontWeight: 'bold' }}>SKU: {p.sku}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
+
               <div style={{ flex: 1 }}>
                 <label style={styles.label}>Qtd.</label>
                 <input type="number" style={styles.input} value={quantidadeDesejada} onChange={e => setQuantidadeDesejada(e.target.value)} min="1" />
@@ -294,7 +340,6 @@ export default function Separacao() {
               <button type="button" onClick={adicionarAoCarrinho} style={{...styles.btnAcao, backgroundColor: '#0288D1', height: '42px', padding: '0 15px'}}>Adicionar</button>
             </div>
 
-            {/* LISTA DO CARRINHO */}
             <div style={{ backgroundColor: '#f9fbfb', border: '1px solid #ecf0f1', borderRadius: '8px', minHeight: '150px', padding: '10px', marginBottom: '20px' }}>
               {carrinho.length === 0 && <p style={{ textAlign: 'center', color: '#bdc3c7', marginTop: '50px' }}>Nenhum item adicionado.</p>}
               {carrinho.map((item, index) => (
@@ -328,6 +373,9 @@ const styles: { [key: string]: React.CSSProperties } = {
   modalOverlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
   modalContent: { backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' },
   label: { display: 'block', fontSize: '13px', fontWeight: 'bold', color: '#34495e', marginBottom: '5px' },
-  input: { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '15px', boxSizing: 'border-box', backgroundColor: '#fafafa' },
-  btnCancelar: { backgroundColor: '#f1f2f6', color: '#7f8c8d', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }
+  input: { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '15px', boxSizing: 'border-box', backgroundColor: '#fafafa', outline: 'none' },
+  btnCancelar: { backgroundColor: '#f1f2f6', color: '#7f8c8d', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' },
+  // Estilos da nova Lista Flutuante
+  listaFlutuante: { position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: 'white', border: '1px solid #ddd', borderRadius: '8px', marginTop: '5px', maxHeight: '220px', overflowY: 'auto', zIndex: 100, boxShadow: '0 10px 25px rgba(0,0,0,0.15)' },
+  itemFlutuante: { padding: '12px 15px', borderBottom: '1px solid #f4f7f6', cursor: 'pointer', transition: 'background-color 0.2s', display: 'flex', flexDirection: 'column', gap: '2px' }
 };
