@@ -10,8 +10,9 @@ import Fornecedores from './pages/Fornecedores';
 import Compras from './pages/Compras';
 import { Locais } from './pages/Locais';
 
-// IMPORTAÇÃO DA NOVA TELA
 import Rupturas from './pages/Rupturas';
+// ✨ IMPORTAÇÃO DO NOVO MÓDULO WMS ✨
+import Separacao from './pages/Separacao';
 
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -46,11 +47,12 @@ function Sidebar({ usuarioLogado, fazerLogout }: any) {
       <nav style={{ flex: 1, padding: '0 15px', overflowY: 'auto' }}>
         <Link to="/" style={navItemStyle('/')}>📊 Dashboard</Link>
         <Link to="/estoque" style={navItemStyle('/estoque')}>📦 Armazém</Link>
-        
-        {/* NOVO BOTÃO NO MENU LATERAL */}
         <Link to="/rupturas" style={navItemStyle('/rupturas')}>⚠️ Rupturas (Perdas)</Link>
-        
         <Link to="/produtos" style={navItemStyle('/produtos')}>🏷️ Catálogo</Link>
+        
+        {/* ✨ NOVO BOTÃO PARA O MÓDULO WMS ✨ */}
+        <Link to="/separacao" style={navItemStyle('/separacao')}>📋 OS (Zebra)</Link>
+        
         <Link to="/historico" style={navItemStyle('/historico')}>🕒 Auditoria</Link>
         <Link to="/fornecedores" style={navItemStyle('/fornecedores')}>🏭 Fornecedores</Link>
         <Link to="/compras" style={navItemStyle('/compras')}>🛒 Pedidos (Compras)</Link>
@@ -104,11 +106,12 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/estoque" element={<Estoque />} />
-            
-            {/* ROTA DA NOVA TELA DE RUPTURAS */}
             <Route path="/rupturas" element={<Rupturas />} />
-
             <Route path="/produtos" element={<Produtos />} />
+            
+            {/* ✨ ROTA DO NOVO MÓDULO WMS ✨ */}
+            <Route path="/separacao" element={<Separacao />} />
+
             <Route path="/historico" element={<Historico />} />
             <Route path="/gestores" element={<Gestores />} />
             <Route path="/fornecedores" element={<Fornecedores />} />
