@@ -2,7 +2,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { api } from '../api';
 import { toast } from 'react-toastify';
-import { IoConstructOutline, IoSwapVerticalOutline, IoCloseCircleOutline } from 'react-icons/io5';
+import { IoConstructOutline, IoSwapVerticalOutline, IoCloseCircleOutline, IoDownloadOutline, IoDocumentTextOutline } from 'react-icons/io5';
+
+// Importações para Exportação
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 export default function Estoque() {
   const location = useLocation();
@@ -68,6 +73,78 @@ export default function Estoque() {
 
   const produtosProduziveis = produtos.filter(p => p.tipo === 'ACABADO');
 
+  // ==========================================
+  // ✨ FUNÇÕES DE EXPORTAÇÃO ✨
+  // ==========================================
+
+  const exportarExcel = () => {
+    if (inventarioFiltrado.length === 0) {
+      return toast.warn("Não há dados para exportar.");
+    }
+
+    const dadosPlanilha = inventarioFiltrado.map((item) => ({
+      'Produto': item.produto?.nome || 'Desconhecido',
+      'SKU': item.produto?.sku || '-',
+      'Qtd. Atual': item.quantidade,
+      'Status': item.status,
+      'Endereço (Zona)': item.localizacao?.zona || item.produto?.enderecoLocalizacao || '-'
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(dadosPlanilha);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Armazém");
+    
+    const dataHj = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `Inventario_ViaPro_${dataHj}.xlsx`);
+    toast.success("Excel exportado com sucesso!");
+  };
+
+  const exportarPDF = () => {
+    if (inventarioFiltrado.length === 0) {
+      return toast.warn("Não há dados para exportar.");
+    }
+
+    const doc = new jsPDF();
+    
+    doc.setFontSize(18);
+    doc.text("Relatório de Armazém & Inventário - ViaPro", 14, 20);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Gerado em: ${new Date().toLocaleString()}`, 14, 28);
+
+    const tableColumn = ["Produto", "SKU", "Qtd", "Status", "Local"];
+    const tableRows: any[] = [];
+
+    inventarioFiltrado.forEach(item => {
+      const rowData = [
+        item.produto?.nome || 'Desconhecido',
+        item.produto?.sku || '-',
+        `${item.quantidade} un`,
+        item.status,
+        item.localizacao?.zona || item.produto?.enderecoLocalizacao || '-'
+      ];
+      tableRows.push(rowData);
+    });
+
+    (doc as any).autoTable({
+      head: [tableColumn],
+      body: tableRows,
+      startY: 35,
+      styles: { fontSize: 9, cellPadding: 3 },
+      headStyles: { fillColor: [44, 62, 80], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [245, 247, 250] }
+    });
+
+    const dataHj = new Date().toISOString().split('T')[0];
+    doc.save(`Inventario_ViaPro_${dataHj}.pdf`);
+    toast.success("PDF exportado com sucesso!");
+  };
+
+  // ==========================================
+  // MODAIS E SALVAMENTOS
+  // ==========================================
+
   function abrirModalMovimento(item: any) {
     setEstoqueSelecionado(item);
     setTipoAcao('Entrada de mercadoria');
@@ -124,7 +201,6 @@ export default function Estoque() {
     }
   }
 
-  // ✨ AS OPÇÕES VISUAIS DE MOVIMENTAÇÃO ✨
   const opcoesMovimentacao = [
     { valor: 'Entrada de mercadoria', label: 'Entrada de Mercadoria', icon: '📦', cor: '#27ae60' },
     { valor: 'Devolução VIAPRO', label: 'Devolução VIAPRO', icon: '🔄', cor: '#2980b9' },
@@ -135,7 +211,7 @@ export default function Estoque() {
     { valor: 'Perdas/Avarias', label: 'Perdas/Avarias', icon: '⚠️', cor: '#c0392b' }
   ];
 
-  if (carregando) return <div>A carregar o armazém...</div>;
+  if (carregando) return <div style={{ textAlign: 'center', marginTop: '50px' }}>A carregar o armazém...</div>;
 
   return (
     <div>
@@ -143,6 +219,15 @@ export default function Estoque() {
         <h1 style={{ color: '#2c3e50', margin: 0 }}>Armazém & Inventário</h1>
         
         <div style={{ display: 'flex', gap: '10px' }}>
+          {/* ✨ NOVOS BOTÕES DE EXPORTAÇÃO ✨ */}
+          <button onClick={exportarExcel} style={{ ...styles.btnPrincipal, backgroundColor: '#27ae60' }}>
+            <IoDownloadOutline size={18} /> Exportar Excel
+          </button>
+          
+          <button onClick={exportarPDF} style={{ ...styles.btnPrincipal, backgroundColor: '#e74c3c' }}>
+            <IoDocumentTextOutline size={18} /> Exportar PDF
+          </button>
+
           <button onClick={abrirModalProducao} style={{...styles.btnPrincipal, backgroundColor: '#8e44ad'}}>
             <IoConstructOutline size={20} /> Produzir Lote
           </button>
@@ -215,7 +300,7 @@ export default function Estoque() {
         </table>
       </div>
 
-      {/* ✨ MODAL DE MOVIMENTAÇÃO RESTAURADO COM ÍCONES E GRID ✨ */}
+      {/* MODAL DE MOVIMENTAÇÃO */}
       {modalMovimentoVisivel && estoqueSelecionado && (
         <div style={styles.modalOverlay}>
           <div style={{...styles.modalContent, maxWidth: '600px'}}>
@@ -278,7 +363,7 @@ export default function Estoque() {
         </div>
       )}
 
-      {/* MODAL DE ORDEM DE PRODUÇÃO (MANTIDO INTACTO) */}
+      {/* MODAL DE ORDEM DE PRODUÇÃO */}
       {modalProducaoVisivel && (
         <div style={styles.modalOverlay}>
           <div style={{...styles.modalContent, maxWidth: '600px'}}>
