@@ -7,7 +7,7 @@ import { IoConstructOutline, IoSwapVerticalOutline, IoCloseCircleOutline, IoDown
 // Importações para Exportação
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable'; // ✨ IMPORTAÇÃO ATUALIZADA ✨
 
 export default function Estoque() {
   const location = useLocation();
@@ -104,41 +104,47 @@ export default function Estoque() {
       return toast.warn("Não há dados para exportar.");
     }
 
-    const doc = new jsPDF();
-    
-    doc.setFontSize(18);
-    doc.text("Relatório de Armazém & Inventário - ViaPro", 14, 20);
-    
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(`Gerado em: ${new Date().toLocaleString()}`, 14, 28);
+    try {
+      const doc = new jsPDF();
+      
+      doc.setFontSize(18);
+      doc.text("Relatório de Armazém & Inventário - ViaPro", 14, 20);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Gerado em: ${new Date().toLocaleString()}`, 14, 28);
 
-    const tableColumn = ["Produto", "SKU", "Qtd", "Status", "Local"];
-    const tableRows: any[] = [];
+      const tableColumn = ["Produto", "SKU", "Qtd", "Status", "Local"];
+      const tableRows: any[] = [];
 
-    inventarioFiltrado.forEach(item => {
-      const rowData = [
-        item.produto?.nome || 'Desconhecido',
-        item.produto?.sku || '-',
-        `${item.quantidade} un`,
-        item.status,
-        item.localizacao?.zona || item.produto?.enderecoLocalizacao || '-'
-      ];
-      tableRows.push(rowData);
-    });
+      inventarioFiltrado.forEach(item => {
+        const rowData = [
+          item.produto?.nome || 'Desconhecido',
+          item.produto?.sku || '-',
+          `${item.quantidade} un`,
+          item.status,
+          item.localizacao?.zona || item.produto?.enderecoLocalizacao || '-'
+        ];
+        tableRows.push(rowData);
+      });
 
-    (doc as any).autoTable({
-      head: [tableColumn],
-      body: tableRows,
-      startY: 35,
-      styles: { fontSize: 9, cellPadding: 3 },
-      headStyles: { fillColor: [44, 62, 80], textColor: 255, fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: [245, 247, 250] }
-    });
+      // ✨ USO CORRETO DO AUTOTABLE ✨
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        startY: 35,
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [44, 62, 80], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [245, 247, 250] }
+      });
 
-    const dataHj = new Date().toISOString().split('T')[0];
-    doc.save(`Inventario_ViaPro_${dataHj}.pdf`);
-    toast.success("PDF exportado com sucesso!");
+      const dataHj = new Date().toISOString().split('T')[0];
+      doc.save(`Inventario_ViaPro_${dataHj}.pdf`);
+      toast.success("PDF exportado com sucesso!");
+    } catch (error) {
+      console.error("Erro ao gerar PDF:", error);
+      toast.error("Erro interno ao gerar o arquivo PDF.");
+    }
   };
 
   // ==========================================
@@ -219,7 +225,7 @@ export default function Estoque() {
         <h1 style={{ color: '#2c3e50', margin: 0 }}>Armazém & Inventário</h1>
         
         <div style={{ display: 'flex', gap: '10px' }}>
-          {/* ✨ NOVOS BOTÕES DE EXPORTAÇÃO ✨ */}
+          {/* ✨ BOTOES DE EXPORTAÇÃO ✨ */}
           <button onClick={exportarExcel} style={{ ...styles.btnPrincipal, backgroundColor: '#27ae60' }}>
             <IoDownloadOutline size={18} /> Exportar Excel
           </button>
