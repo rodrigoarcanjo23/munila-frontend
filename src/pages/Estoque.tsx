@@ -58,7 +58,6 @@ export default function Estoque() {
 
   useEffect(() => { carregarDados(); }, []);
 
-  // ✨ FILTRO COM ORDENAÇÃO ALFABÉTICA APLICADA ✨
   const inventarioFiltrado = useMemo(() => {
     const filtrado = inventario.filter(i => {
       if (mostrarApenasCritico) {
@@ -71,7 +70,6 @@ export default function Estoque() {
       return nomeProduto.includes(termo) || skuProduto.includes(termo) || i.status.toLowerCase().includes(termo);
     });
 
-    // Ordenação Alfabética
     return filtrado.sort((a, b) => {
       const nomeA = a.produto?.nome || '';
       const nomeB = b.produto?.nome || '';
@@ -79,7 +77,6 @@ export default function Estoque() {
     });
   }, [inventario, termoBusca, mostrarApenasCritico]);
 
-  // ✨ LISTA DE PRODUÇÃO TAMBÉM ORDENADA ALFABETICAMENTE ✨
   const produtosProduziveis = produtos
     .filter(p => p.tipo === 'ACABADO')
     .sort((a, b) => {
@@ -102,7 +99,8 @@ export default function Estoque() {
       'SKU': item.produto?.sku || '-',
       'Qtd. Atual': item.quantidade,
       'Status': item.status,
-      'Endereço (Zona)': item.localizacao?.zona || item.produto?.enderecoLocalizacao || '-'
+      // ✨ CORREÇÃO DO ENDEREÇO NO EXCEL ✨
+      'Endereço (Zona)': item.produto?.enderecoLocalizacao || '-'
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(dadosPlanilha);
@@ -138,7 +136,8 @@ export default function Estoque() {
           item.produto?.sku || '-',
           `${item.quantidade} un`,
           item.status,
-          item.localizacao?.zona || item.produto?.enderecoLocalizacao || '-'
+          // ✨ CORREÇÃO DO ENDEREÇO NO PDF ✨
+          item.produto?.enderecoLocalizacao || '-'
         ];
         tableRows.push(rowData);
       });
@@ -306,7 +305,8 @@ export default function Estoque() {
                       {item.status}
                     </span>
                   </td>
-                  <td style={styles.td}>{item.localizacao?.zona || item.produto?.enderecoLocalizacao || '-'}</td>
+                  {/* ✨ CORREÇÃO DO ENDEREÇO NA TABELA ✨ */}
+                  <td style={styles.td}>{item.produto?.enderecoLocalizacao || '-'}</td>
                   <td style={{...styles.td, textAlign: 'center'}}>
                     <button onClick={() => abrirModalMovimento(item)} style={styles.btnAcaoEditar}>
                       <IoSwapVerticalOutline size={16} /> Movimentar
