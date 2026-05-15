@@ -7,7 +7,7 @@ import { IoConstructOutline, IoSwapVerticalOutline, IoCloseCircleOutline, IoDown
 // Importações para Exportação
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable'; // ✨ IMPORTAÇÃO ATUALIZADA ✨
+import autoTable from 'jspdf-autotable';
 
 export default function Estoque() {
   const location = useLocation();
@@ -58,8 +58,9 @@ export default function Estoque() {
 
   useEffect(() => { carregarDados(); }, []);
 
+  // ✨ FILTRO COM ORDENAÇÃO ALFABÉTICA APLICADA ✨
   const inventarioFiltrado = useMemo(() => {
-    return inventario.filter(i => {
+    const filtrado = inventario.filter(i => {
       if (mostrarApenasCritico) {
         const minimo = i.produto?.estoqueMinimo || 10; 
         if (i.quantidade > minimo) return false; 
@@ -69,12 +70,26 @@ export default function Estoque() {
       const skuProduto = i.produto?.sku?.toLowerCase() || '';
       return nomeProduto.includes(termo) || skuProduto.includes(termo) || i.status.toLowerCase().includes(termo);
     });
+
+    // Ordenação Alfabética
+    return filtrado.sort((a, b) => {
+      const nomeA = a.produto?.nome || '';
+      const nomeB = b.produto?.nome || '';
+      return nomeA.localeCompare(nomeB);
+    });
   }, [inventario, termoBusca, mostrarApenasCritico]);
 
-  const produtosProduziveis = produtos.filter(p => p.tipo === 'ACABADO');
+  // ✨ LISTA DE PRODUÇÃO TAMBÉM ORDENADA ALFABETICAMENTE ✨
+  const produtosProduziveis = produtos
+    .filter(p => p.tipo === 'ACABADO')
+    .sort((a, b) => {
+      const nomeA = a.nome || '';
+      const nomeB = b.nome || '';
+      return nomeA.localeCompare(nomeB);
+    });
 
   // ==========================================
-  // ✨ FUNÇÕES DE EXPORTAÇÃO ✨
+  // FUNÇÕES DE EXPORTAÇÃO
   // ==========================================
 
   const exportarExcel = () => {
@@ -128,7 +143,6 @@ export default function Estoque() {
         tableRows.push(rowData);
       });
 
-      // ✨ USO CORRETO DO AUTOTABLE ✨
       autoTable(doc, {
         head: [tableColumn],
         body: tableRows,
@@ -225,7 +239,6 @@ export default function Estoque() {
         <h1 style={{ color: '#2c3e50', margin: 0 }}>Armazém & Inventário</h1>
         
         <div style={{ display: 'flex', gap: '10px' }}>
-          {/* ✨ BOTOES DE EXPORTAÇÃO ✨ */}
           <button onClick={exportarExcel} style={{ ...styles.btnPrincipal, backgroundColor: '#27ae60' }}>
             <IoDownloadOutline size={18} /> Exportar Excel
           </button>
