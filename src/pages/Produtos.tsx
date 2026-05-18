@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../api';
 import { toast } from 'react-toastify';
-import { IoPencilSharp, IoTrashSharp, IoAddOutline, IoCloseCircle } from 'react-icons/io5';
+import { IoPencilSharp, IoTrashSharp, IoAddOutline, IoCloseCircle, IoDownloadOutline, IoDocumentTextOutline } from 'react-icons/io5';
+
+// ✨ IMPORTAÇÕES PARA EXPORTAÇÃO ✨
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export default function Produtos() {
   const [produtos, setProdutos] = useState<any[]>([]);
@@ -34,7 +39,6 @@ export default function Produtos() {
   const [dataCadastro, setDataCadastro] = useState('');
   const [novaCategoriaNome, setNovaCategoriaNome] = useState('');
 
-  // ✨ NOVOS ESTADOS PARA A RECEITA DO PRODUTO ✨
   const [ingredientesLista, setIngredientesLista] = useState<{produtoFilhoId: string, nome: string, quantidade: number}[]>([]);
   const [ingredienteSelecionado, setIngredienteSelecionado] = useState('');
   const [ingredienteQtd, setIngredienteQtd] = useState('1');
@@ -83,8 +87,88 @@ export default function Produtos() {
     });
   }, [produtos, termoBusca, filtroCategoria]);
 
-  // Lista de matérias-primas disponíveis para formar a receita
   const materiasPrimas = produtos.filter(p => p.tipo === 'MATERIA_PRIMA');
+
+  // ==========================================
+  // ✨ FUNÇÕES DE EXPORTAÇÃO DO CATÁLOGO ✨
+  // ==========================================
+
+  const exportarExcel = () => {
+    if (produtosFiltrados.length === 0) {
+      return toast.warn("Não há produtos para exportar.");
+    }
+
+    const dadosPlanilha = produtosFiltrados.map((item) => ({
+      'Nome do Produto': item.nome,
+      'SKU': item.sku,
+      'Procedência': item.tipo === 'MATERIA_PRIMA' ? 'Importado' : 'Nacional',
+      'Categoria': item.categoria?.nome || '-',
+      'Endereço Físico': item.enderecoLocalizacao || '-',
+      'Data de Cadastro': formatarDataBR(item.dataCadastro),
+      'Fornecedor': item.fornecedor?.nomeEmpresa || '-'
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(dadosPlanilha);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Catálogo");
+    
+    const dataHj = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `Catalogo_ViaPro_${dataHj}.xlsx`);
+    toast.success("Excel exportado com sucesso!");
+  };
+
+  const exportarPDF = () => {
+    if (produtosFiltrados.length === 0) {
+      return toast.warn("Não há produtos para exportar.");
+    }
+
+    try {
+      const doc = new jsPDF('landscape'); // Orientação paisagem pois tem mais colunas
+      
+      doc.setFontSize(18);
+      doc.text("Catálogo de Produtos - ViaPro", 14, 20);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Gerado em: ${new Date().toLocaleString()}`, 14, 28);
+
+      const tableColumn = ["Produto", "SKU", "Procedência", "Categoria", "Endereço", "Data Cad.", "Fornecedor"];
+      const tableRows: any[] = [];
+
+      produtosFiltrados.forEach(item => {
+        const rowData = [
+          item.nome,
+          item.sku,
+          item.tipo === 'MATERIA_PRIMA' ? 'Importado' : 'Nacional',
+          item.categoria?.nome || '-',
+          item.enderecoLocalizacao || '-',
+          formatarDataBR(item.dataCadastro),
+          item.fornecedor?.nomeEmpresa || '-'
+        ];
+        tableRows.push(rowData);
+      });
+
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        startY: 35,
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [44, 62, 80], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [245, 247, 250] }
+      });
+
+      const dataHj = new Date().toISOString().split('T')[0];
+      doc.save(`Catalogo_ViaPro_${dataHj}.pdf`);
+      toast.success("PDF exportado com sucesso!");
+    } catch (error) {
+      console.error("Erro ao gerar PDF:", error);
+      toast.error("Erro interno ao gerar o arquivo PDF.");
+    }
+  };
+
+  // ==========================================
+  // MODAIS E SALVAMENTOS
+  // ==========================================
 
   function abrirModalNovo() {
     setIdEdicao(null);
@@ -92,7 +176,7 @@ export default function Produtos() {
     setPrecoCusto(''); setPrecoVenda(''); setEstoqueMinimo('10');
     setLote(''); setEnderecoLocalizacao(''); setFornecedorId('');
     setDataCadastro(new Date().toISOString().substring(0, 10));
-    setIngredientesLista([]); // Limpa a receita
+    setIngredientesLista([]); 
     if (categorias.length > 0) setCategoriaId(categorias[0].id);
     if (localizacoes.length > 0) setLocalizacaoId(localizacoes[0].id);
     setModalVisivel(true);
@@ -109,7 +193,7 @@ export default function Produtos() {
     setPrecoCusto(p.precoCusto ? String(p.precoCusto) : ''); setPrecoVenda(p.precoVenda ? String(p.precoVenda) : '');
     setLote(p.lote || ''); setEnderecoLocalizacao(p.enderecoLocalizacao || ''); setFornecedorId(p.fornecedorId || '');
     setDataCadastro(p.dataCadastro ? new Date(p.dataCadastro).toISOString().substring(0, 10) : new Date().toISOString().substring(0, 10));
-    setIngredientesLista([]); // Edição de receita ficará para uma próxima etapa
+    setIngredientesLista([]); 
     setModalVisivel(true);
   }
 
@@ -123,7 +207,6 @@ export default function Produtos() {
     } catch (err: any) { toast.error("Erro ao excluir: " + (err.response?.data?.error || "Falha na comunicação.")); }
   }
 
-  // ✨ FUNÇÃO PARA ADICIONAR ITEM NA RECEITA ✨
   function adicionarIngrediente() {
     if (!ingredienteSelecionado) return toast.warn("Selecione um item importado (matéria-prima).");
     if (Number(ingredienteQtd) <= 0) return toast.warn("A quantidade deve ser maior que zero.");
@@ -159,7 +242,7 @@ export default function Produtos() {
       precoCusto: custoNum, precoVenda: vendaNum,
       lote, enderecoLocalizacao, 
       fornecedorId: fornecedorId || null, dataCadastro,
-      ingredientes: tipo === 'ACABADO' ? ingredientesLista : [] // Envia a receita para o backend
+      ingredientes: tipo === 'ACABADO' ? ingredientesLista : [] 
     };
 
     try {
@@ -184,7 +267,23 @@ export default function Produtos() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <h1 style={{ color: '#2c3e50', margin: 0 }}>Catálogo de Produtos</h1>
-        {!isVendedor && (<button onClick={abrirModalNovo} style={styles.btnPrincipal}><IoAddOutline size={20} /> Novo Produto</button>)}
+        
+        {/* ✨ BOTÕES DE AÇÃO ALINHADOS NO TOPO ✨ */}
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button onClick={exportarExcel} style={{ ...styles.btnPrincipal, backgroundColor: '#27ae60' }}>
+            <IoDownloadOutline size={18} /> Exportar Excel
+          </button>
+          
+          <button onClick={exportarPDF} style={{ ...styles.btnPrincipal, backgroundColor: '#e74c3c' }}>
+            <IoDocumentTextOutline size={18} /> Exportar PDF
+          </button>
+
+          {!isVendedor && (
+            <button onClick={abrirModalNovo} style={{...styles.btnPrincipal, backgroundColor: '#27ae60', marginLeft: '10px'}}>
+              <IoAddOutline size={20} /> Novo Produto
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', backgroundColor: 'white', padding: '15px', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
@@ -273,7 +372,6 @@ export default function Produtos() {
                 </div>
               </div>
 
-              {/* ✨ NOVO MÓDULO DE CONSTRUÇÃO DE RECEITA ✨ */}
               {tipo === 'ACABADO' && !idEdicao && (
                 <div style={{ backgroundColor: '#f0f4f8', padding: '15px', borderRadius: '8px', border: '1px solid #d9e2ec', marginTop: '5px' }}>
                   <div style={{...styles.formGroupTitle, backgroundColor: 'transparent', padding: 0, marginTop: 0, marginBottom: '10px', color: '#0288D1'}}>Receita de Produção (Opcional)</div>
@@ -360,8 +458,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   label: { display: 'block', fontSize: '13px', fontWeight: 'bold', color: '#34495e', marginBottom: '5px' },
   input: { width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '15px', boxSizing: 'border-box', backgroundColor: '#fafafa' },
   btnSalvar: { backgroundColor: '#27ae60', color: 'white', padding: '15px', borderRadius: '8px', border: 'none', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
-  btnPrincipal: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' },
-  inputBusca: { width: '100%', padding: '12px 15px', borderRadius: '8px', border: '1px solid #ecf0f1', fontSize: '14px', backgroundColor: '#f9fbfb', color: '#2c3e50' },
+  btnPrincipal: { color: 'white', border: 'none', padding: '12px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' },
+  inputBusca: { width: '100%', padding: '12px 15px', borderRadius: '8px', border: '1px solid #ecf0f1', fontSize: '14px', backgroundColor: '#f9fbfb', color: '#2c3e50', boxSizing: 'border-box' },
   selectBusca: { width: '100%', padding: '12px 15px', borderRadius: '8px', border: '1px solid #ecf0f1', fontSize: '14px', backgroundColor: '#f9fbfb', color: '#2c3e50', cursor: 'pointer' },
   btnLink: { background: 'none', border: 'none', color: '#27ae60', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px', padding: 0 },
   btnCancelar: { backgroundColor: '#f1f2f6', color: '#7f8c8d', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' },
