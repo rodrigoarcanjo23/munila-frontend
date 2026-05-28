@@ -15,10 +15,13 @@ export default function Separacao() {
   const [tipoOS, setTipoOS] = useState('SAIDA'); 
   const [carrinho, setCarrinho] = useState<any[]>([]);
 
-  // ✨ NOVOS ESTADOS PARA A BUSCA INTELIGENTE (SMART SEARCH) ✨
-  const [produtoSelecionado, setProdutoSelecionado] = useState(''); // Guarda o ID oculto
-  const [buscaProduto, setBuscaProduto] = useState(''); // Guarda o texto que o utilizador digita
-  const [mostrarSugestoes, setMostrarSugestoes] = useState(false); // Controla a lista flutuante
+  // Estados para a Busca Inteligente
+  const [produtoSelecionado, setProdutoSelecionado] = useState(''); 
+  const [buscaProduto, setBuscaProduto] = useState(''); 
+  const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
+
+  // ✨ NOVO ESTADO DO FILTRO ✨
+  const [filtroStatus, setFiltroStatus] = useState('Pendente'); 
 
   async function carregarDados() {
     setCarregando(true);
@@ -41,7 +44,6 @@ export default function Separacao() {
 
   useEffect(() => { carregarDados(); }, []);
 
-  // === LÓGICA DA BUSCA INTELIGENTE ===
   const produtosFiltrados = produtos.filter(p => 
     p.nome.toLowerCase().includes(buscaProduto.toLowerCase()) || 
     p.sku.toLowerCase().includes(buscaProduto.toLowerCase())
@@ -53,7 +55,6 @@ export default function Separacao() {
     setMostrarSugestoes(false);
   }
 
-  // === FUNÇÕES DA NOVA ORDEM ===
   function adicionarAoCarrinho() {
     if (!produtoSelecionado || Number(quantidadeDesejada) <= 0) return toast.warn("Selecione um produto válido da lista e uma quantidade.");
     
@@ -69,7 +70,6 @@ export default function Separacao() {
       setCarrinho([...carrinho, { produtoId: prodRef.id, nome: prodRef.nome, sku: prodRef.sku, quantidade: Number(quantidadeDesejada) }]);
     }
 
-    // Limpa a barra de pesquisa para o próximo item
     setProdutoSelecionado('');
     setBuscaProduto('');
     setQuantidadeDesejada('1');
@@ -100,7 +100,6 @@ export default function Separacao() {
     }
   }
 
-  // === FUNÇÕES DE GESTÃO DA ORDEM ===
   async function excluirOrdem(id: string) {
     if (!window.confirm("Atenção: Deseja realmente cancelar e excluir esta Ordem de Serviço?")) return;
 
@@ -146,10 +145,13 @@ export default function Separacao() {
             .header { text-align: center; border-bottom: 2px dashed black; padding-bottom: 10px; margin-bottom: 10px; }
             .title { font-size: 18px; font-weight: bold; margin: 0; }
             .subtitle { font-size: 12px; margin: 5px 0 0 0; }
-            .item { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
-            .box { width: 15px; height: 15px; border: 2px solid black; display: inline-block; margin-right: 8px; vertical-align: middle; }
-            .item-nome { font-weight: bold; font-size: 13px; flex: 1; }
-            .item-qtd { font-weight: bold; font-size: 16px; margin-left: 10px; }
+            .item { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; border-bottom: 1px solid #ddd; padding-bottom: 8px; }
+            .box { width: 15px; height: 15px; border: 2px solid black; display: inline-block; margin-right: 8px; vertical-align: middle; margin-top: 2px; }
+            .item-detalhes { flex: 1; display: flex; flex-direction: column; }
+            .item-nome { font-weight: bold; font-size: 14px; margin-bottom: 3px; }
+            .item-meta { font-size: 11px; font-weight: normal; color: #333; }
+            .item-local { font-size: 12px; font-weight: bold; margin-top: 3px; border: 1px dashed black; padding: 2px 4px; display: inline-block; width: fit-content; }
+            .item-qtd { font-weight: bold; font-size: 18px; margin-left: 10px; }
             .barcode { text-align: center; margin-top: 20px; font-size: 24px; letter-spacing: 2px; border: 1px solid black; padding: 10px; }
           </style>
         </head>
@@ -165,9 +167,10 @@ export default function Separacao() {
               <div class="item">
                 <div style="display: flex; align-items: flex-start; flex: 1;">
                   <span class="box"></span>
-                  <div class="item-nome">
-                    ${item.produto.nome}<br/>
-                    <span style="font-size: 10px; font-weight: normal;">SKU: ${item.produto.sku}</span>
+                  <div class="item-detalhes">
+                    <span class="item-nome">${item.produto.nome}</span>
+                    <span class="item-meta">SKU: ${item.produto.sku}</span>
+                    <span class="item-local">LOCAL: ${item.produto.enderecoLocalizacao || 'Estoque Principal'}</span>
                   </div>
                 </div>
                 <div class="item-qtd">${item.quantidade} un</div>
@@ -190,21 +193,48 @@ export default function Separacao() {
     janela.document.close();
   }
 
+  // ✨ LÓGICA DE FILTRAGEM DAS ORDENS ✨
+  const ordensFiltradas = ordens.filter(ordem => 
+    filtroStatus === 'Todos' || ordem.status === filtroStatus
+  );
+
   if (carregando) return <div>A carregar módulo WMS...</div>;
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <h1 style={{ color: '#2c3e50', margin: 0 }}>Gestão de Ordens e Retiradas</h1>
         <button onClick={() => setModalNovaOrdem(true)} style={styles.btnPrincipal}>
           <IoAddOutline size={20} /> Nova Ordem
         </button>
       </div>
 
+      {/* ✨ MENU DE ABAS (TABS) ✨ */}
+      <div style={styles.tabsContainer}>
+        {['Todos', 'Pendente', 'Em Separação', 'Concluída'].map((status) => {
+          const isActive = filtroStatus === status;
+          const corAba = status === 'Pendente' ? '#f39c12' : status === 'Em Separação' ? '#3498db' : status === 'Concluída' ? '#27ae60' : '#8e44ad';
+          
+          return (
+            <button
+              key={status}
+              onClick={() => setFiltroStatus(status)}
+              style={{
+                ...styles.tabButton,
+                color: isActive ? corAba : '#95a5a6',
+                borderBottomColor: isActive ? corAba : 'transparent'
+              }}
+            >
+              {status === 'Todos' ? 'Todas' : status === 'Pendente' ? 'Pendentes' : status === 'Em Separação' ? 'Em Execução' : 'Concluídas'}
+            </button>
+          );
+        })}
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
-        {ordens.length === 0 && <p style={{ color: '#7f8c8d' }}>Nenhuma ordem de serviço encontrada.</p>}
+        {ordensFiltradas.length === 0 && <p style={{ color: '#7f8c8d' }}>Nenhuma ordem de serviço encontrada nesta categoria.</p>}
         
-        {ordens.map((ordem) => {
+        {ordensFiltradas.map((ordem) => {
           const corTipo = ordem.tipo === 'ENTRADA' ? { bg: '#eafaf1', text: '#27ae60' } 
                         : ordem.tipo === 'SAIDA' ? { bg: '#fdedec', text: '#c0392b' } 
                         : { bg: '#ebf5fb', text: '#2980b9' };
@@ -268,7 +298,7 @@ export default function Separacao() {
 
       {modalNovaOrdem && (
         <div style={styles.modalOverlay}>
-          <div style={{...styles.modalContent, maxWidth: '650px', overflow: 'visible'}}> {/* overflow visible para a lista flutuante não cortar */}
+          <div style={{...styles.modalContent, maxWidth: '650px', overflow: 'visible'}}>
             <h2 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>Gerar Nova Ordem de Serviço</h2>
             <p style={{ color: '#7f8c8d', marginBottom: '20px' }}>Monte a lista de produtos e escolha a direção da movimentação.</p>
 
@@ -291,7 +321,6 @@ export default function Separacao() {
               </div>
             </div>
 
-            {/* ✨ BARRA DE PESQUISA INTELIGENTE ✨ */}
             <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', alignItems: 'flex-end' }}>
               <div style={{ flex: 3, position: 'relative' }}>
                 <label style={styles.label}>Produto (Nome ou SKU)</label>
@@ -304,15 +333,14 @@ export default function Separacao() {
                     value={buscaProduto}
                     onChange={(e) => {
                       setBuscaProduto(e.target.value);
-                      setProdutoSelecionado(''); // Se alterar o texto, desmarca a seleção anterior
+                      setProdutoSelecionado('');
                       setMostrarSugestoes(true);
                     }}
                     onFocus={() => setMostrarSugestoes(true)}
-                    onBlur={() => setTimeout(() => setMostrarSugestoes(false), 200)} // Delay para permitir o clique na lista
+                    onBlur={() => setTimeout(() => setMostrarSugestoes(false), 200)}
                   />
                 </div>
 
-                {/* ✨ LISTA FLUTUANTE (DROPDOWN) ✨ */}
                 {mostrarSugestoes && buscaProduto.length > 0 && (
                   <div style={styles.listaFlutuante}>
                     {produtosFiltrados.length === 0 ? (
@@ -322,7 +350,7 @@ export default function Separacao() {
                         <div 
                           key={p.id} 
                           style={styles.itemFlutuante}
-                          onMouseDown={() => selecionarProdutoSugestao(p)} // onMouseDown executa antes do onBlur do input
+                          onMouseDown={() => selecionarProdutoSugestao(p)}
                         >
                           <span style={{ fontWeight: 'bold', color: '#2c3e50', display: 'block' }}>{p.nome}</span>
                           <span style={{ color: '#0288D1', fontSize: '11px', fontWeight: 'bold' }}>SKU: {p.sku}</span>
@@ -375,7 +403,9 @@ const styles: { [key: string]: React.CSSProperties } = {
   label: { display: 'block', fontSize: '13px', fontWeight: 'bold', color: '#34495e', marginBottom: '5px' },
   input: { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '15px', boxSizing: 'border-box', backgroundColor: '#fafafa', outline: 'none' },
   btnCancelar: { backgroundColor: '#f1f2f6', color: '#7f8c8d', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' },
-  // Estilos da nova Lista Flutuante
   listaFlutuante: { position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: 'white', border: '1px solid #ddd', borderRadius: '8px', marginTop: '5px', maxHeight: '220px', overflowY: 'auto', zIndex: 100, boxShadow: '0 10px 25px rgba(0,0,0,0.15)' },
-  itemFlutuante: { padding: '12px 15px', borderBottom: '1px solid #f4f7f6', cursor: 'pointer', transition: 'background-color 0.2s', display: 'flex', flexDirection: 'column', gap: '2px' }
+  itemFlutuante: { padding: '12px 15px', borderBottom: '1px solid #f4f7f6', cursor: 'pointer', transition: 'background-color 0.2s', display: 'flex', flexDirection: 'column', gap: '2px' },
+  // ✨ ESTILOS DAS ABAS ✨
+  tabsContainer: { display: 'flex', gap: '20px', marginBottom: '25px', borderBottom: '2px solid #ecf0f1', paddingBottom: '0px' },
+  tabButton: { background: 'none', border: 'none', borderBottom: '3px solid transparent', padding: '10px 5px', fontSize: '15px', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s', marginBottom: '-2px' }
 };
