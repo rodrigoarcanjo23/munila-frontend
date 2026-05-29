@@ -9,6 +9,13 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+// ✨ FUNÇÃO QUE LÊ A TAG ESCONDIDA NA DESCRIÇÃO PARA CADA PRODUTO ✨
+function extrairEstoqueMinimo(descricao: string | null | undefined): number {
+  if (!descricao) return 10; // Valor padrão caso não tenha descrição
+  const match = descricao.match(/\[MIN:(\d+)\]/);
+  return match && match[1] ? parseInt(match[1], 10) : 10;
+}
+
 export default function Estoque() {
   const location = useLocation();
   const [inventario, setInventario] = useState<any[]>([]);
@@ -61,7 +68,7 @@ export default function Estoque() {
   const inventarioFiltrado = useMemo(() => {
     const filtrado = inventario.filter(i => {
       if (mostrarApenasCritico) {
-        const minimo = i.produto?.estoqueMinimo || 10; 
+        const minimo = extrairEstoqueMinimo(i.produto?.descricao); 
         if (i.quantidade > minimo) return false; 
       }
       const termo = termoBusca.toLowerCase();
@@ -98,8 +105,9 @@ export default function Estoque() {
       'Produto': item.produto?.nome || 'Desconhecido',
       'SKU': item.produto?.sku || '-',
       'Qtd. Atual': item.quantidade,
+      // ✨ ADICIONADO AO EXCEL ✨
+      'Estoque Mínimo': extrairEstoqueMinimo(item.produto?.descricao),
       'Status': item.status,
-      // ✨ CORREÇÃO DO ENDEREÇO NO EXCEL ✨
       'Endereço (Zona)': item.produto?.enderecoLocalizacao || '-'
     }));
 
@@ -127,7 +135,8 @@ export default function Estoque() {
       doc.setTextColor(100);
       doc.text(`Gerado em: ${new Date().toLocaleString()}`, 14, 28);
 
-      const tableColumn = ["Produto", "SKU", "Qtd", "Status", "Local"];
+      // ✨ ADICIONADO AO PDF ✨
+      const tableColumn = ["Produto", "SKU", "Qtd Atual", "Qtd Mín.", "Status", "Local"];
       const tableRows: any[] = [];
 
       inventarioFiltrado.forEach(item => {
@@ -135,8 +144,8 @@ export default function Estoque() {
           item.produto?.nome || 'Desconhecido',
           item.produto?.sku || '-',
           `${item.quantidade} un`,
+          `${extrairEstoqueMinimo(item.produto?.descricao)} un`, // ✨ Coluna Nova
           item.status,
-          // ✨ CORREÇÃO DO ENDEREÇO NO PDF ✨
           item.produto?.enderecoLocalizacao || '-'
         ];
         tableRows.push(rowData);
@@ -280,15 +289,18 @@ export default function Estoque() {
               <th style={styles.th}>Produto</th>
               <th style={styles.th}>SKU</th>
               <th style={styles.th}>Qtd. Atual</th>
+              {/* ✨ NOVO CABEÇALHO ADICIONADO AQUI ✨ */}
+              <th style={styles.th}>Qtd. Mínima</th>
               <th style={styles.th}>Status</th>
               <th style={styles.th}>Endereço (Zona)</th>
               <th style={{...styles.th, textAlign: 'center'}}>Ações</th>
             </tr>
           </thead>
           <tbody>
-            {inventarioFiltrado.length === 0 && <tr><td colSpan={6} style={{textAlign: 'center', padding: '20px', color: '#7f8c8d'}}>Nenhum item encontrado no armazém.</td></tr>}
+            {/* Ajustado o colSpan para 7 colunas */}
+            {inventarioFiltrado.length === 0 && <tr><td colSpan={7} style={{textAlign: 'center', padding: '20px', color: '#7f8c8d'}}>Nenhum item encontrado no armazém.</td></tr>}
             {inventarioFiltrado.map((item) => {
-              const estoqueMin = item.produto?.estoqueMinimo || 10;
+              const estoqueMin = extrairEstoqueMinimo(item.produto?.descricao);
               const isCritico = item.quantidade <= estoqueMin;
 
               return (
@@ -300,12 +312,17 @@ export default function Estoque() {
                       {item.quantidade} un
                     </strong>
                   </td>
+                  {/* ✨ NOVA COLUNA NA TABELA EXIBINDO O ESTOQUE MÍNIMO ✨ */}
+                  <td style={styles.td}>
+                    <span style={{ color: '#7f8c8d', fontSize: '13px', fontWeight: 'bold' }}>
+                      {estoqueMin} un
+                    </span>
+                  </td>
                   <td style={styles.td}>
                     <span style={item.status === 'Disponível' ? styles.badgeNacional : styles.badgeImportado}>
                       {item.status}
                     </span>
                   </td>
-                  {/* ✨ CORREÇÃO DO ENDEREÇO NA TABELA ✨ */}
                   <td style={styles.td}>{item.produto?.enderecoLocalizacao || '-'}</td>
                   <td style={{...styles.td, textAlign: 'center'}}>
                     <button onClick={() => abrirModalMovimento(item)} style={styles.btnAcaoEditar}>
@@ -390,7 +407,7 @@ export default function Estoque() {
               <div style={{ backgroundColor: '#f4ecf7', padding: '10px', borderRadius: '50%' }}>
                 <IoConstructOutline size={24} color="#8e44ad" />
               </div>
-              <h2 style={{ margin: 0, color: '#2c3e50' }}>Ordem de Produção Interna</h2>
+              <h2 style={{ margin: '0', color: '#2c3e50' }}>Ordem de Produção Interna</h2>
             </div>
             
             <p style={{ color: '#7f8c8d', marginBottom: '20px', fontSize: '14px', lineHeight: '1.5' }}>
