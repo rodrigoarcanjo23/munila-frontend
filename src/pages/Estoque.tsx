@@ -105,7 +105,6 @@ export default function Estoque() {
       'Produto': item.produto?.nome || 'Desconhecido',
       'SKU': item.produto?.sku || '-',
       'Qtd. Atual': item.quantidade,
-      // ✨ ADICIONADO AO EXCEL ✨
       'Estoque Mínimo': extrairEstoqueMinimo(item.produto?.descricao),
       'Status': item.status,
       'Endereço (Zona)': item.produto?.enderecoLocalizacao || '-'
@@ -135,7 +134,6 @@ export default function Estoque() {
       doc.setTextColor(100);
       doc.text(`Gerado em: ${new Date().toLocaleString()}`, 14, 28);
 
-      // ✨ ADICIONADO AO PDF ✨
       const tableColumn = ["Produto", "SKU", "Qtd Atual", "Qtd Mín.", "Status", "Local"];
       const tableRows: any[] = [];
 
@@ -144,7 +142,7 @@ export default function Estoque() {
           item.produto?.nome || 'Desconhecido',
           item.produto?.sku || '-',
           `${item.quantidade} un`,
-          `${extrairEstoqueMinimo(item.produto?.descricao)} un`, // ✨ Coluna Nova
+          `${extrairEstoqueMinimo(item.produto?.descricao)} un`, 
           item.status,
           item.produto?.enderecoLocalizacao || '-'
         ];
@@ -157,7 +155,38 @@ export default function Estoque() {
         startY: 35,
         styles: { fontSize: 9, cellPadding: 3 },
         headStyles: { fillColor: [44, 62, 80], textColor: 255, fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [245, 247, 250] }
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+        // ✨ LÓGICA DE CORES NO PDF ADICIONADA AQUI ✨
+        didParseCell: (data) => {
+          if (data.section === 'body') {
+            // Coluna "Qtd Atual" (Índice 2)
+            if (data.column.index === 2) {
+              const qtdAtual = parseInt(data.row.raw[2] as string, 10);
+              const qtdMin = parseInt(data.row.raw[3] as string, 10);
+              
+              if (qtdAtual <= qtdMin) {
+                // Vermelho WMS (#e74c3c)
+                data.cell.styles.textColor = [231, 76, 60]; 
+                data.cell.styles.fontStyle = 'bold';
+              } else {
+                // Verde WMS (#27ae60)
+                data.cell.styles.textColor = [39, 174, 96]; 
+                data.cell.styles.fontStyle = 'bold';
+              }
+            }
+
+            // Coluna "Status" (Índice 4)
+            if (data.column.index === 4) {
+              if (data.cell.raw === 'Disponível') {
+                data.cell.styles.textColor = [39, 174, 96]; // Verde
+                data.cell.styles.fontStyle = 'bold';
+              } else {
+                data.cell.styles.textColor = [243, 156, 18]; // Laranja
+                data.cell.styles.fontStyle = 'bold';
+              }
+            }
+          }
+        }
       });
 
       const dataHj = new Date().toISOString().split('T')[0];
@@ -289,7 +318,6 @@ export default function Estoque() {
               <th style={styles.th}>Produto</th>
               <th style={styles.th}>SKU</th>
               <th style={styles.th}>Qtd. Atual</th>
-              {/* ✨ NOVO CABEÇALHO ADICIONADO AQUI ✨ */}
               <th style={styles.th}>Qtd. Mínima</th>
               <th style={styles.th}>Status</th>
               <th style={styles.th}>Endereço (Zona)</th>
@@ -297,7 +325,6 @@ export default function Estoque() {
             </tr>
           </thead>
           <tbody>
-            {/* Ajustado o colSpan para 7 colunas */}
             {inventarioFiltrado.length === 0 && <tr><td colSpan={7} style={{textAlign: 'center', padding: '20px', color: '#7f8c8d'}}>Nenhum item encontrado no armazém.</td></tr>}
             {inventarioFiltrado.map((item) => {
               const estoqueMin = extrairEstoqueMinimo(item.produto?.descricao);
@@ -312,7 +339,6 @@ export default function Estoque() {
                       {item.quantidade} un
                     </strong>
                   </td>
-                  {/* ✨ NOVA COLUNA NA TABELA EXIBINDO O ESTOQUE MÍNIMO ✨ */}
                   <td style={styles.td}>
                     <span style={{ color: '#7f8c8d', fontSize: '13px', fontWeight: 'bold' }}>
                       {estoqueMin} un
