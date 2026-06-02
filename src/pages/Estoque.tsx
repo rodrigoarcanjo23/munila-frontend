@@ -101,19 +101,38 @@ export default function Estoque() {
       return toast.warn("Não há dados para exportar.");
     }
 
-    const dadosPlanilha = inventarioFiltrado.map((item) => ({
-      'Produto': item.produto?.nome || 'Desconhecido',
-      'SKU': item.produto?.sku || '-',
-      'Qtd. Atual': item.quantidade,
-      'Estoque Mínimo': extrairEstoqueMinimo(item.produto?.descricao),
-      'Status': item.status,
-      'Endereço (Zona)': item.produto?.enderecoLocalizacao || '-'
-    }));
+    const dadosPlanilha = inventarioFiltrado.map((item) => {
+      const estoqueMin = extrairEstoqueMinimo(item.produto?.descricao);
+      const isCritico = item.quantidade <= estoqueMin;
+
+      return {
+        'Produto': item.produto?.nome || 'Desconhecido',
+        'SKU': item.produto?.sku || '-',
+        'Qtd. Atual': item.quantidade, // Mantemos como número puro para o Excel poder somar
+        'Qtd. Mínima': estoqueMin,
+        // ✨ NOVA COLUNA DE ALERTA VISUAL NO EXCEL ✨
+        'Alerta Visual': isCritico ? '🔴 ESTOQUE CRÍTICO' : '🟢 OK',
+        'Status': item.status,
+        'Endereço (Zona)': item.produto?.enderecoLocalizacao || '-'
+      };
+    });
 
     const worksheet = XLSX.utils.json_to_sheet(dadosPlanilha);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Armazém");
     
+    // Auto-ajustar a largura das colunas do Excel para ficar bonito
+    const columnWidths = [
+      { wch: 50 }, // Produto
+      { wch: 15 }, // SKU
+      { wch: 12 }, // Qtd Atual
+      { wch: 12 }, // Qtd Mínima
+      { wch: 20 }, // Alerta Visual
+      { wch: 15 }, // Status
+      { wch: 20 }, // Endereço
+    ];
+    worksheet['!cols'] = columnWidths;
+
     const dataHj = new Date().toISOString().split('T')[0];
     XLSX.writeFile(workbook, `Inventario_ViaPro_${dataHj}.xlsx`);
     toast.success("Excel exportado com sucesso!");
@@ -156,7 +175,6 @@ export default function Estoque() {
         styles: { fontSize: 9, cellPadding: 3 },
         headStyles: { fillColor: [44, 62, 80], textColor: 255, fontStyle: 'bold' },
         alternateRowStyles: { fillColor: [245, 247, 250] },
-        // ✨ LÓGICA DE CORES NO PDF ADICIONADA AQUI ✨
         didParseCell: (data) => {
           if (data.section === 'body') {
             // Coluna "Qtd Atual" (Índice 2)
