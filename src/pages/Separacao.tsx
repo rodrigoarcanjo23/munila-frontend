@@ -20,7 +20,7 @@ export default function Separacao() {
   const [buscaProduto, setBuscaProduto] = useState(''); 
   const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
 
-  // ✨ NOVO ESTADO DO FILTRO ✨
+  // Filtro de Abas
   const [filtroStatus, setFiltroStatus] = useState('Pendente'); 
 
   async function carregarDados() {
@@ -130,6 +130,7 @@ export default function Separacao() {
     }
   }
 
+  // ✨ FUNÇÃO ZEBRA FORMATADA PARA IMPRESSORA TÉRMICA 80mm ✨
   function imprimirZebra(ordem: any) {
     const janela = window.open('', '', 'width=400,height=600');
     if (!janela) return toast.error("Pop-up bloqueado pelo navegador.");
@@ -141,18 +142,36 @@ export default function Separacao() {
         <head>
           <title>Impressão Zebra - ${ordem.codigo}</title>
           <style>
-            body { font-family: 'Courier New', Courier, monospace; font-size: 14px; margin: 0; padding: 10px; color: black; background: white; }
-            .header { text-align: center; border-bottom: 2px dashed black; padding-bottom: 10px; margin-bottom: 10px; }
-            .title { font-size: 18px; font-weight: bold; margin: 0; }
-            .subtitle { font-size: 12px; margin: 5px 0 0 0; }
-            .item { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; border-bottom: 1px solid #ddd; padding-bottom: 8px; }
-            .box { width: 15px; height: 15px; border: 2px solid black; display: inline-block; margin-right: 8px; vertical-align: middle; margin-top: 2px; }
-            .item-detalhes { flex: 1; display: flex; flex-direction: column; }
-            .item-nome { font-weight: bold; font-size: 14px; margin-bottom: 3px; }
-            .item-meta { font-size: 11px; font-weight: normal; color: #333; }
-            .item-local { font-size: 12px; font-weight: bold; margin-top: 3px; border: 1px dashed black; padding: 2px 4px; display: inline-block; width: fit-content; }
-            .item-qtd { font-weight: bold; font-size: 18px; margin-left: 10px; }
-            .barcode { text-align: center; margin-top: 20px; font-size: 24px; letter-spacing: 2px; border: 1px solid black; padding: 10px; }
+            /* Reset básico e configuração de página para impressora térmica */
+            @page {
+              margin: 0;
+            }
+            body { 
+              font-family: 'Courier New', Courier, monospace; 
+              font-size: 12px; 
+              width: 75mm; /* Largura padrão imprimível na bobina de 80mm */
+              margin: 0 auto; 
+              padding: 5mm 2mm; 
+              color: black; 
+              background: white; 
+            }
+            .header { text-align: center; border-bottom: 2px dashed black; padding-bottom: 8px; margin-bottom: 10px; }
+            .title { font-size: 16px; font-weight: bold; margin: 0; }
+            .subtitle { font-size: 11px; margin: 5px 0 0 0; }
+            
+            /* Ajuste dos itens para caber na largura de 75mm */
+            .item { margin-bottom: 10px; border-bottom: 1px dashed #ccc; padding-bottom: 8px; page-break-inside: avoid; }
+            .item-linha1 { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 3px; }
+            .box { width: 14px; height: 14px; border: 2px solid black; display: inline-block; margin-right: 5px; flex-shrink: 0; margin-top: 1px; }
+            .item-nome { font-weight: bold; font-size: 12px; flex: 1; line-height: 1.1; word-wrap: break-word; }
+            .item-qtd { font-weight: bold; font-size: 15px; margin-left: 8px; white-space: nowrap; }
+            
+            .item-linha2 { display: flex; flex-direction: column; padding-left: 23px; }
+            .item-meta { font-size: 10px; color: #333; margin-bottom: 3px; }
+            .item-local { font-size: 11px; font-weight: bold; border: 1px dashed black; padding: 2px 4px; display: inline-block; width: fit-content; }
+            
+            .barcode { text-align: center; margin-top: 15px; font-size: 16px; letter-spacing: 2px; border: 1px solid black; padding: 5px; page-break-inside: avoid; }
+            .footer { text-align: center; font-size: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed black; }
           </style>
         </head>
         <body>
@@ -162,18 +181,18 @@ export default function Separacao() {
             <p class="subtitle">Solicitante: ${ordem.solicitante?.nome || 'Fábrica'}</p>
           </div>
           
-          <div style="margin-bottom: 20px;">
+          <div style="margin-bottom: 15px;">
             ${ordem.itens.map((item: any) => `
               <div class="item">
-                <div style="display: flex; align-items: flex-start; flex: 1;">
+                <div class="item-linha1">
                   <span class="box"></span>
-                  <div class="item-detalhes">
-                    <span class="item-nome">${item.produto.nome}</span>
-                    <span class="item-meta">SKU: ${item.produto.sku}</span>
-                    <span class="item-local">LOCAL: ${item.produto.enderecoLocalizacao || 'Estoque Principal'}</span>
-                  </div>
+                  <span class="item-nome">${item.produto.nome}</span>
+                  <span class="item-qtd">${item.quantidade} un</span>
                 </div>
-                <div class="item-qtd">${item.quantidade} un</div>
+                <div class="item-linha2">
+                  <span class="item-meta">SKU: ${item.produto.sku}</span>
+                  <span class="item-local">LOCAL: ${item.produto.enderecoLocalizacao || 'Estoque Principal'}</span>
+                </div>
               </div>
             `).join('')}
           </div>
@@ -181,7 +200,7 @@ export default function Separacao() {
           <div class="barcode">
             *${ordem.codigo}*
           </div>
-          <p style="text-align: center; font-size: 10px; margin-top: 5px;">ViaPro WMS</p>
+          <div class="footer">ViaPro WMS</div>
           
           <script>
             window.onload = function() { window.print(); window.close(); }
@@ -193,7 +212,6 @@ export default function Separacao() {
     janela.document.close();
   }
 
-  // ✨ LÓGICA DE FILTRAGEM DAS ORDENS ✨
   const ordensFiltradas = ordens.filter(ordem => 
     filtroStatus === 'Todos' || ordem.status === filtroStatus
   );
@@ -209,7 +227,6 @@ export default function Separacao() {
         </button>
       </div>
 
-      {/* ✨ MENU DE ABAS (TABS) ✨ */}
       <div style={styles.tabsContainer}>
         {['Todos', 'Pendente', 'Em Separação', 'Concluída'].map((status) => {
           const isActive = filtroStatus === status;
@@ -405,7 +422,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   btnCancelar: { backgroundColor: '#f1f2f6', color: '#7f8c8d', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' },
   listaFlutuante: { position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: 'white', border: '1px solid #ddd', borderRadius: '8px', marginTop: '5px', maxHeight: '220px', overflowY: 'auto', zIndex: 100, boxShadow: '0 10px 25px rgba(0,0,0,0.15)' },
   itemFlutuante: { padding: '12px 15px', borderBottom: '1px solid #f4f7f6', cursor: 'pointer', transition: 'background-color 0.2s', display: 'flex', flexDirection: 'column', gap: '2px' },
-  // ✨ ESTILOS DAS ABAS ✨
   tabsContainer: { display: 'flex', gap: '20px', marginBottom: '25px', borderBottom: '2px solid #ecf0f1', paddingBottom: '0px' },
   tabButton: { background: 'none', border: 'none', borderBottom: '3px solid transparent', padding: '10px 5px', fontSize: '15px', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s', marginBottom: '-2px' }
 };
