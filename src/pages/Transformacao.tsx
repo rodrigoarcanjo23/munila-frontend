@@ -5,6 +5,7 @@ import {
   IoSearchOutline, IoFilterOutline, IoTimeOutline, IoPersonOutline 
 } from 'react-icons/io5';
 import { toast } from 'react-toastify';
+import { api } from '../api'; // Conexão com o seu Backend
 
 interface ItemEstoque {
   id: string;
@@ -22,10 +23,12 @@ interface IngredienteReceita {
 
 interface LoteProduzido {
   id: string;
+  codigoLote: string;
   produtoNome: string;
   produtoSku: string;
   quantidade: number;
   receitaUsada: (IngredienteReceita & { totalGasto: number })[];
+  createdAt: string;
 }
 
 interface LogAuditoria {
@@ -33,13 +36,14 @@ interface LogAuditoria {
   acao: 'Criação' | 'Exclusão';
   detalhes: string;
   usuario: string;
-  dataHora: Date;
+  dataHora: string;
 }
 
 export default function Transformacao() {
   const [usuarioLogado, setUsuarioLogado] = useState<any>(null);
+  const [carregando, setCarregando] = useState(true);
 
-  // O nosso Banco de Dados Virtual Central
+  // Banco de Dados Real (conectado à API)
   const [estoque, setEstoque] = useState<ItemEstoque[]>([]);
   const [lotesProduzidos, setLotesProduzidos] = useState<LoteProduzido[]>([]);
   const [ingredientesReceita, setIngredientesReceita] = useState<IngredienteReceita[]>([]);
@@ -67,34 +71,40 @@ export default function Transformacao() {
   const [buscaEstoque, setBuscaEstoque] = useState('');
   const [filtroTipo, setFiltroTipo] = useState('');
 
-  // Buscar usuário logado
+  // 1. CARREGAR DADOS INICIAIS DO BANCO
+  async function carregarDadosBanco() {
+    try {
+      setCarregando(true);
+      const [resEstoque, resLotes, resAuditoria] = await Promise.all([
+        api.get('/transformacao/estoque'),
+        api.get('/transformacao/lotes'),
+        api.get('/transformacao/auditoria')
+      ]);
+      setEstoque(resEstoque.data);
+      setLotesProduzidos(resLotes.data);
+      setAuditoria(resAuditoria.data);
+    } catch (error) {
+      toast.error("Erro ao carregar os dados do laboratório.");
+    } finally {
+      setCarregando(false);
+    }
+  }
+
   useEffect(() => {
     const userSalvo = localStorage.getItem('@Munila:user');
     if (userSalvo) setUsuarioLogado(JSON.parse(userSalvo));
+    carregarDadosBanco();
   }, []);
 
   // Filtros Derivados para a UI
   const materiasPrimas = estoque.filter(item => item.tipo === 'INSUMO');
-  
   const estoqueFiltrado = estoque.filter(item => {
     const matchBusca = item.nome.toLowerCase().includes(buscaEstoque.toLowerCase()) || item.sku.toLowerCase().includes(buscaEstoque.toLowerCase());
     const matchTipo = filtroTipo === '' || item.tipo === filtroTipo;
     return matchBusca && matchTipo;
   });
 
-  // ==========================================
-  // FUNÇÕES DE AUDITORIA E VALIDAÇÃO
-  // ==========================================
-  function registrarAuditoria(acao: 'Criação' | 'Exclusão', detalhes: string) {
-    setAuditoria(prev => [{
-      id: Math.random().toString(36).substring(2, 9),
-      acao,
-      detalhes,
-      usuario: usuarioLogado?.nome || 'Usuário Desconhecido',
-      dataHora: new Date()
-    }, ...prev]);
-  }
-
+  // Validação de Duplicidade no Frontend antes de enviar
   function verificaDuplicidade(nome: string, sku: string, idIgnorado?: string): boolean {
     const nomeNormalizado = nome.toLowerCase().trim();
     const skuNormalizado = sku.toLowerCase().trim();
@@ -105,23 +115,23 @@ export default function Transformacao() {
   }
 
   // ==========================================
-  // CRUD DE MATÉRIA-PRIMA
+  // CRUD DE MATÉRIA-PRIMA (COM API)
   // ==========================================
-  function adicionarMateriaPrima(e: React.FormEvent) {
+  async function adicionarMateriaPrima(e: React.FormEvent) {
     e.preventDefault();
     if (!novaMpNome || !novaMpSku || Number(novaMpQtd) <= 0) return toast.warn("Preencha Nome, SKU e Quantidade válida.");
     if (verificaDuplicidade(novaMpNome, novaMpSku)) return toast.error("Este Nome ou SKU já está cadastrado no laboratório.");
 
-    setEstoque([...estoque, { 
-      id: Math.random().toString(36).substring(2, 9), 
-      tipo: 'INSUMO', 
-      sku: novaMpSku, 
-      nome: novaMpNome, 
-      quantidade: Number(novaMpQtd) 
-    }]);
-    
-    setNovaMpNome(''); setNovaMpSku(''); setNovaMpQtd('');
-    toast.success("Insumo adicionado ao Estoque Virtual!");
+    try {
+      await api.post('/transformacao/estoque', {
+        tipo: 'INSUMO', sku: novaMpSku, nome: novaMpNome, quantidade: Number(novaMpQtd)
+      });
+      toast.success("Insumo cadastrado e salvo no banco!");
+      setNovaMpNome(''); setNovaMpSku(''); setNovaMpQtd('');
+      carregarDadosBanco(); // Recarrega para pegar o ID real do banco
+    } catch (error) {
+      toast.error("Erro ao salvar insumo.");
+    }
   }
 
   function iniciarEdicao(item: ItemEstoque) {
@@ -131,23 +141,38 @@ export default function Transformacao() {
     setEditQtd(item.quantidade.toString());
   }
 
-  function salvarEdicao(id: string) {
+  async function salvarEdicao(id: string) {
     if (!editNome || !editSku || Number(editQtd) < 0) return toast.warn("Dados inválidos para edição.");
     if (verificaDuplicidade(editNome, editSku, id)) return toast.error("Este Nome ou SKU já está em uso por outro item.");
 
-    setEstoque(estoque.map(item => item.id === id ? { ...item, nome: editNome, sku: editSku, quantidade: Number(editQtd) } : item));
-    setEditandoId(null);
-    toast.success("Item atualizado!");
+    try {
+      await api.put(`/transformacao/estoque/${id}`, {
+        nome: editNome, sku: editSku, quantidade: Number(editQtd)
+      });
+      toast.success("Insumo atualizado no banco!");
+      setEditandoId(null);
+      carregarDadosBanco();
+    } catch (error) {
+      toast.error("Erro ao atualizar item.");
+    }
   }
 
-  function removerItem(id: string) {
+  async function removerItem(id: string) {
     if(ingredientesReceita.some(ing => ing.idInsumo === id)) return toast.error("Este insumo está em uso na receita atual!");
-    setEstoque(estoque.filter(item => item.id !== id));
-    toast.info("Item removido do laboratório.");
+    
+    if(window.confirm("Deseja realmente apagar este item permanentemente?")) {
+      try {
+        await api.delete(`/transformacao/estoque/${id}`);
+        toast.info("Item removido do banco de dados.");
+        carregarDadosBanco();
+      } catch (error) {
+        toast.error("Erro ao remover item.");
+      }
+    }
   }
 
   // ==========================================
-  // MOTOR DE RECEITA (BOM) E TRANSFORMAÇÃO
+  // MONTAR RECEITA VIRTUAL (NÃO PRECISA DE API AINDA)
   // ==========================================
   function adicionarInsumoNaReceita() {
     if (!mpSelecionadaId || Number(qtdMpGastaPorUnidade) <= 0) return toast.warn("Selecione um insumo e a quantidade gasta.");
@@ -169,7 +194,10 @@ export default function Transformacao() {
     setIngredientesReceita(ingredientesReceita.filter(ing => ing.idInsumo !== idInsumo));
   }
 
-  function executarTransformacao(e: React.FormEvent) {
+  // ==========================================
+  // MOTOR DE TRANSFORMAÇÃO (SALVANDO NO BANCO)
+  // ==========================================
+  async function executarTransformacao(e: React.FormEvent) {
     e.preventDefault();
     if (ingredientesReceita.length === 0) return toast.warn("Sua receita está vazia! Adicione insumos primeiro.");
     if (!nomeProdutoFinal || !skuProdutoFinal || Number(qtdLotesProduzir) <= 0) return toast.warn("Preencha o Nome, SKU e a quantidade a fabricar.");
@@ -182,80 +210,63 @@ export default function Transformacao() {
     if (itemExistente) {
       if (itemExistente.tipo === 'INSUMO') return toast.error("Este Nome/SKU já pertence a um Insumo.");
       if (itemExistente.nome.toLowerCase().trim() !== nomeNormalizado || itemExistente.sku.toLowerCase().trim() !== skuNormalizado) {
-        return toast.error("O Nome e o SKU informados não combinam com o registro existente deste produto.");
+        return toast.error("O Nome e o SKU não combinam com o registro existente deste produto.");
       }
     }
 
+    // Pre-validação de saldo
     for (const ing of ingredientesReceita) {
       const mp = estoque.find(m => m.id === ing.idInsumo);
       const necessidade = ing.qtdPorUnidade * totalAProduzir;
       if (!mp || mp.quantidade < necessidade) {
-        return toast.error(`Saldo insuficiente de ${ing.nomeInsumo}! Necessário: ${necessidade} un. Disponível: ${mp?.quantidade || 0} un.`);
+        return toast.error(`Saldo insuficiente de ${ing.nomeInsumo}! Necessário: ${necessidade} un.`);
       }
     }
 
-    let novoEstoque = [...estoque];
-    const receitaComGastos = ingredientesReceita.map(ing => {
-      const totalGasto = ing.qtdPorUnidade * totalAProduzir;
-      const mpIndex = novoEstoque.findIndex(m => m.id === ing.idInsumo);
-      novoEstoque[mpIndex].quantidade -= totalGasto;
-      return { ...ing, totalGasto };
-    });
+    const receitaComGastos = ingredientesReceita.map(ing => ({
+      ...ing,
+      totalGasto: ing.qtdPorUnidade * totalAProduzir
+    }));
 
-    if (itemExistente) {
-      const pIndex = novoEstoque.findIndex(i => i.id === itemExistente.id);
-      novoEstoque[pIndex].quantidade += totalAProduzir;
-    } else {
-      novoEstoque.push({
-        id: Math.random().toString(36).substring(2, 9),
-        tipo: 'ACABADO',
-        nome: nomeProdutoFinal,
-        sku: skuProdutoFinal,
-        quantidade: totalAProduzir
+    try {
+      const toastId = toast.loading("Processando transformação no banco de dados...");
+      await api.post('/transformacao/lotes', {
+        produtoNome: nomeProdutoFinal,
+        produtoSku: skuProdutoFinal,
+        quantidade: totalAProduzir,
+        receitaUsada: receitaComGastos,
+        usuario: usuarioLogado?.nome
       });
+      
+      toast.update(toastId, { render: `Sucesso! ${totalAProduzir}x ${nomeProdutoFinal} fabricados.`, type: "success", isLoading: false, autoClose: 3000 });
+      setIngredientesReceita([]); setNomeProdutoFinal(''); setSkuProdutoFinal(''); setQtdLotesProduzir('1');
+      carregarDadosBanco(); // Recarrega para ver a auditoria, novo lote e saldos atualizados
+    } catch (error) {
+      toast.dismiss();
+      toast.error("Erro interno ao processar a transformação.");
     }
-
-    setEstoque(novoEstoque);
-    setLotesProduzidos([{
-      id: Math.random().toString(36).substring(2, 9),
-      produtoNome: nomeProdutoFinal,
-      produtoSku: skuProdutoFinal,
-      quantidade: totalAProduzir,
-      receitaUsada: receitaComGastos
-    }, ...lotesProduzidos]);
-
-    // ✨ REGISTA A AUDITORIA ✨
-    registrarAuditoria('Criação', `Fabricou ${totalAProduzir} un. de [${skuProdutoFinal}] ${nomeProdutoFinal}.`);
-
-    setIngredientesReceita([]); setNomeProdutoFinal(''); setSkuProdutoFinal(''); setQtdLotesProduzir('1');
-    toast.success(`Sucesso! ${totalAProduzir}x ${nomeProdutoFinal} fabricados.`);
   }
 
   // ==========================================
-  // ESTORNO (DESFAZER)
+  // ESTORNO DE LOTE (COM API)
   // ==========================================
-  function desfazerTransformacao(idLote: string) {
-    const lote = lotesProduzidos.find(l => l.id === idLote);
-    if (!lote) return;
-
-    let novoEstoque = [...estoque];
-    
-    lote.receitaUsada.forEach(ing => {
-      const mpIndex = novoEstoque.findIndex(m => m.id === ing.idInsumo);
-      if (mpIndex >= 0) novoEstoque[mpIndex].quantidade += ing.totalGasto;
-    });
-
-    const pIndex = novoEstoque.findIndex(p => p.nome === lote.produtoNome && p.sku === lote.produtoSku);
-    if (pIndex >= 0) novoEstoque[pIndex].quantidade -= lote.quantidade;
-
-    setEstoque(novoEstoque);
-    setLotesProduzidos(lotesProduzidos.filter(l => l.id !== idLote));
-    
-    // ✨ REGISTA A AUDITORIA ✨
-    registrarAuditoria('Exclusão', `Desfez o lote gerando estorno de ${lote.quantidade} un. de [${lote.produtoSku}] ${lote.produtoNome}.`);
-    
-    toast.info(`Produção cancelada. Estoque restaurado.`);
+  async function desfazerTransformacao(idLote: string) {
+    if(window.confirm("Deseja cancelar este lote e devolver os insumos gastos?")) {
+      try {
+        const toastId = toast.loading("Estornando lote...");
+        await api.delete(`/transformacao/lotes/${idLote}`, {
+          data: { usuario: usuarioLogado?.nome }
+        });
+        toast.update(toastId, { render: "Lote desfeito e estoque restaurado!", type: "info", isLoading: false, autoClose: 3000 });
+        carregarDadosBanco();
+      } catch (error) {
+        toast.dismiss();
+        toast.error("Erro ao tentar desfazer o lote.");
+      }
+    }
   }
+
+  if (carregando && estoque.length === 0) return <div style={{ textAlign: 'center', marginTop: '50px', color: '#7f8c8d' }}>Carregando laboratório...</div>;
 
   return (
     <div style={{ paddingBottom: '40px' }}>
@@ -265,7 +276,7 @@ export default function Transformacao() {
         </div>
         <div>
           <h1 style={{ color: '#2c3e50', margin: 0, fontSize: '24px' }}>Laboratório de Transformação</h1>
-          <p style={{ margin: 0, color: '#7f8c8d', fontSize: '13px' }}>Simulador seguro e isolado com gestão unificada de estoque virtual.</p>
+          <p style={{ margin: 0, color: '#7f8c8d', fontSize: '13px' }}>Módulo oficial com gestão persistente de estoque e rastreabilidade.</p>
         </div>
       </div>
 
@@ -379,7 +390,7 @@ export default function Transformacao() {
                     <IoCubeOutline size={22} color="#27ae60" />
                     <div>
                       <strong style={{ color: '#27ae60', display: 'block', fontSize: '14px' }}>{lote.produtoNome}</strong>
-                      <span style={{ color: '#2c3e50', fontSize: '11px' }}>Lote gerou: <strong>{lote.quantidade} un</strong></span>
+                      <span style={{ color: '#2c3e50', fontSize: '11px' }}>Lote <strong style={{color: '#34495e'}}>{lote.codigoLote}</strong> gerou: <strong>{lote.quantidade} un</strong></span>
                     </div>
                   </div>
                   <button onClick={() => desfazerTransformacao(lote.id)} title="Desfazer Lote" style={{...styles.btnAcaoIcon, backgroundColor: '#fdedec', color: '#c0392b', padding: '6px', borderRadius: '6px'}}><IoTrashOutline size={16} /></button>
@@ -406,7 +417,6 @@ export default function Transformacao() {
         <div style={{ flex: '2 1 600px', ...styles.card }}>
           <h2 style={{ ...styles.cardTitle, borderBottom: 'none', marginBottom: '15px' }}>📦 Estoque Virtual Consolidado</h2>
           
-          {/* FILTROS DA TABELA */}
           <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
             <div style={{ flex: 1, position: 'relative' }}>
               <IoSearchOutline style={{ position: 'absolute', left: '12px', top: '12px', color: '#95a5a6' }} size={18} />
@@ -467,7 +477,7 @@ export default function Transformacao() {
           </h2>
           
           <div style={{ flex: 1, overflowY: 'auto', maxHeight: '400px', paddingRight: '5px' }}>
-            {auditoria.length === 0 && <p style={{ textAlign: 'center', color: '#95a5a6', fontSize: '13px', marginTop: '20px' }}>Nenhuma transformação realizada nesta sessão.</p>}
+            {auditoria.length === 0 && <p style={{ textAlign: 'center', color: '#95a5a6', fontSize: '13px', marginTop: '20px' }}>Nenhuma ação registrada no banco.</p>}
             
             {auditoria.map(log => (
               <div key={log.id} style={{ marginBottom: '15px', paddingBottom: '15px', borderBottom: '1px solid #34495e' }}>
@@ -475,7 +485,9 @@ export default function Transformacao() {
                   <span style={{ fontSize: '11px', fontWeight: 'bold', color: log.acao === 'Criação' ? '#2ecc71' : '#e74c3c', textTransform: 'uppercase' }}>
                     {log.acao}
                   </span>
-                  <span style={{ fontSize: '11px', color: '#95a5a6' }}>{log.dataHora.toLocaleTimeString()}</span>
+                  <span style={{ fontSize: '11px', color: '#95a5a6' }}>
+                    {new Date(log.dataHora).toLocaleTimeString()}
+                  </span>
                 </div>
                 <p style={{ margin: '0 0 8px 0', fontSize: '13px', lineHeight: '1.4', color: '#ecf0f1' }}>{log.detalhes}</p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#bdc3c7', fontSize: '11px' }}>
