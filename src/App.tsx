@@ -11,6 +11,8 @@ import Compras from './pages/Compras';
 import { Locais } from './pages/Locais';
 import Rupturas from './pages/Rupturas';
 import Separacao from './pages/Separacao';
+// ✨ IMPORT NOVO AQUI ✨
+import Transformacao from './pages/Transformacao'; 
 
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -45,12 +47,13 @@ function Sidebar({ usuarioLogado, fazerLogout }: any) {
       <nav style={{ flex: 1, padding: '0 15px', overflowY: 'auto' }}>
         <Link to="/" style={navItemStyle('/')}>📊 Dashboard</Link>
         <Link to="/estoque" style={navItemStyle('/estoque')}>📦 Armazém</Link>
+        
+        {/* ✨ MENU NOVO ADICIONADO AQUI ✨ */}
+        <Link to="/transformacao" style={navItemStyle('/transformacao')}>🧪 Transformação</Link>
+        
         <Link to="/rupturas" style={navItemStyle('/rupturas')}>⚠️ Rupturas (Perdas)</Link>
         <Link to="/produtos" style={navItemStyle('/produtos')}>🏷️ Catálogo</Link>
-        
-        {/* ✨ NOME DO MENU ATUALIZADO ✨ */}
         <Link to="/separacao" style={navItemStyle('/separacao')}>📋 Retirada de Material</Link>
-        
         <Link to="/historico" style={navItemStyle('/historico')}>🕒 Auditoria</Link>
         <Link to="/fornecedores" style={navItemStyle('/fornecedores')}>🏭 Fornecedores</Link>
         <Link to="/compras" style={navItemStyle('/compras')}>🛒 Pedidos (Compras)</Link>
@@ -104,6 +107,10 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/estoque" element={<Estoque />} />
+            
+            {/* ✨ ROTA NOVA ADICIONADA AQUI ✨ */}
+            <Route path="/transformacao" element={<Transformacao />} />
+            
             <Route path="/rupturas" element={<Rupturas />} />
             <Route path="/produtos" element={<Produtos />} />
             <Route path="/separacao" element={<Separacao />} />
