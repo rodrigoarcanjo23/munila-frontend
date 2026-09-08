@@ -5,7 +5,7 @@ import {
   IoSearchOutline, IoFilterOutline, IoTimeOutline, IoPersonOutline 
 } from 'react-icons/io5';
 import { toast } from 'react-toastify';
-import { api } from '../api'; // Conexão com o seu Backend
+import { api } from '../api'; 
 
 interface ItemEstoque {
   id: string;
@@ -84,7 +84,7 @@ export default function Transformacao() {
       setLotesProduzidos(resLotes.data);
       setAuditoria(resAuditoria.data);
     } catch (error) {
-      toast.error("Erro ao carregar os dados do laboratório.");
+      toast.error("Erro ao carregar os dados do módulo.");
     } finally {
       setCarregando(false);
     }
@@ -120,7 +120,7 @@ export default function Transformacao() {
   async function adicionarMateriaPrima(e: React.FormEvent) {
     e.preventDefault();
     if (!novaMpNome || !novaMpSku || Number(novaMpQtd) <= 0) return toast.warn("Preencha Nome, SKU e Quantidade válida.");
-    if (verificaDuplicidade(novaMpNome, novaMpSku)) return toast.error("Este Nome ou SKU já está cadastrado no laboratório.");
+    if (verificaDuplicidade(novaMpNome, novaMpSku)) return toast.error("Este Nome ou SKU já está cadastrado no módulo.");
 
     try {
       await api.post('/transformacao/estoque', {
@@ -128,7 +128,7 @@ export default function Transformacao() {
       });
       toast.success("Insumo cadastrado e salvo no banco!");
       setNovaMpNome(''); setNovaMpSku(''); setNovaMpQtd('');
-      carregarDadosBanco(); // Recarrega para pegar o ID real do banco
+      carregarDadosBanco(); 
     } catch (error) {
       toast.error("Erro ao salvar insumo.");
     }
@@ -163,7 +163,7 @@ export default function Transformacao() {
     if(window.confirm("Deseja realmente apagar este item permanentemente?")) {
       try {
         await api.delete(`/transformacao/estoque/${id}`);
-        toast.info("Item removido do banco de dados.");
+        toast.info("Item removido do módulo de transformação.");
         carregarDadosBanco();
       } catch (error) {
         toast.error("Erro ao remover item.");
@@ -172,7 +172,7 @@ export default function Transformacao() {
   }
 
   // ==========================================
-  // MONTAR RECEITA VIRTUAL (NÃO PRECISA DE API AINDA)
+  // MONTAR RECEITA (NÃO PRECISA DE API AINDA)
   // ==========================================
   function adicionarInsumoNaReceita() {
     if (!mpSelecionadaId || Number(qtdMpGastaPorUnidade) <= 0) return toast.warn("Selecione um insumo e a quantidade gasta.");
@@ -214,7 +214,6 @@ export default function Transformacao() {
       }
     }
 
-    // Pre-validação de saldo
     for (const ing of ingredientesReceita) {
       const mp = estoque.find(m => m.id === ing.idInsumo);
       const necessidade = ing.qtdPorUnidade * totalAProduzir;
@@ -229,7 +228,7 @@ export default function Transformacao() {
     }));
 
     try {
-      const toastId = toast.loading("Processando transformação no banco de dados...");
+      const toastId = toast.loading("Processando produção no banco de dados...");
       await api.post('/transformacao/lotes', {
         produtoNome: nomeProdutoFinal,
         produtoSku: skuProdutoFinal,
@@ -240,10 +239,10 @@ export default function Transformacao() {
       
       toast.update(toastId, { render: `Sucesso! ${totalAProduzir}x ${nomeProdutoFinal} fabricados.`, type: "success", isLoading: false, autoClose: 3000 });
       setIngredientesReceita([]); setNomeProdutoFinal(''); setSkuProdutoFinal(''); setQtdLotesProduzir('1');
-      carregarDadosBanco(); // Recarrega para ver a auditoria, novo lote e saldos atualizados
+      carregarDadosBanco(); 
     } catch (error) {
       toast.dismiss();
-      toast.error("Erro interno ao processar a transformação.");
+      toast.error("Erro interno ao processar a produção.");
     }
   }
 
@@ -266,7 +265,7 @@ export default function Transformacao() {
     }
   }
 
-  if (carregando && estoque.length === 0) return <div style={{ textAlign: 'center', marginTop: '50px', color: '#7f8c8d' }}>Carregando laboratório...</div>;
+  if (carregando && estoque.length === 0) return <div style={{ textAlign: 'center', marginTop: '50px', color: '#7f8c8d' }}>Carregando módulo de transformação...</div>;
 
   return (
     <div style={{ paddingBottom: '40px' }}>
@@ -275,8 +274,8 @@ export default function Transformacao() {
           <IoBeakerOutline size={28} color="#8e44ad" />
         </div>
         <div>
-          <h1 style={{ color: '#2c3e50', margin: 0, fontSize: '24px' }}>Laboratório de Transformação</h1>
-          <p style={{ margin: 0, color: '#7f8c8d', fontSize: '13px' }}>Módulo oficial com gestão persistente de estoque e rastreabilidade.</p>
+          <h1 style={{ color: '#2c3e50', margin: 0, fontSize: '24px' }}>Transformação de Produtos</h1>
+          <p style={{ margin: 0, color: '#7f8c8d', fontSize: '13px' }}>Módulo oficial de conversão de insumos, receitas de produção e rastreabilidade de lotes.</p>
         </div>
       </div>
 
@@ -295,7 +294,7 @@ export default function Transformacao() {
           </form>
 
           <div style={styles.lista}>
-            {materiasPrimas.length === 0 && <p style={styles.emptyText}>Nenhum insumo virtual cadastrado.</p>}
+            {materiasPrimas.length === 0 && <p style={styles.emptyText}>Nenhum insumo cadastrado neste módulo.</p>}
             {materiasPrimas.map(mp => (
               <div key={mp.id} style={styles.listItem}>
                 {editandoId === mp.id ? (
@@ -415,7 +414,7 @@ export default function Transformacao() {
         
         {/* TABELA DE ESTOQUE VIRTUAL */}
         <div style={{ flex: '2 1 600px', ...styles.card }}>
-          <h2 style={{ ...styles.cardTitle, borderBottom: 'none', marginBottom: '15px' }}>📦 Estoque Virtual Consolidado</h2>
+          <h2 style={{ ...styles.cardTitle, borderBottom: 'none', marginBottom: '15px' }}>📦 Estoque de Transformação Consolidado</h2>
           
           <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
             <div style={{ flex: 1, position: 'relative' }}>
@@ -473,7 +472,7 @@ export default function Transformacao() {
         {/* LOG DE AUDITORIA */}
         <div style={{ flex: '1 1 300px', ...styles.card, backgroundColor: '#2c3e50', color: 'white' }}>
           <h2 style={{ ...styles.cardTitle, color: 'white', borderBottomColor: '#34495e', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <IoTimeOutline size={20} /> Auditoria do Simulador
+            <IoTimeOutline size={20} /> Auditoria de Produção
           </h2>
           
           <div style={{ flex: 1, overflowY: 'auto', maxHeight: '400px', paddingRight: '5px' }}>
