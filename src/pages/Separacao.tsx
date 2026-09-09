@@ -3,7 +3,7 @@ import { api } from '../api';
 import { toast } from 'react-toastify';
 import { 
   IoAddOutline, IoPrintOutline, IoCheckmarkCircleOutline, 
-  IoPlayOutline, IoTrashOutline, IoSearchOutline, IoEyeOutline 
+  IoPlayOutline, IoTrashOutline, IoSearchOutline, IoEyeOutline, IoPersonOutline 
 } from 'react-icons/io5';
 
 export default function Separacao() {
@@ -262,7 +262,6 @@ export default function Separacao() {
           const dataCard = ordem.createdAt ? new Date(ordem.createdAt) : new Date();
           const dataExibicaoCard = `${dataCard.toLocaleDateString('pt-BR')} às ${dataCard.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
 
-          // ✨ FORMATAÇÃO DA DATA DE CONCLUSÃO ✨
           const dataConclusaoObj = ordem.updatedAt ? new Date(ordem.updatedAt) : null;
           const dataConclusaoFormatada = dataConclusaoObj ? `${dataConclusaoObj.toLocaleDateString('pt-BR')} às ${dataConclusaoObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : '';
 
@@ -313,13 +312,23 @@ export default function Separacao() {
               )}
 
               {ordem.status === 'Em Separação' && (
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button onClick={() => imprimirZebra(ordem)} style={{...styles.btnAcao, backgroundColor: '#34495e', flex: 1}}>
-                    <IoPrintOutline size={18} /> Zebra
-                  </button>
-                  <button onClick={() => finalizarSeparacao(ordem.id)} style={{...styles.btnAcao, backgroundColor: '#27ae60', flex: 2}}>
-                    <IoCheckmarkCircleOutline size={18} /> Finalizar
-                  </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  
+                  <div style={{ backgroundColor: '#ebf5fb', padding: '8px 10px', borderRadius: '6px', border: '1px solid #d6eaf8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <IoPersonOutline color="#2980b9" size={14} />
+                    <span style={{ color: '#2980b9', fontSize: '12px' }}>
+                      Em separação por: <strong>{ordem.separador?.nome || 'Usuário não identificado'}</strong>
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button onClick={() => imprimirZebra(ordem)} style={{...styles.btnAcao, backgroundColor: '#34495e', flex: 1}}>
+                      <IoPrintOutline size={18} /> Zebra
+                    </button>
+                    <button onClick={() => finalizarSeparacao(ordem.id)} style={{...styles.btnAcao, backgroundColor: '#27ae60', flex: 2}}>
+                      <IoCheckmarkCircleOutline size={18} /> Finalizar
+                    </button>
+                  </div>
                 </div>
               )}
               
@@ -328,7 +337,6 @@ export default function Separacao() {
                   <div style={{ color: '#27ae60', fontWeight: 'bold', fontSize: '13px', marginBottom: '2px' }}>
                     Concluído por {ordem.separador?.nome}
                   </div>
-                  {/* ✨ EXIBE A DATA DE CONCLUSÃO NO CARD ✨ */}
                   {dataConclusaoFormatada && (
                     <div style={{ fontSize: '11px', color: '#7f8c8d' }}>
                       Em: {dataConclusaoFormatada}
@@ -346,7 +354,7 @@ export default function Separacao() {
         <div style={styles.modalOverlay}>
           <div style={{...styles.modalContent, maxWidth: '600px'}}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <h2 style={{ margin: 0, color: '#2c3e50' }}>Detalhes da Ordem: {ordemSelecionada.codigo}</h2>
+              <h2 style={{ margin: '0', color: '#2c3e50' }}>Detalhes da Ordem: {ordemSelecionada.codigo}</h2>
               <span style={{ backgroundColor: '#f1f2f6', color: '#7f8c8d', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' }}>
                 {ordemSelecionada.tipo}
               </span>
@@ -356,7 +364,6 @@ export default function Separacao() {
               <div>
                 <div style={{ marginBottom: '5px' }}><strong>Solicitante:</strong> {ordemSelecionada.solicitante?.nome || 'Não informado'}</div>
                 <div><strong>Criação:</strong> {ordemSelecionada.createdAt ? `${new Date(ordemSelecionada.createdAt).toLocaleDateString('pt-BR')} às ${new Date(ordemSelecionada.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : '-'}</div>
-                {/* ✨ EXIBE A DATA DE CONCLUSÃO TAMBÉM NO MODAL SE ESTIVER CONCLUÍDA ✨ */}
                 {ordemSelecionada.status === 'Concluída' && ordemSelecionada.updatedAt && (
                   <div style={{ marginTop: '5px', color: '#27ae60' }}>
                     <strong>Conclusão:</strong> {new Date(ordemSelecionada.updatedAt).toLocaleDateString('pt-BR')} às {new Date(ordemSelecionada.updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
