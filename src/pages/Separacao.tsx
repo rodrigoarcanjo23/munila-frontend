@@ -323,7 +323,7 @@ export default function Separacao() {
 
                   <div style={{ display: 'flex', gap: '10px' }}>
                     <button onClick={() => imprimirZebra(ordem)} style={{...styles.btnAcao, backgroundColor: '#34495e', flex: 1}}>
-                      <IoPrintOutline size={18} /> Zebra
+                      <IoPrintOutline size={18} /> imprimir
                     </button>
                     <button onClick={() => finalizarSeparacao(ordem.id)} style={{...styles.btnAcao, backgroundColor: '#27ae60', flex: 2}}>
                       <IoCheckmarkCircleOutline size={18} /> Finalizar
