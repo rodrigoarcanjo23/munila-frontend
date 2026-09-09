@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { toast } from 'react-toastify';
-import { IoAddOutline, IoPrintOutline, IoCheckmarkCircleOutline, IoPlayOutline, IoTrashOutline, IoSearchOutline } from 'react-icons/io5';
+import { 
+  IoAddOutline, IoPrintOutline, IoCheckmarkCircleOutline, 
+  IoPlayOutline, IoTrashOutline, IoSearchOutline, IoEyeOutline 
+} from 'react-icons/io5';
 
 export default function Separacao() {
   const [ordens, setOrdens] = useState<any[]>([]);
@@ -14,6 +17,9 @@ export default function Separacao() {
   const [quantidadeDesejada, setQuantidadeDesejada] = useState('1');
   const [tipoOS, setTipoOS] = useState('SAIDA'); 
   const [carrinho, setCarrinho] = useState<any[]>([]);
+
+  // Estado para o Modal de Visualização de Detalhes da OS
+  const [ordemSelecionada, setOrdemSelecionada] = useState<any>(null);
 
   // Estados para a Busca Inteligente
   const [produtoSelecionado, setProdutoSelecionado] = useState(''); 
@@ -130,26 +136,26 @@ export default function Separacao() {
     }
   }
 
-  // ✨ FUNÇÃO ZEBRA FORMATADA PARA IMPRESSORA TÉRMICA 80mm ✨
   function imprimirZebra(ordem: any) {
     const janela = window.open('', '', 'width=400,height=600');
     if (!janela) return toast.error("Pop-up bloqueado pelo navegador.");
 
     const tituloDoc = ordem.tipo === 'ENTRADA' ? 'LISTA DE ENTRADA' : ordem.tipo === 'DEVOLUCAO' ? 'LISTA DE DEVOLUÇÃO' : 'LISTA DE PICKING';
+    
+    const dataOS = ordem.createdAt ? new Date(ordem.createdAt) : new Date();
+    const dataFormatada = dataOS.toLocaleDateString('pt-BR');
+    const horaFormatada = dataOS.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
     const htmlZebra = `
       <html>
         <head>
           <title>Impressão Zebra - ${ordem.codigo}</title>
           <style>
-            /* Reset básico e configuração de página para impressora térmica */
-            @page {
-              margin: 0;
-            }
+            @page { margin: 0; }
             body { 
               font-family: 'Courier New', Courier, monospace; 
               font-size: 12px; 
-              width: 75mm; /* Largura padrão imprimível na bobina de 80mm */
+              width: 75mm; 
               margin: 0 auto; 
               padding: 5mm 2mm; 
               color: black; 
@@ -158,18 +164,14 @@ export default function Separacao() {
             .header { text-align: center; border-bottom: 2px dashed black; padding-bottom: 8px; margin-bottom: 10px; }
             .title { font-size: 16px; font-weight: bold; margin: 0; }
             .subtitle { font-size: 11px; margin: 5px 0 0 0; }
-            
-            /* Ajuste dos itens para caber na largura de 75mm */
             .item { margin-bottom: 10px; border-bottom: 1px dashed #ccc; padding-bottom: 8px; page-break-inside: avoid; }
             .item-linha1 { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 3px; }
             .box { width: 14px; height: 14px; border: 2px solid black; display: inline-block; margin-right: 5px; flex-shrink: 0; margin-top: 1px; }
             .item-nome { font-weight: bold; font-size: 12px; flex: 1; line-height: 1.1; word-wrap: break-word; }
             .item-qtd { font-weight: bold; font-size: 15px; margin-left: 8px; white-space: nowrap; }
-            
             .item-linha2 { display: flex; flex-direction: column; padding-left: 23px; }
             .item-meta { font-size: 10px; color: #333; margin-bottom: 3px; }
             .item-local { font-size: 11px; font-weight: bold; border: 1px dashed black; padding: 2px 4px; display: inline-block; width: fit-content; }
-            
             .barcode { text-align: center; margin-top: 15px; font-size: 16px; letter-spacing: 2px; border: 1px solid black; padding: 5px; page-break-inside: avoid; }
             .footer { text-align: center; font-size: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed black; }
           </style>
@@ -179,6 +181,7 @@ export default function Separacao() {
             <p class="title">${tituloDoc}</p>
             <p class="subtitle">ORDEM ${ordem.codigo} (${ordem.tipo})</p>
             <p class="subtitle">Solicitante: ${ordem.solicitante?.nome || 'Fábrica'}</p>
+            <p class="subtitle">Data: ${dataFormatada} às ${horaFormatada}</p>
           </div>
           
           <div style="margin-bottom: 15px;">
@@ -256,6 +259,13 @@ export default function Separacao() {
                         : ordem.tipo === 'SAIDA' ? { bg: '#fdedec', text: '#c0392b' } 
                         : { bg: '#ebf5fb', text: '#2980b9' };
 
+          const dataCard = ordem.createdAt ? new Date(ordem.createdAt) : new Date();
+          const dataExibicaoCard = `${dataCard.toLocaleDateString('pt-BR')} às ${dataCard.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+
+          // ✨ FORMATAÇÃO DA DATA DE CONCLUSÃO ✨
+          const dataConclusaoObj = ordem.updatedAt ? new Date(ordem.updatedAt) : null;
+          const dataConclusaoFormatada = dataConclusaoObj ? `${dataConclusaoObj.toLocaleDateString('pt-BR')} às ${dataConclusaoObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : '';
+
           return (
             <div key={ordem.id} style={{ ...styles.card, borderTop: `5px solid ${ordem.status === 'Pendente' ? '#f39c12' : ordem.status === 'Em Separação' ? '#3498db' : '#27ae60'}` }}>
               
@@ -279,7 +289,17 @@ export default function Separacao() {
               </div>
               
               <p style={{ margin: '0 0 5px 0', fontSize: '13px', color: '#7f8c8d' }}><strong>Solicitante:</strong> {ordem.solicitante?.nome}</p>
-              <p style={{ margin: '0 0 15px 0', fontSize: '13px', color: '#7f8c8d' }}><strong>Itens:</strong> {ordem.itens.length} produtos diferentes</p>
+              <p style={{ margin: '0 0 15px 0', fontSize: '13px', color: '#7f8c8d' }}><strong>Data Criação:</strong> {dataExibicaoCard}</p>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <p style={{ margin: 0, fontSize: '13px', color: '#7f8c8d' }}><strong>Itens:</strong> {ordem.itens.length} produtos diferentes</p>
+                <button 
+                  onClick={() => setOrdemSelecionada(ordem)}
+                  style={{ background: 'none', border: 'none', color: '#3498db', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <IoEyeOutline size={16} /> Ver lista
+                </button>
+              </div>
 
               {ordem.status === 'Pendente' && (
                 <div style={{ display: 'flex', gap: '10px' }}>
@@ -304,8 +324,16 @@ export default function Separacao() {
               )}
               
               {ordem.status === 'Concluída' && (
-                <div style={{ textAlign: 'center', color: '#27ae60', fontWeight: 'bold', fontSize: '14px', padding: '10px', backgroundColor: '#f9fbfb', borderRadius: '6px' }}>
-                  Concluído por {ordem.separador?.nome}
+                <div style={{ backgroundColor: '#f9fbfb', padding: '10px', borderRadius: '6px', border: '1px solid #eafaf1' }}>
+                  <div style={{ color: '#27ae60', fontWeight: 'bold', fontSize: '13px', marginBottom: '2px' }}>
+                    Concluído por {ordem.separador?.nome}
+                  </div>
+                  {/* ✨ EXIBE A DATA DE CONCLUSÃO NO CARD ✨ */}
+                  {dataConclusaoFormatada && (
+                    <div style={{ fontSize: '11px', color: '#7f8c8d' }}>
+                      Em: {dataConclusaoFormatada}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -313,6 +341,55 @@ export default function Separacao() {
         })}
       </div>
 
+      {/* MODAL DE VISUALIZAÇÃO DOS DETALHES DA OS */}
+      {ordemSelecionada && (
+        <div style={styles.modalOverlay}>
+          <div style={{...styles.modalContent, maxWidth: '600px'}}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+              <h2 style={{ margin: 0, color: '#2c3e50' }}>Detalhes da Ordem: {ordemSelecionada.codigo}</h2>
+              <span style={{ backgroundColor: '#f1f2f6', color: '#7f8c8d', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' }}>
+                {ordemSelecionada.tipo}
+              </span>
+            </div>
+            
+            <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#34495e' }}>
+              <div>
+                <div style={{ marginBottom: '5px' }}><strong>Solicitante:</strong> {ordemSelecionada.solicitante?.nome || 'Não informado'}</div>
+                <div><strong>Criação:</strong> {ordemSelecionada.createdAt ? `${new Date(ordemSelecionada.createdAt).toLocaleDateString('pt-BR')} às ${new Date(ordemSelecionada.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : '-'}</div>
+                {/* ✨ EXIBE A DATA DE CONCLUSÃO TAMBÉM NO MODAL SE ESTIVER CONCLUÍDA ✨ */}
+                {ordemSelecionada.status === 'Concluída' && ordemSelecionada.updatedAt && (
+                  <div style={{ marginTop: '5px', color: '#27ae60' }}>
+                    <strong>Conclusão:</strong> {new Date(ordemSelecionada.updatedAt).toLocaleDateString('pt-BR')} às {new Date(ordemSelecionada.updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                )}
+              </div>
+              <div><strong>Status:</strong> {ordemSelecionada.status}</div>
+            </div>
+            
+            <div style={{ backgroundColor: '#f9fbfb', border: '1px solid #ecf0f1', borderRadius: '8px', padding: '5px', maxHeight: '300px', overflowY: 'auto' }}>
+              {ordemSelecionada.itens.map((item: any, index: number) => (
+                <div key={index} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px', borderBottom: '1px solid #eee', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#2c3e50' }}>{item.produto.nome}</span>
+                    <span style={{ fontSize: '12px', color: '#7f8c8d', marginTop: '3px' }}>
+                      SKU: {item.produto.sku} | <span style={{fontWeight: 'bold'}}>Local: {item.produto.enderecoLocalizacao || 'Estoque Geral'}</span>
+                    </span>
+                  </div>
+                  <span style={{ color: '#0288D1', fontWeight: '900', fontSize: '16px', whiteSpace: 'nowrap', marginLeft: '15px' }}>
+                    {item.quantidade} un
+                  </span>
+                </div>
+              ))}
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+              <button type="button" onClick={() => setOrdemSelecionada(null)} style={{...styles.btnCancelar, backgroundColor: '#e0e0e0', color: '#333'}}>Fechar Detalhes</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CRIAÇÃO DA NOVA OS */}
       {modalNovaOrdem && (
         <div style={styles.modalOverlay}>
           <div style={{...styles.modalContent, maxWidth: '650px', overflow: 'visible'}}>
