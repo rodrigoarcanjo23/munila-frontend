@@ -3,7 +3,8 @@ import { api } from '../api';
 import { toast } from 'react-toastify';
 import { 
   IoAddOutline, IoPrintOutline, IoCheckmarkCircleOutline, 
-  IoPlayOutline, IoTrashOutline, IoSearchOutline, IoEyeOutline, IoPersonOutline 
+  IoPlayOutline, IoTrashOutline, IoSearchOutline, IoEyeOutline, 
+  IoPersonOutline, IoPauseCircleOutline, IoWarningOutline, IoBarcodeOutline
 } from 'react-icons/io5';
 
 export default function Separacao() {
@@ -16,18 +17,21 @@ export default function Separacao() {
   const [modalNovaOrdem, setModalNovaOrdem] = useState(false);
   const [quantidadeDesejada, setQuantidadeDesejada] = useState('1');
   const [tipoOS, setTipoOS] = useState('SAIDA'); 
+  const [prioridadeOS, setPrioridadeOS] = useState('Normal'); // ✨ ESTADO DE PRIORIDADE
   const [carrinho, setCarrinho] = useState<any[]>([]);
 
-  // Estado para o Modal de Visualização de Detalhes da OS
+  // Estados de Visualização e Conferência
   const [ordemSelecionada, setOrdemSelecionada] = useState<any>(null);
+  const [osEmConferencia, setOsEmConferencia] = useState<any>(null); // ✨ ESTADO DO CHECKLIST
+  const [itensConferidos, setItensConferidos] = useState<string[]>([]);
 
-  // Estados para a Busca Inteligente
+  // Estados de Busca e Filtros
   const [produtoSelecionado, setProdutoSelecionado] = useState(''); 
   const [buscaProduto, setBuscaProduto] = useState(''); 
   const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
-
-  // Filtro de Abas
   const [filtroStatus, setFiltroStatus] = useState('Pendente'); 
+  const [buscaOS, setBuscaOS] = useState(''); // ✨ PESQUISA GLOBAL DE OS
+  const [filtroData, setFiltroData] = useState('Todos'); // ✨ FILTRO DE DATA
 
   async function carregarDados() {
     setCarregando(true);
@@ -62,7 +66,7 @@ export default function Separacao() {
   }
 
   function adicionarAoCarrinho() {
-    if (!produtoSelecionado || Number(quantidadeDesejada) <= 0) return toast.warn("Selecione um produto válido da lista e uma quantidade.");
+    if (!produtoSelecionado || Number(quantidadeDesejada) <= 0) return toast.warn("Selecione um produto e a quantidade.");
     
     const prodRef = produtos.find(p => p.id === produtoSelecionado);
     if (!prodRef) return;
@@ -75,10 +79,7 @@ export default function Separacao() {
     } else {
       setCarrinho([...carrinho, { produtoId: prodRef.id, nome: prodRef.nome, sku: prodRef.sku, quantidade: Number(quantidadeDesejada) }]);
     }
-
-    setProdutoSelecionado('');
-    setBuscaProduto('');
-    setQuantidadeDesejada('1');
+    setProdutoSelecionado(''); setBuscaProduto(''); setQuantidadeDesejada('1');
   }
 
   function removerDoCarrinho(index: number) {
@@ -89,33 +90,26 @@ export default function Separacao() {
 
   async function gerarOrdem() {
     if (carrinho.length === 0) return toast.warn("O carrinho está vazio.");
-    if (!usuarioLogado) return toast.error("Sessão inválida.");
-
     try {
       await api.post('/wms/ordens', {
         solicitanteId: usuarioLogado.id,
         tipo: tipoOS, 
+        prioridade: prioridadeOS, // ✨ ENVIA PRIORIDADE
         itens: carrinho
       });
       toast.success(`Ordem de ${tipoOS} gerada com sucesso!`);
-      setModalNovaOrdem(false);
-      setCarrinho([]);
+      setModalNovaOrdem(false); setCarrinho([]); setPrioridadeOS('Normal');
       carregarDados();
-    } catch (error: any) {
-      toast.error(error.response?.data?.error || "Erro ao gerar OS.");
-    }
+    } catch (error: any) { toast.error(error.response?.data?.error || "Erro ao gerar OS."); }
   }
 
   async function excluirOrdem(id: string) {
-    if (!window.confirm("Atenção: Deseja realmente cancelar e excluir esta Ordem de Serviço?")) return;
-
+    if (!window.confirm("Atenção: Deseja cancelar e excluir esta OS?")) return;
     try {
       await api.delete(`/wms/ordens/${id}`);
       toast.success("Ordem excluída com sucesso.");
       carregarDados();
-    } catch (error: any) {
-      toast.error(error.response?.data?.error || "Erro ao excluir a ordem.");
-    }
+    } catch (error: any) { toast.error("Erro ao excluir a ordem."); }
   }
 
   async function iniciarSeparacao(id: string) {
@@ -126,22 +120,54 @@ export default function Separacao() {
     } catch (error) { toast.error("Erro ao iniciar separação."); }
   }
 
-  async function finalizarSeparacao(id: string) {
+  // ✨ NOVA FUNÇÃO DE PAUSA ✨
+  async function pausarSeparacao(id: string) {
+    if (!window.confirm("Deseja pausar esta OS e devolvê-la para a fila de Pendentes?")) return;
+    try {
+      await api.put(`/wms/ordens/${id}/pausar`);
+      toast.warn("Ordem devolvida para a fila.");
+      carregarDados();
+    } catch (error) { toast.error("Erro ao pausar a OS."); }
+  }
+
+  // ✨ ORDENAÇÃO INTELIGENTE POR LOCALIZAÇÃO (ROTEIRIZAÇÃO) ✨
+  const ordenarItensPorLocal = (itens: any[]) => {
+    return [...itens].sort((a, b) => {
+      const localA = a.produto.enderecoLocalizacao || 'ZZZ';
+      const localB = b.produto.enderecoLocalizacao || 'ZZZ';
+      return localA.localeCompare(localB);
+    });
+  };
+
+  // ✨ FUNÇÕES DO CHECKLIST ✨
+  function abrirConferencia(ordem: any) {
+    setOsEmConferencia({ ...ordem, itens: ordenarItensPorLocal(ordem.itens) });
+    setItensConferidos([]);
+  }
+
+  function toggleItemConferido(itemId: string) {
+    if (itensConferidos.includes(itemId)) {
+      setItensConferidos(itensConferidos.filter(id => id !== itemId));
+    } else {
+      setItensConferidos([...itensConferidos, itemId]);
+    }
+  }
+
+  async function confirmarFinalizacao(id: string) {
     try {
       await api.post(`/wms/ordens/${id}/concluir`, { usuarioId: usuarioLogado?.id });
-      toast.success("Operação concluída e estoque atualizado com sucesso!");
+      toast.success("Checklist validado! Operação concluída e estoque atualizado!");
+      setOsEmConferencia(null);
       carregarDados();
-    } catch (error: any) {
-      toast.error(error.response?.data?.error || "Erro ao finalizar separação.");
-    }
+    } catch (error: any) { toast.error(error.response?.data?.error || "Erro ao finalizar separação."); }
   }
 
   function imprimirZebra(ordem: any) {
     const janela = window.open('', '', 'width=400,height=600');
     if (!janela) return toast.error("Pop-up bloqueado pelo navegador.");
 
+    const itensRoteirizados = ordenarItensPorLocal(ordem.itens); // ✨ APLICA A ROTEIRIZAÇÃO NA IMPRESSÃO
     const tituloDoc = ordem.tipo === 'ENTRADA' ? 'LISTA DE ENTRADA' : ordem.tipo === 'DEVOLUCAO' ? 'LISTA DE DEVOLUÇÃO' : 'LISTA DE PICKING';
-    
     const dataOS = ordem.createdAt ? new Date(ordem.createdAt) : new Date();
     const dataFormatada = dataOS.toLocaleDateString('pt-BR');
     const horaFormatada = dataOS.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -152,18 +178,11 @@ export default function Separacao() {
           <title>Impressão Zebra - ${ordem.codigo}</title>
           <style>
             @page { margin: 0; }
-            body { 
-              font-family: 'Courier New', Courier, monospace; 
-              font-size: 12px; 
-              width: 75mm; 
-              margin: 0 auto; 
-              padding: 5mm 2mm; 
-              color: black; 
-              background: white; 
-            }
+            body { font-family: 'Courier New', Courier, monospace; font-size: 12px; width: 75mm; margin: 0 auto; padding: 5mm 2mm; color: black; background: white; }
             .header { text-align: center; border-bottom: 2px dashed black; padding-bottom: 8px; margin-bottom: 10px; }
             .title { font-size: 16px; font-weight: bold; margin: 0; }
             .subtitle { font-size: 11px; margin: 5px 0 0 0; }
+            .priority { font-weight: bold; font-size: 14px; padding: 2px; margin-top: 5px; border: 1px solid black; }
             .item { margin-bottom: 10px; border-bottom: 1px dashed #ccc; padding-bottom: 8px; page-break-inside: avoid; }
             .item-linha1 { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 3px; }
             .box { width: 14px; height: 14px; border: 2px solid black; display: inline-block; margin-right: 5px; flex-shrink: 0; margin-top: 1px; }
@@ -171,7 +190,7 @@ export default function Separacao() {
             .item-qtd { font-weight: bold; font-size: 15px; margin-left: 8px; white-space: nowrap; }
             .item-linha2 { display: flex; flex-direction: column; padding-left: 23px; }
             .item-meta { font-size: 10px; color: #333; margin-bottom: 3px; }
-            .item-local { font-size: 11px; font-weight: bold; border: 1px dashed black; padding: 2px 4px; display: inline-block; width: fit-content; }
+            .item-local { font-size: 12px; font-weight: bold; border: 1px dashed black; padding: 2px 4px; display: inline-block; width: fit-content; background: #eee; }
             .barcode { text-align: center; margin-top: 15px; font-size: 16px; letter-spacing: 2px; border: 1px solid black; padding: 5px; page-break-inside: avoid; }
             .footer { text-align: center; font-size: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed black; }
           </style>
@@ -180,12 +199,12 @@ export default function Separacao() {
           <div class="header">
             <p class="title">${tituloDoc}</p>
             <p class="subtitle">ORDEM ${ordem.codigo} (${ordem.tipo})</p>
+            ${ordem.prioridade === 'Urgente' || ordem.prioridade === 'Alta' ? `<div class="priority">PRIORIDADE: ${ordem.prioridade.toUpperCase()}</div>` : ''}
             <p class="subtitle">Solicitante: ${ordem.solicitante?.nome || 'Fábrica'}</p>
             <p class="subtitle">Data: ${dataFormatada} às ${horaFormatada}</p>
           </div>
-          
           <div style="margin-bottom: 15px;">
-            ${ordem.itens.map((item: any) => `
+            ${itensRoteirizados.map((item: any) => `
               <div class="item">
                 <div class="item-linha1">
                   <span class="box"></span>
@@ -194,20 +213,14 @@ export default function Separacao() {
                 </div>
                 <div class="item-linha2">
                   <span class="item-meta">SKU: ${item.produto.sku}</span>
-                  <span class="item-local">LOCAL: ${item.produto.enderecoLocalizacao || 'Estoque Principal'}</span>
+                  <span class="item-local">LOCAL: ${item.produto.enderecoLocalizacao || 'Estoque Geral'}</span>
                 </div>
               </div>
             `).join('')}
           </div>
-
-          <div class="barcode">
-            *${ordem.codigo}*
-          </div>
+          <div class="barcode">*${ordem.codigo}*</div>
           <div class="footer">ViaPro WMS</div>
-          
-          <script>
-            window.onload = function() { window.print(); window.close(); }
-          </script>
+          <script>window.onload = function() { window.print(); window.close(); }</script>
         </body>
       </html>
     `;
@@ -215,9 +228,42 @@ export default function Separacao() {
     janela.document.close();
   }
 
-  const ordensFiltradas = ordens.filter(ordem => 
-    filtroStatus === 'Todos' || ordem.status === filtroStatus
-  );
+  // ✨ SUPER FILTRO COM BUSCA E DATAS ✨
+  const ordensFiltradas = ordens.filter(ordem => {
+    if (filtroStatus !== 'Todos' && ordem.status !== filtroStatus) return false;
+    
+    // Busca por Texto (OS ou Solicitante)
+    if (buscaOS) {
+      const termo = buscaOS.toLowerCase();
+      const matchCodigo = ordem.codigo.toLowerCase().includes(termo);
+      const matchSolicitante = ordem.solicitante?.nome?.toLowerCase().includes(termo);
+      if (!matchCodigo && !matchSolicitante) return false;
+    }
+
+    // Filtro por Data
+    if (filtroData !== 'Todos') {
+      const dataOS = new Date(ordem.createdAt);
+      const hoje = new Date();
+      if (filtroData === 'Hoje') {
+        if (dataOS.toDateString() !== hoje.toDateString()) return false;
+      } else if (filtroData === 'Ultimos7Dias') {
+        const seteDiasAtras = new Date();
+        seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
+        if (dataOS < seteDiasAtras) return false;
+      }
+    }
+    return true;
+  }).sort((a, b) => {
+    // ✨ ORDENAÇÃO DE PENDENTES: URGENTE VEM PRIMEIRO ✨
+    if (a.status === 'Pendente' && b.status === 'Pendente') {
+      const pesoPrioridade = { 'Urgente': 3, 'Alta': 2, 'Normal': 1 };
+      const pesoA = pesoPrioridade[a.prioridade as keyof typeof pesoPrioridade] || 1;
+      const pesoB = pesoPrioridade[b.prioridade as keyof typeof pesoPrioridade] || 1;
+      if (pesoA !== pesoB) return pesoB - pesoA; // Ordem decrescente de importância
+    }
+    // Depois, ordena pela data mais recente
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
 
   if (carregando) return <div>A carregar módulo WMS...</div>;
 
@@ -230,20 +276,36 @@ export default function Separacao() {
         </button>
       </div>
 
+      {/* ✨ NOVA BARRA DE FERRAMENTAS E FILTROS ✨ */}
+      <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', backgroundColor: 'white', padding: '15px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+        <div style={{ flex: 1, position: 'relative' }}>
+          <IoSearchOutline size={18} color="#7f8c8d" style={{ position: 'absolute', left: '12px', top: '12px' }} />
+          <input 
+            type="text" 
+            placeholder="Buscar por código (OS) ou Solicitante..." 
+            value={buscaOS}
+            onChange={(e) => setBuscaOS(e.target.value)}
+            style={{...styles.inputFiltro, paddingLeft: '38px', backgroundColor: '#f9fbfb'}}
+          />
+        </div>
+        <div style={{ width: '200px' }}>
+          <select value={filtroData} onChange={(e) => setFiltroData(e.target.value)} style={{...styles.inputFiltro, backgroundColor: '#f9fbfb'}}>
+            <option value="Todos">Todas as Datas</option>
+            <option value="Hoje">Criadas Hoje</option>
+            <option value="Ultimos7Dias">Últimos 7 dias</option>
+          </select>
+        </div>
+      </div>
+
       <div style={styles.tabsContainer}>
         {['Todos', 'Pendente', 'Em Separação', 'Concluída'].map((status) => {
           const isActive = filtroStatus === status;
           const corAba = status === 'Pendente' ? '#f39c12' : status === 'Em Separação' ? '#3498db' : status === 'Concluída' ? '#27ae60' : '#8e44ad';
-          
           return (
             <button
               key={status}
               onClick={() => setFiltroStatus(status)}
-              style={{
-                ...styles.tabButton,
-                color: isActive ? corAba : '#95a5a6',
-                borderBottomColor: isActive ? corAba : 'transparent'
-              }}
+              style={{ ...styles.tabButton, color: isActive ? corAba : '#95a5a6', borderBottomColor: isActive ? corAba : 'transparent' }}
             >
               {status === 'Todos' ? 'Todas' : status === 'Pendente' ? 'Pendentes' : status === 'Em Separação' ? 'Em Execução' : 'Concluídas'}
             </button>
@@ -252,31 +314,30 @@ export default function Separacao() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
-        {ordensFiltradas.length === 0 && <p style={{ color: '#7f8c8d' }}>Nenhuma ordem de serviço encontrada nesta categoria.</p>}
+        {ordensFiltradas.length === 0 && <p style={{ color: '#7f8c8d' }}>Nenhuma ordem de serviço encontrada.</p>}
         
         {ordensFiltradas.map((ordem) => {
-          const corTipo = ordem.tipo === 'ENTRADA' ? { bg: '#eafaf1', text: '#27ae60' } 
-                        : ordem.tipo === 'SAIDA' ? { bg: '#fdedec', text: '#c0392b' } 
-                        : { bg: '#ebf5fb', text: '#2980b9' };
+          const corTipo = ordem.tipo === 'ENTRADA' ? { bg: '#eafaf1', text: '#27ae60' } : ordem.tipo === 'SAIDA' ? { bg: '#fdedec', text: '#c0392b' } : { bg: '#ebf5fb', text: '#2980b9' };
+          
+          // Cores da Prioridade
+          const corPrioridade = ordem.prioridade === 'Urgente' ? '#e74c3c' : ordem.prioridade === 'Alta' ? '#e67e22' : '#95a5a6';
 
           const dataCard = ordem.createdAt ? new Date(ordem.createdAt) : new Date();
           const dataExibicaoCard = `${dataCard.toLocaleDateString('pt-BR')} às ${dataCard.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
-
           const dataConclusaoObj = ordem.updatedAt ? new Date(ordem.updatedAt) : null;
           const dataConclusaoFormatada = dataConclusaoObj ? `${dataConclusaoObj.toLocaleDateString('pt-BR')} às ${dataConclusaoObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : '';
 
           return (
-            <div key={ordem.id} style={{ ...styles.card, borderTop: `5px solid ${ordem.status === 'Pendente' ? '#f39c12' : ordem.status === 'Em Separação' ? '#3498db' : '#27ae60'}` }}>
+            <div key={ordem.id} style={{ ...styles.card, position: 'relative', overflow: 'hidden', borderTop: `5px solid ${ordem.status === 'Pendente' ? '#f39c12' : ordem.status === 'Em Separação' ? '#3498db' : '#27ae60'}` }}>
               
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                <h3 style={{ margin: 0, color: '#2c3e50', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {ordem.codigo}
-                </h3>
-                <span style={{ 
-                  backgroundColor: ordem.status === 'Pendente' ? '#fef5e7' : ordem.status === 'Em Separação' ? '#ebf5fb' : '#eafaf1',
-                  color: ordem.status === 'Pendente' ? '#f39c12' : ordem.status === 'Em Separação' ? '#2980b9' : '#27ae60',
-                  padding: '5px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold'
-                }}>
+              {/* ✨ BADGE DE PRIORIDADE ✨ */}
+              <div style={{ position: 'absolute', top: '15px', right: '-30px', backgroundColor: corPrioridade, color: 'white', fontSize: '10px', fontWeight: 'bold', padding: '4px 35px', transform: 'rotate(45deg)', textTransform: 'uppercase', boxShadow: '0 2px 4px rgba(0,0,0,0.2)', zIndex: 1 }}>
+                {ordem.prioridade}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', paddingRight: '20px' }}>
+                <h3 style={{ margin: 0, color: '#2c3e50', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>{ordem.codigo}</h3>
+                <span style={{ backgroundColor: ordem.status === 'Pendente' ? '#fef5e7' : ordem.status === 'Em Separação' ? '#ebf5fb' : '#eafaf1', color: ordem.status === 'Pendente' ? '#f39c12' : ordem.status === 'Em Separação' ? '#2980b9' : '#27ae60', padding: '5px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' }}>
                   {ordem.status}
                 </span>
               </div>
@@ -291,12 +352,9 @@ export default function Separacao() {
               <p style={{ margin: '0 0 15px 0', fontSize: '13px', color: '#7f8c8d' }}><strong>Data Criação:</strong> {dataExibicaoCard}</p>
               
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                <p style={{ margin: 0, fontSize: '13px', color: '#7f8c8d' }}><strong>Itens:</strong> {ordem.itens.length} produtos diferentes</p>
-                <button 
-                  onClick={() => setOrdemSelecionada(ordem)}
-                  style={{ background: 'none', border: 'none', color: '#3498db', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-                >
-                  <IoEyeOutline size={16} /> Ver lista
+                <p style={{ margin: 0, fontSize: '13px', color: '#7f8c8d' }}><strong>Itens:</strong> {ordem.itens.length} produtos</p>
+                <button onClick={() => { setOrdemSelecionada({...ordem, itens: ordenarItensPorLocal(ordem.itens)}) }} style={{ background: 'none', border: 'none', color: '#3498db', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <IoEyeOutline size={16} /> Ver lista (Rota)
                 </button>
               </div>
 
@@ -313,20 +371,24 @@ export default function Separacao() {
 
               {ordem.status === 'Em Separação' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  
-                  <div style={{ backgroundColor: '#ebf5fb', padding: '8px 10px', borderRadius: '6px', border: '1px solid #d6eaf8', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <IoPersonOutline color="#2980b9" size={14} />
-                    <span style={{ color: '#2980b9', fontSize: '12px' }}>
-                      Em separação por: <strong>{ordem.separador?.nome || 'Usuário não identificado'}</strong>
-                    </span>
+                  <div style={{ backgroundColor: '#ebf5fb', padding: '8px 10px', borderRadius: '6px', border: '1px solid #d6eaf8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <IoPersonOutline color="#2980b9" size={14} />
+                      <span style={{ color: '#2980b9', fontSize: '12px' }}>Em separação por: <strong>{ordem.separador?.nome}</strong></span>
+                    </div>
+                    {/* ✨ BOTÃO DE PAUSA ✨ */}
+                    <button onClick={() => pausarSeparacao(ordem.id)} title="Pausar OS" style={{ background: 'none', border: 'none', color: '#f39c12', cursor: 'pointer' }}>
+                      <IoPauseCircleOutline size={20} />
+                    </button>
                   </div>
 
                   <div style={{ display: 'flex', gap: '10px' }}>
                     <button onClick={() => imprimirZebra(ordem)} style={{...styles.btnAcao, backgroundColor: '#34495e', flex: 1}}>
-                      <IoPrintOutline size={18} /> imprimir
+                      <IoPrintOutline size={18} /> Zebra
                     </button>
-                    <button onClick={() => finalizarSeparacao(ordem.id)} style={{...styles.btnAcao, backgroundColor: '#27ae60', flex: 2}}>
-                      <IoCheckmarkCircleOutline size={18} /> Finalizar
+                    {/* ✨ AGORA ABRE O CHECKLIST EM VEZ DE FINALIZAR DIRETO ✨ */}
+                    <button onClick={() => abrirConferencia(ordem)} style={{...styles.btnAcao, backgroundColor: '#27ae60', flex: 2}}>
+                      <IoBarcodeOutline size={18} /> Conferir & Finalizar
                     </button>
                   </div>
                 </div>
@@ -334,14 +396,8 @@ export default function Separacao() {
               
               {ordem.status === 'Concluída' && (
                 <div style={{ backgroundColor: '#f9fbfb', padding: '10px', borderRadius: '6px', border: '1px solid #eafaf1' }}>
-                  <div style={{ color: '#27ae60', fontWeight: 'bold', fontSize: '13px', marginBottom: '2px' }}>
-                    Concluído por {ordem.separador?.nome}
-                  </div>
-                  {dataConclusaoFormatada && (
-                    <div style={{ fontSize: '11px', color: '#7f8c8d' }}>
-                      Em: {dataConclusaoFormatada}
-                    </div>
-                  )}
+                  <div style={{ color: '#27ae60', fontWeight: 'bold', fontSize: '13px', marginBottom: '2px' }}>Concluído por {ordem.separador?.nome}</div>
+                  {dataConclusaoFormatada && <div style={{ fontSize: '11px', color: '#7f8c8d' }}>Em: {dataConclusaoFormatada}</div>}
                 </div>
               )}
             </div>
@@ -349,42 +405,90 @@ export default function Separacao() {
         })}
       </div>
 
-      {/* MODAL DE VISUALIZAÇÃO DOS DETALHES DA OS */}
-      {ordemSelecionada && (
+      {/* ✨ MODAL DO CHECKLIST DE CONFERÊNCIA (POKA-YOKE) ✨ */}
+      {osEmConferencia && (
+        <div style={styles.modalOverlay}>
+          <div style={{...styles.modalContent, maxWidth: '650px', backgroundColor: '#fdfefe'}}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #ecf0f1', paddingBottom: '15px', marginBottom: '20px' }}>
+              <div>
+                <h2 style={{ margin: '0 0 5px 0', color: '#2c3e50', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <IoBarcodeOutline color="#8e44ad" /> Checklist de Separação
+                </h2>
+                <p style={{ margin: 0, color: '#7f8c8d', fontSize: '13px' }}>Marque todos os itens recolhidos para liberar a conclusão da OS {osEmConferencia.codigo}.</p>
+              </div>
+              <span style={{ backgroundColor: '#eafaf1', color: '#27ae60', padding: '6px 12px', borderRadius: '20px', fontSize: '14px', fontWeight: 'bold' }}>
+                {itensConferidos.length} / {osEmConferencia.itens.length}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '400px', overflowY: 'auto', paddingRight: '5px' }}>
+              {osEmConferencia.itens.map((item: any) => {
+                const isConferido = itensConferidos.includes(item.id);
+                return (
+                  <div 
+                    key={item.id} 
+                    onClick={() => toggleItemConferido(item.id)}
+                    style={{ ...styles.checklistItem, borderColor: isConferido ? '#27ae60' : '#ddd', backgroundColor: isConferido ? '#eafaf1' : 'white', opacity: isConferido ? 0.8 : 1 }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                      <input type="checkbox" checked={isConferido} readOnly style={{ width: '20px', height: '20px', cursor: 'pointer' }} />
+                      <div>
+                        <div style={{ fontSize: '15px', fontWeight: 'bold', color: isConferido ? '#27ae60' : '#2c3e50', textDecoration: isConferido ? 'line-through' : 'none' }}>
+                          {item.produto.nome}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#7f8c8d', marginTop: '4px' }}>
+                          SKU: {item.produto.sku} <span style={{ margin: '0 5px' }}>|</span> 
+                          Local: <strong style={{ color: '#e67e22' }}>{item.produto.enderecoLocalizacao || 'Estoque Geral'}</strong>
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '20px', fontWeight: '900', color: isConferido ? '#27ae60' : '#0288D1' }}>
+                      {item.quantidade} un
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '25px', paddingTop: '15px', borderTop: '1px solid #ecf0f1' }}>
+              <button type="button" onClick={() => setOsEmConferencia(null)} style={{...styles.btnCancelar, backgroundColor: '#f1f2f6'}}>Cancelar e Voltar</button>
+              
+              <button 
+                type="button" 
+                disabled={itensConferidos.length !== osEmConferencia.itens.length}
+                onClick={() => confirmarFinalizacao(osEmConferencia.id)} 
+                style={{
+                  ...styles.btnPrincipal, 
+                  backgroundColor: itensConferidos.length === osEmConferencia.itens.length ? '#27ae60' : '#bdc3c7',
+                  cursor: itensConferidos.length === osEmConferencia.itens.length ? 'pointer' : 'not-allowed'
+                }}
+              >
+                <IoCheckmarkCircleOutline size={20} /> Concluir e Baixar Estoque
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE VISUALIZAÇÃO DOS DETALHES (Somente Leitura, com Rota) */}
+      {ordemSelecionada && !osEmConferencia && (
         <div style={styles.modalOverlay}>
           <div style={{...styles.modalContent, maxWidth: '600px'}}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <h2 style={{ margin: '0', color: '#2c3e50' }}>Detalhes da Ordem: {ordemSelecionada.codigo}</h2>
-              <span style={{ backgroundColor: '#f1f2f6', color: '#7f8c8d', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' }}>
-                {ordemSelecionada.tipo}
-              </span>
+              <h2 style={{ margin: '0', color: '#2c3e50' }}>Detalhes da Rota: {ordemSelecionada.codigo}</h2>
+              <span style={{ backgroundColor: '#f1f2f6', color: '#7f8c8d', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' }}>{ordemSelecionada.tipo}</span>
             </div>
             
-            <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#34495e' }}>
-              <div>
-                <div style={{ marginBottom: '5px' }}><strong>Solicitante:</strong> {ordemSelecionada.solicitante?.nome || 'Não informado'}</div>
-                <div><strong>Criação:</strong> {ordemSelecionada.createdAt ? `${new Date(ordemSelecionada.createdAt).toLocaleDateString('pt-BR')} às ${new Date(ordemSelecionada.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : '-'}</div>
-                {ordemSelecionada.status === 'Concluída' && ordemSelecionada.updatedAt && (
-                  <div style={{ marginTop: '5px', color: '#27ae60' }}>
-                    <strong>Conclusão:</strong> {new Date(ordemSelecionada.updatedAt).toLocaleDateString('pt-BR')} às {new Date(ordemSelecionada.updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                  </div>
-                )}
-              </div>
-              <div><strong>Status:</strong> {ordemSelecionada.status}</div>
-            </div>
-            
-            <div style={{ backgroundColor: '#f9fbfb', border: '1px solid #ecf0f1', borderRadius: '8px', padding: '5px', maxHeight: '300px', overflowY: 'auto' }}>
+            <div style={{ backgroundColor: '#fdfefe', border: '1px solid #ecf0f1', borderRadius: '8px', padding: '5px', maxHeight: '350px', overflowY: 'auto' }}>
               {ordemSelecionada.itens.map((item: any, index: number) => (
-                <div key={index} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px', borderBottom: '1px solid #eee', alignItems: 'center' }}>
+                <div key={index} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px', borderBottom: '1px solid #eee', alignItems: 'center' }}>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#2c3e50' }}>{item.produto.nome}</span>
                     <span style={{ fontSize: '12px', color: '#7f8c8d', marginTop: '3px' }}>
-                      SKU: {item.produto.sku} | <span style={{fontWeight: 'bold'}}>Local: {item.produto.enderecoLocalizacao || 'Estoque Geral'}</span>
+                      SKU: {item.produto.sku} | <span style={{fontWeight: 'bold'}}>Local: <span style={{ color: '#e67e22'}}>{item.produto.enderecoLocalizacao || 'Estoque Geral'}</span></span>
                     </span>
                   </div>
-                  <span style={{ color: '#0288D1', fontWeight: '900', fontSize: '16px', whiteSpace: 'nowrap', marginLeft: '15px' }}>
-                    {item.quantidade} un
-                  </span>
+                  <span style={{ color: '#0288D1', fontWeight: '900', fontSize: '16px', whiteSpace: 'nowrap', marginLeft: '15px' }}>{item.quantidade} un</span>
                 </div>
               ))}
             </div>
@@ -396,29 +500,32 @@ export default function Separacao() {
         </div>
       )}
 
-      {/* MODAL DE CRIAÇÃO DA NOVA OS */}
+      {/* MODAL DE CRIAÇÃO DA NOVA OS (AGORA COM PRIORIDADE) */}
       {modalNovaOrdem && (
         <div style={styles.modalOverlay}>
           <div style={{...styles.modalContent, maxWidth: '650px', overflow: 'visible'}}>
             <h2 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>Gerar Nova Ordem de Serviço</h2>
-            <p style={{ color: '#7f8c8d', marginBottom: '20px' }}>Monte a lista de produtos e escolha a direção da movimentação.</p>
-
-            <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f9fbfb', borderRadius: '8px', border: '1px solid #ecf0f1' }}>
-              <label style={styles.label}>Finalidade da Ordem de Serviço</label>
-              <div style={{ display: 'flex', gap: '15px', marginTop: '10px' }}>
-                {['SAIDA', 'ENTRADA', 'DEVOLUCAO'].map(tipo => (
-                  <label key={tipo} style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontWeight: 'bold', color: tipoOS === tipo ? '#0288D1' : '#7f8c8d' }}>
-                    <input 
-                      type="radio" 
-                      name="tipoOS" 
-                      value={tipo} 
-                      checked={tipoOS === tipo} 
-                      onChange={() => setTipoOS(tipo)} 
-                      style={{ cursor: 'pointer' }}
-                    />
-                    {tipo === 'SAIDA' ? 'Saída (Retirada)' : tipo === 'ENTRADA' ? 'Entrada (Recebimento)' : 'Devolução (Retorno)'}
-                  </label>
-                ))}
+            
+            <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
+              {/* TIPO DE OS */}
+              <div style={{ flex: 1, padding: '15px', backgroundColor: '#f9fbfb', borderRadius: '8px', border: '1px solid #ecf0f1' }}>
+                <label style={styles.label}>Finalidade</label>
+                <select style={styles.input} value={tipoOS} onChange={e => setTipoOS(e.target.value)}>
+                  <option value="SAIDA">Saída (Retirada)</option>
+                  <option value="ENTRADA">Entrada (Recebimento)</option>
+                  <option value="DEVOLUCAO">Devolução (Retorno)</option>
+                </select>
+              </div>
+              {/* PRIORIDADE */}
+              <div style={{ flex: 1, padding: '15px', backgroundColor: prioridadeOS === 'Urgente' ? '#fdedec' : '#f9fbfb', borderRadius: '8px', border: prioridadeOS === 'Urgente' ? '1px solid #e74c3c' : '1px solid #ecf0f1' }}>
+                <label style={{...styles.label, color: prioridadeOS === 'Urgente' ? '#c0392b' : '#34495e'}}>
+                  {prioridadeOS === 'Urgente' ? <IoWarningOutline /> : null} Nível de Prioridade
+                </label>
+                <select style={{...styles.input, fontWeight: prioridadeOS === 'Urgente' ? 'bold' : 'normal', color: prioridadeOS === 'Urgente' ? '#c0392b' : '#333'}} value={prioridadeOS} onChange={e => setPrioridadeOS(e.target.value)}>
+                  <option value="Normal">Normal</option>
+                  <option value="Alta">Alta</option>
+                  <option value="Urgente">Urgente (Imediato)</option>
+                </select>
               </div>
             </div>
 
@@ -427,41 +534,19 @@ export default function Separacao() {
                 <label style={styles.label}>Produto (Nome ou SKU)</label>
                 <div style={{ position: 'relative' }}>
                   <IoSearchOutline size={18} color="#7f8c8d" style={{ position: 'absolute', left: '10px', top: '12px' }} />
-                  <input 
-                    type="text" 
-                    style={{...styles.input, paddingLeft: '35px'}} 
-                    placeholder="Comece a digitar para pesquisar..."
-                    value={buscaProduto}
-                    onChange={(e) => {
-                      setBuscaProduto(e.target.value);
-                      setProdutoSelecionado('');
-                      setMostrarSugestoes(true);
-                    }}
-                    onFocus={() => setMostrarSugestoes(true)}
-                    onBlur={() => setTimeout(() => setMostrarSugestoes(false), 200)}
-                  />
+                  <input type="text" style={{...styles.input, paddingLeft: '35px'}} placeholder="Pesquise..." value={buscaProduto} onChange={(e) => { setBuscaProduto(e.target.value); setProdutoSelecionado(''); setMostrarSugestoes(true); }} onFocus={() => setMostrarSugestoes(true)} onBlur={() => setTimeout(() => setMostrarSugestoes(false), 200)} />
                 </div>
-
                 {mostrarSugestoes && buscaProduto.length > 0 && (
                   <div style={styles.listaFlutuante}>
-                    {produtosFiltrados.length === 0 ? (
-                      <div style={{ padding: '15px', color: '#7f8c8d', textAlign: 'center', fontSize: '13px' }}>Nenhum produto encontrado.</div>
-                    ) : (
-                      produtosFiltrados.map((p) => (
-                        <div 
-                          key={p.id} 
-                          style={styles.itemFlutuante}
-                          onMouseDown={() => selecionarProdutoSugestao(p)}
-                        >
-                          <span style={{ fontWeight: 'bold', color: '#2c3e50', display: 'block' }}>{p.nome}</span>
-                          <span style={{ color: '#0288D1', fontSize: '11px', fontWeight: 'bold' }}>SKU: {p.sku}</span>
-                        </div>
-                      ))
-                    )}
+                    {produtosFiltrados.length === 0 ? <div style={{ padding: '15px', color: '#7f8c8d', textAlign: 'center', fontSize: '13px' }}>Nenhum produto encontrado.</div> : produtosFiltrados.map((p) => (
+                      <div key={p.id} style={styles.itemFlutuante} onMouseDown={() => selecionarProdutoSugestao(p)}>
+                        <span style={{ fontWeight: 'bold', color: '#2c3e50', display: 'block' }}>{p.nome}</span>
+                        <span style={{ color: '#0288D1', fontSize: '11px', fontWeight: 'bold' }}>SKU: {p.sku} | Loc: {p.enderecoLocalizacao || '-'}</span>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
-
               <div style={{ flex: 1 }}>
                 <label style={styles.label}>Qtd.</label>
                 <input type="number" style={styles.input} value={quantidadeDesejada} onChange={e => setQuantidadeDesejada(e.target.value)} min="1" />
@@ -496,16 +581,18 @@ export default function Separacao() {
 }
 
 const styles: { [key: string]: React.CSSProperties } = {
-  btnPrincipal: { backgroundColor: '#8e44ad', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' },
+  btnPrincipal: { backgroundColor: '#8e44ad', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' },
   card: { backgroundColor: 'white', padding: '20px', borderRadius: '10px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column' },
   btnAcao: { color: 'white', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' },
   modalOverlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
   modalContent: { backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' },
   label: { display: 'block', fontSize: '13px', fontWeight: 'bold', color: '#34495e', marginBottom: '5px' },
-  input: { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '15px', boxSizing: 'border-box', backgroundColor: '#fafafa', outline: 'none' },
+  input: { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '14px', boxSizing: 'border-box', backgroundColor: '#white', outline: 'none' },
+  inputFiltro: { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '14px', boxSizing: 'border-box', outline: 'none', cursor: 'pointer' },
   btnCancelar: { backgroundColor: '#f1f2f6', color: '#7f8c8d', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' },
   listaFlutuante: { position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: 'white', border: '1px solid #ddd', borderRadius: '8px', marginTop: '5px', maxHeight: '220px', overflowY: 'auto', zIndex: 100, boxShadow: '0 10px 25px rgba(0,0,0,0.15)' },
   itemFlutuante: { padding: '12px 15px', borderBottom: '1px solid #f4f7f6', cursor: 'pointer', transition: 'background-color 0.2s', display: 'flex', flexDirection: 'column', gap: '2px' },
   tabsContainer: { display: 'flex', gap: '20px', marginBottom: '25px', borderBottom: '2px solid #ecf0f1', paddingBottom: '0px' },
-  tabButton: { background: 'none', border: 'none', borderBottom: '3px solid transparent', padding: '10px 5px', fontSize: '15px', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s', marginBottom: '-2px' }
+  tabButton: { background: 'none', border: 'none', borderBottom: '3px solid transparent', padding: '10px 5px', fontSize: '15px', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s', marginBottom: '-2px' },
+  checklistItem: { border: '2px solid', padding: '15px', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }
 };
