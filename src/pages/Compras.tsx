@@ -4,6 +4,9 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { toast } from 'react-toastify'; 
+import { 
+  IoTimeOutline, IoWarningOutline, IoWalletOutline 
+} from 'react-icons/io5';
 
 export default function Compras() {
   const [fornecedores, setFornecedores] = useState<any[]>([]);
@@ -14,7 +17,7 @@ export default function Compras() {
   const [usuarioLogado, setUsuarioLogado] = useState<any>(null);
   const [modalVisivel, setModalVisivel] = useState(false);
 
-  // NOVO: Estado para saber se estamos editando
+  // Estado para saber se estamos editando
   const [idEdicao, setIdEdicao] = useState<string | null>(null);
 
   const [fornecedorId, setFornecedorId] = useState('');
@@ -56,13 +59,12 @@ export default function Compras() {
     setModalVisivel(true);
   }
 
-  // NOVO: Função para abrir o modal de edição
   function abrirModalEdicao(pedido: any) {
     setIdEdicao(pedido.id);
     setFornecedorId(pedido.fornecedorId);
     setProdutoId(pedido.produtoId);
     setQuantidade(String(pedido.quantidade));
-    setCustoEstimado(String(pedido.custoTotal / pedido.quantidade)); // Calcula o preço unitário novamente
+    setCustoEstimado(String(pedido.custoTotal / pedido.quantidade)); 
     setPrevisaoEntrega(pedido.dataPrevisao ? pedido.dataPrevisao.substring(0, 10) : '');
     setModalVisivel(true);
   }
@@ -95,7 +97,6 @@ export default function Compras() {
     }
   }
 
-  // NOVO: Função de Exclusão
   async function apagarPedido(id: string) {
     if (window.confirm("Deseja mesmo excluir este pedido de compra? Esta ação não pode ser desfeita.")) {
       try {
@@ -123,6 +124,27 @@ export default function Compras() {
       }
     }
   }
+
+  // ==========================================
+  // LÓGICA DO MINI-DASHBOARD FINANCEIRO E ATRASOS
+  // ==========================================
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+
+  const totalEmTransito = pedidos
+    .filter(p => p.status === 'Pendente')
+    .reduce((acc, p) => acc + Number(p.custoTotal), 0);
+
+  const totalCompradoMes = pedidos
+    .filter(p => new Date(p.createdAt).getMonth() === new Date().getMonth())
+    .reduce((acc, p) => acc + Number(p.custoTotal), 0);
+
+  const pedidosAtrasados = pedidos.filter(p => {
+    if (p.status !== 'Pendente' || !p.dataPrevisao) return false;
+    const prev = new Date(p.dataPrevisao);
+    prev.setHours(0, 0, 0, 0);
+    return prev < hoje;
+  }).length;
 
   const exportarExcel = () => {
     if (pedidos.length === 0) return toast.warn("Não há dados para exportar."); 
@@ -158,13 +180,41 @@ export default function Compras() {
   if (carregando) return <div>Sincronizando Módulo de Compras...</div>;
 
   return (
-    <div>
+    <div style={{ paddingBottom: '40px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h1 style={{ color: '#2c3e50', margin: 0 }}>Pedidos de Compra</h1>
+        <div>
+          <h1 style={{ color: '#2c3e50', margin: 0 }}>Pedidos de Compra</h1>
+          <p style={{ margin: 0, color: '#7f8c8d', fontSize: '14px' }}>Gestão de suprimentos e recebimento de fornecedores.</p>
+        </div>
         <div style={{ display: 'flex', gap: '10px' }}>
           <button onClick={exportarExcel} style={styles.btnExcel}>📊 Exportar Excel</button>
           <button onClick={exportarPDF} style={styles.btnPDF}>📄 Exportar PDF</button>
           <button onClick={abrirModalNovo} style={styles.btnPrincipal}>+ Emitir Pedido</button>
+        </div>
+      </div>
+
+      {/* MINI-DASHBOARD FINANCEIRO */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '25px' }}>
+        <div style={{...styles.cardDashboard, borderLeft: '5px solid #f39c12'}}>
+          <div style={styles.iconDash}><IoTimeOutline size={24} color="#f39c12" /></div>
+          <div>
+            <p style={styles.dashTitle}>Total em Trânsito (Pendentes)</p>
+            <h2 style={styles.dashValue}>R$ {totalEmTransito.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
+          </div>
+        </div>
+        <div style={{...styles.cardDashboard, borderLeft: '5px solid #e74c3c'}}>
+          <div style={{...styles.iconDash, backgroundColor: '#fdedec'}}><IoWarningOutline size={24} color="#e74c3c" /></div>
+          <div>
+            <p style={styles.dashTitle}>Entregas Atrasadas</p>
+            <h2 style={{...styles.dashValue, color: '#e74c3c'}}>{pedidosAtrasados} fornecedor(es)</h2>
+          </div>
+        </div>
+        <div style={{...styles.cardDashboard, borderLeft: '5px solid #27ae60'}}>
+          <div style={{...styles.iconDash, backgroundColor: '#eafaf1'}}><IoWalletOutline size={24} color="#27ae60" /></div>
+          <div>
+            <p style={styles.dashTitle}>Compras neste Mês</p>
+            <h2 style={styles.dashValue}>R$ {totalCompradoMes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
+          </div>
         </div>
       </div>
 
@@ -186,29 +236,53 @@ export default function Compras() {
             {pedidos.length === 0 && (
               <tr><td colSpan={8} style={{textAlign: 'center', padding: '30px', color: '#7f8c8d'}}>Ainda não efetuou nenhum pedido.</td></tr>
             )}
-            {pedidos.map((item) => (
-              <tr key={item.id} style={styles.tr}>
-                <td style={styles.td}><span style={styles.badgeCodigo}>{item.codigo || '-'}</span></td>
-                <td style={styles.td}>{new Date(item.createdAt).toLocaleDateString('pt-BR')}</td>
-                <td style={styles.td}><strong>{item.fornecedor?.nomeEmpresa}</strong></td>
-                <td style={styles.td}>{item.produto?.nome}</td>
-                <td style={{...styles.td, textAlign: 'center', fontWeight: 'bold'}}>{item.quantidade}</td>
-                <td style={{...styles.td, color: '#e74c3c', fontWeight: 'bold'}}>R$ {item.custoTotal.toFixed(2).replace('.', ',')}</td>
-                <td style={styles.td}><span style={item.status === 'Pendente' ? styles.badgeAmarelo : styles.badgeVerde}>{item.status}</span></td>
-                
-                <td style={{...styles.td, textAlign: 'center'}}>
-                  {item.status === 'Pendente' ? (
-                    <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
-                      <button onClick={() => marcarComoRecebido(item.id)} style={styles.btnAcao}>📥 Receber</button>
-                      <button onClick={() => abrirModalEdicao(item)} style={styles.btnEditar}>✏️ Editar</button>
-                      <button onClick={() => apagarPedido(item.id)} style={styles.btnApagar}>🗑️ Excluir</button>
-                    </div>
-                  ) : (
-                    <span style={{ color: '#7f8c8d', fontSize: '12px', fontWeight: 'bold' }}>✓ Concluído</span>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {pedidos.map((item) => {
+              // Lógica de Detecção de Atraso
+              let badgeStatus = styles.badgeAmarelo;
+              let textoStatus = item.status;
+
+              if (item.status === 'Recebido') {
+                badgeStatus = styles.badgeVerde;
+              } else if (item.dataPrevisao) {
+                const prev = new Date(item.dataPrevisao);
+                prev.setHours(0,0,0,0);
+                if (prev < hoje) {
+                  badgeStatus = styles.badgeVermelho;
+                  textoStatus = 'Atrasado';
+                }
+              }
+
+              return (
+                <tr key={item.id} style={styles.tr}>
+                  <td style={styles.td}><span style={styles.badgeCodigo}>{item.codigo || '-'}</span></td>
+                  <td style={styles.td}>
+                    <div>{new Date(item.createdAt).toLocaleDateString('pt-BR')}</div>
+                    {item.dataPrevisao && (
+                      <div style={{ fontSize: '11px', color: '#7f8c8d', marginTop: '2px' }}>
+                        Prev: {new Date(item.dataPrevisao).toLocaleDateString('pt-BR')}
+                      </div>
+                    )}
+                  </td>
+                  <td style={styles.td}><strong>{item.fornecedor?.nomeEmpresa}</strong></td>
+                  <td style={styles.td}>{item.produto?.nome}</td>
+                  <td style={{...styles.td, textAlign: 'center', fontWeight: 'bold'}}>{item.quantidade}</td>
+                  <td style={{...styles.td, color: '#e74c3c', fontWeight: 'bold'}}>R$ {item.custoTotal.toFixed(2).replace('.', ',')}</td>
+                  <td style={styles.td}><span style={badgeStatus}>{textoStatus}</span></td>
+                  
+                  <td style={{...styles.td, textAlign: 'center'}}>
+                    {item.status === 'Pendente' ? (
+                      <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
+                        <button onClick={() => marcarComoRecebido(item.id)} style={styles.btnAcao}>📥 Receber</button>
+                        <button onClick={() => abrirModalEdicao(item)} style={styles.btnEditar}>✏️ Editar</button>
+                        <button onClick={() => apagarPedido(item.id)} style={styles.btnApagar}>🗑️ Excluir</button>
+                      </div>
+                    ) : (
+                      <span style={{ color: '#7f8c8d', fontSize: '12px', fontWeight: 'bold' }}>✓ Concluído</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -267,6 +341,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   tr: { borderBottom: '1px solid #ecf0f1' },
   td: { padding: '15px 20px', color: '#2c3e50', fontSize: '14px', verticalAlign: 'middle' },
   badgeAmarelo: { backgroundColor: '#fef9e7', color: '#f39c12', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' },
+  badgeVermelho: { backgroundColor: '#fdedec', color: '#c0392b', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' },
   badgeVerde: { backgroundColor: '#eafaf1', color: '#27ae60', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' },
   badgeCodigo: { backgroundColor: '#f1f2f6', color: '#2c3e50', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', border: '1px solid #ddd' },
   btnPrincipal: { backgroundColor: '#e67e22', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' },
@@ -280,5 +355,9 @@ const styles: { [key: string]: React.CSSProperties } = {
   btnFechar: { background: 'none', border: 'none', fontSize: '20px', color: '#e74c3c', cursor: 'pointer' },
   label: { display: 'block', fontSize: '13px', fontWeight: 'bold', color: '#34495e', marginBottom: '5px' },
   input: { width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '15px', boxSizing: 'border-box', backgroundColor: '#fafafa' },
-  btnSalvar: { backgroundColor: '#e67e22', color: 'white', padding: '15px', borderRadius: '8px', border: 'none', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '20px' }
+  btnSalvar: { backgroundColor: '#e67e22', color: 'white', padding: '15px', borderRadius: '8px', border: 'none', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '20px' },
+  cardDashboard: { backgroundColor: 'white', padding: '20px', borderRadius: '10px', boxShadow: '0 4px 10px rgba(0,0,0,0.03)', display: 'flex', alignItems: 'center', gap: '15px' },
+  iconDash: { backgroundColor: '#fef5e7', padding: '12px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  dashTitle: { margin: '0 0 5px 0', fontSize: '13px', color: '#7f8c8d', fontWeight: 'bold', textTransform: 'uppercase' },
+  dashValue: { margin: 0, fontSize: '22px', color: '#2c3e50' }
 };

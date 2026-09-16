@@ -4,7 +4,8 @@ import { toast } from 'react-toastify';
 import { 
   IoAddOutline, IoPrintOutline, IoCheckmarkCircleOutline, 
   IoPlayOutline, IoTrashOutline, IoSearchOutline, IoEyeOutline, 
-  IoPersonOutline, IoPauseCircleOutline, IoWarningOutline, IoBarcodeOutline
+  IoPersonOutline, IoPauseCircleOutline, IoWarningOutline, IoBarcodeOutline,
+  IoPencilOutline // ✨ NOVO ÍCONE DE EDIÇÃO
 } from 'react-icons/io5';
 
 export default function Separacao() {
@@ -13,16 +14,17 @@ export default function Separacao() {
   const [carregando, setCarregando] = useState(true);
   const [usuarioLogado, setUsuarioLogado] = useState<any>(null);
 
-  // Estados do Modal de Nova OS
+  // Estados do Modal
   const [modalNovaOrdem, setModalNovaOrdem] = useState(false);
+  const [idEdicao, setIdEdicao] = useState<string | null>(null); // ✨ CONTROLA SE É CRIAÇÃO OU EDIÇÃO
   const [quantidadeDesejada, setQuantidadeDesejada] = useState('1');
   const [tipoOS, setTipoOS] = useState('SAIDA'); 
-  const [prioridadeOS, setPrioridadeOS] = useState('Normal'); // ✨ ESTADO DE PRIORIDADE
+  const [prioridadeOS, setPrioridadeOS] = useState('Normal'); 
   const [carrinho, setCarrinho] = useState<any[]>([]);
 
   // Estados de Visualização e Conferência
   const [ordemSelecionada, setOrdemSelecionada] = useState<any>(null);
-  const [osEmConferencia, setOsEmConferencia] = useState<any>(null); // ✨ ESTADO DO CHECKLIST
+  const [osEmConferencia, setOsEmConferencia] = useState<any>(null);
   const [itensConferidos, setItensConferidos] = useState<string[]>([]);
 
   // Estados de Busca e Filtros
@@ -30,8 +32,8 @@ export default function Separacao() {
   const [buscaProduto, setBuscaProduto] = useState(''); 
   const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
   const [filtroStatus, setFiltroStatus] = useState('Pendente'); 
-  const [buscaOS, setBuscaOS] = useState(''); // ✨ PESQUISA GLOBAL DE OS
-  const [filtroData, setFiltroData] = useState('Todos'); // ✨ FILTRO DE DATA
+  const [buscaOS, setBuscaOS] = useState(''); 
+  const [filtroData, setFiltroData] = useState('Todos'); 
 
   async function carregarDados() {
     setCarregando(true);
@@ -65,6 +67,33 @@ export default function Separacao() {
     setMostrarSugestoes(false);
   }
 
+  // ✨ FUNÇÃO DE ABRIR MODAL VAZIO (NOVA OS)
+  function abrirModalNovo() {
+    setIdEdicao(null);
+    setTipoOS('SAIDA');
+    setPrioridadeOS('Normal');
+    setCarrinho([]);
+    setModalNovaOrdem(true);
+  }
+
+  // ✨ FUNÇÃO DE ABRIR MODAL PREENCHIDO (EDITAR OS)
+  function abrirModalEdicao(ordem: any) {
+    setIdEdicao(ordem.id);
+    setTipoOS(ordem.tipo);
+    setPrioridadeOS(ordem.prioridade || 'Normal');
+    
+    // Transforma os itens do banco no formato do carrinho
+    const carrinhoFormatado = ordem.itens.map((item: any) => ({
+      produtoId: item.produtoId,
+      nome: item.produto.nome,
+      sku: item.produto.sku,
+      quantidade: item.quantidade
+    }));
+    
+    setCarrinho(carrinhoFormatado);
+    setModalNovaOrdem(true);
+  }
+
   function adicionarAoCarrinho() {
     if (!produtoSelecionado || Number(quantidadeDesejada) <= 0) return toast.warn("Selecione um produto e a quantidade.");
     
@@ -88,19 +117,34 @@ export default function Separacao() {
     setCarrinho(novoCarrinho);
   }
 
-  async function gerarOrdem() {
+  // ✨ UNIFICA CRIAR E EDITAR NUMA FUNÇÃO SÓ ✨
+  async function salvarOrdem() {
     if (carrinho.length === 0) return toast.warn("O carrinho está vazio.");
+    
     try {
-      await api.post('/wms/ordens', {
-        solicitanteId: usuarioLogado.id,
+      const payload = {
+        solicitanteId: usuarioLogado?.id,
         tipo: tipoOS, 
-        prioridade: prioridadeOS, // ✨ ENVIA PRIORIDADE
+        prioridade: prioridadeOS, 
         itens: carrinho
-      });
-      toast.success(`Ordem de ${tipoOS} gerada com sucesso!`);
-      setModalNovaOrdem(false); setCarrinho([]); setPrioridadeOS('Normal');
+      };
+
+      if (idEdicao) {
+        await api.put(`/wms/ordens/${idEdicao}`, payload);
+        toast.success("Ordem atualizada com sucesso!");
+      } else {
+        await api.post('/wms/ordens', payload);
+        toast.success(`Ordem de ${tipoOS} gerada com sucesso!`);
+      }
+
+      setModalNovaOrdem(false); 
+      setCarrinho([]); 
+      setPrioridadeOS('Normal');
+      setIdEdicao(null);
       carregarDados();
-    } catch (error: any) { toast.error(error.response?.data?.error || "Erro ao gerar OS."); }
+    } catch (error: any) { 
+      toast.error(error.response?.data?.error || "Erro ao salvar OS."); 
+    }
   }
 
   async function excluirOrdem(id: string) {
@@ -120,7 +164,6 @@ export default function Separacao() {
     } catch (error) { toast.error("Erro ao iniciar separação."); }
   }
 
-  // ✨ NOVA FUNÇÃO DE PAUSA ✨
   async function pausarSeparacao(id: string) {
     if (!window.confirm("Deseja pausar esta OS e devolvê-la para a fila de Pendentes?")) return;
     try {
@@ -130,7 +173,6 @@ export default function Separacao() {
     } catch (error) { toast.error("Erro ao pausar a OS."); }
   }
 
-  // ✨ ORDENAÇÃO INTELIGENTE POR LOCALIZAÇÃO (ROTEIRIZAÇÃO) ✨
   const ordenarItensPorLocal = (itens: any[]) => {
     return [...itens].sort((a, b) => {
       const localA = a.produto.enderecoLocalizacao || 'ZZZ';
@@ -139,7 +181,6 @@ export default function Separacao() {
     });
   };
 
-  // ✨ FUNÇÕES DO CHECKLIST ✨
   function abrirConferencia(ordem: any) {
     setOsEmConferencia({ ...ordem, itens: ordenarItensPorLocal(ordem.itens) });
     setItensConferidos([]);
@@ -166,7 +207,7 @@ export default function Separacao() {
     const janela = window.open('', '', 'width=400,height=600');
     if (!janela) return toast.error("Pop-up bloqueado pelo navegador.");
 
-    const itensRoteirizados = ordenarItensPorLocal(ordem.itens); // ✨ APLICA A ROTEIRIZAÇÃO NA IMPRESSÃO
+    const itensRoteirizados = ordenarItensPorLocal(ordem.itens); 
     const tituloDoc = ordem.tipo === 'ENTRADA' ? 'LISTA DE ENTRADA' : ordem.tipo === 'DEVOLUCAO' ? 'LISTA DE DEVOLUÇÃO' : 'LISTA DE PICKING';
     const dataOS = ordem.createdAt ? new Date(ordem.createdAt) : new Date();
     const dataFormatada = dataOS.toLocaleDateString('pt-BR');
@@ -228,11 +269,9 @@ export default function Separacao() {
     janela.document.close();
   }
 
-  // ✨ SUPER FILTRO COM BUSCA E DATAS ✨
   const ordensFiltradas = ordens.filter(ordem => {
     if (filtroStatus !== 'Todos' && ordem.status !== filtroStatus) return false;
     
-    // Busca por Texto (OS ou Solicitante)
     if (buscaOS) {
       const termo = buscaOS.toLowerCase();
       const matchCodigo = ordem.codigo.toLowerCase().includes(termo);
@@ -240,7 +279,6 @@ export default function Separacao() {
       if (!matchCodigo && !matchSolicitante) return false;
     }
 
-    // Filtro por Data
     if (filtroData !== 'Todos') {
       const dataOS = new Date(ordem.createdAt);
       const hoje = new Date();
@@ -254,14 +292,12 @@ export default function Separacao() {
     }
     return true;
   }).sort((a, b) => {
-    // ✨ ORDENAÇÃO DE PENDENTES: URGENTE VEM PRIMEIRO ✨
     if (a.status === 'Pendente' && b.status === 'Pendente') {
       const pesoPrioridade = { 'Urgente': 3, 'Alta': 2, 'Normal': 1 };
       const pesoA = pesoPrioridade[a.prioridade as keyof typeof pesoPrioridade] || 1;
       const pesoB = pesoPrioridade[b.prioridade as keyof typeof pesoPrioridade] || 1;
-      if (pesoA !== pesoB) return pesoB - pesoA; // Ordem decrescente de importância
+      if (pesoA !== pesoB) return pesoB - pesoA; 
     }
-    // Depois, ordena pela data mais recente
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
@@ -271,12 +307,11 @@ export default function Separacao() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <h1 style={{ color: '#2c3e50', margin: 0 }}>Gestão de Ordens e Retiradas</h1>
-        <button onClick={() => setModalNovaOrdem(true)} style={styles.btnPrincipal}>
+        <button onClick={abrirModalNovo} style={styles.btnPrincipal}>
           <IoAddOutline size={20} /> Nova Ordem
         </button>
       </div>
 
-      {/* ✨ NOVA BARRA DE FERRAMENTAS E FILTROS ✨ */}
       <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', backgroundColor: 'white', padding: '15px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
         <div style={{ flex: 1, position: 'relative' }}>
           <IoSearchOutline size={18} color="#7f8c8d" style={{ position: 'absolute', left: '12px', top: '12px' }} />
@@ -318,8 +353,6 @@ export default function Separacao() {
         
         {ordensFiltradas.map((ordem) => {
           const corTipo = ordem.tipo === 'ENTRADA' ? { bg: '#eafaf1', text: '#27ae60' } : ordem.tipo === 'SAIDA' ? { bg: '#fdedec', text: '#c0392b' } : { bg: '#ebf5fb', text: '#2980b9' };
-          
-          // Cores da Prioridade
           const corPrioridade = ordem.prioridade === 'Urgente' ? '#e74c3c' : ordem.prioridade === 'Alta' ? '#e67e22' : '#95a5a6';
 
           const dataCard = ordem.createdAt ? new Date(ordem.createdAt) : new Date();
@@ -330,7 +363,6 @@ export default function Separacao() {
           return (
             <div key={ordem.id} style={{ ...styles.card, position: 'relative', overflow: 'hidden', borderTop: `5px solid ${ordem.status === 'Pendente' ? '#f39c12' : ordem.status === 'Em Separação' ? '#3498db' : '#27ae60'}` }}>
               
-              {/* ✨ BADGE DE PRIORIDADE ✨ */}
               <div style={{ position: 'absolute', top: '15px', right: '-30px', backgroundColor: corPrioridade, color: 'white', fontSize: '10px', fontWeight: 'bold', padding: '4px 35px', transform: 'rotate(45deg)', textTransform: 'uppercase', boxShadow: '0 2px 4px rgba(0,0,0,0.2)', zIndex: 1 }}>
                 {ordem.prioridade}
               </div>
@@ -363,6 +395,12 @@ export default function Separacao() {
                   <button onClick={() => iniciarSeparacao(ordem.id)} style={{...styles.btnAcao, backgroundColor: '#3498db', flex: 1}}>
                     <IoPlayOutline size={18} /> Iniciar Operação
                   </button>
+                  
+                  {/* ✨ BOTÃO DE EDITAR ADICIONADO AQUI ✨ */}
+                  <button onClick={() => abrirModalEdicao(ordem)} style={{...styles.btnAcao, backgroundColor: '#f1c40f', padding: '10px 15px'}} title="Editar Ordem">
+                    <IoPencilOutline size={18} color="white" />
+                  </button>
+
                   <button onClick={() => excluirOrdem(ordem.id)} style={{...styles.btnAcao, backgroundColor: '#e74c3c', padding: '10px 15px'}} title="Excluir Ordem">
                     <IoTrashOutline size={18} />
                   </button>
@@ -376,7 +414,6 @@ export default function Separacao() {
                       <IoPersonOutline color="#2980b9" size={14} />
                       <span style={{ color: '#2980b9', fontSize: '12px' }}>Em separação por: <strong>{ordem.separador?.nome}</strong></span>
                     </div>
-                    {/* ✨ BOTÃO DE PAUSA ✨ */}
                     <button onClick={() => pausarSeparacao(ordem.id)} title="Pausar OS" style={{ background: 'none', border: 'none', color: '#f39c12', cursor: 'pointer' }}>
                       <IoPauseCircleOutline size={20} />
                     </button>
@@ -386,7 +423,6 @@ export default function Separacao() {
                     <button onClick={() => imprimirZebra(ordem)} style={{...styles.btnAcao, backgroundColor: '#34495e', flex: 1}}>
                       <IoPrintOutline size={18} /> Zebra
                     </button>
-                    {/* ✨ AGORA ABRE O CHECKLIST EM VEZ DE FINALIZAR DIRETO ✨ */}
                     <button onClick={() => abrirConferencia(ordem)} style={{...styles.btnAcao, backgroundColor: '#27ae60', flex: 2}}>
                       <IoBarcodeOutline size={18} /> Conferir & Finalizar
                     </button>
@@ -405,7 +441,7 @@ export default function Separacao() {
         })}
       </div>
 
-      {/* ✨ MODAL DO CHECKLIST DE CONFERÊNCIA (POKA-YOKE) ✨ */}
+      {/* MODAL DO CHECKLIST */}
       {osEmConferencia && (
         <div style={styles.modalOverlay}>
           <div style={{...styles.modalContent, maxWidth: '650px', backgroundColor: '#fdfefe'}}>
@@ -470,7 +506,7 @@ export default function Separacao() {
         </div>
       )}
 
-      {/* MODAL DE VISUALIZAÇÃO DOS DETALHES (Somente Leitura, com Rota) */}
+      {/* MODAL DE VISUALIZAÇÃO DOS DETALHES */}
       {ordemSelecionada && !osEmConferencia && (
         <div style={styles.modalOverlay}>
           <div style={{...styles.modalContent, maxWidth: '600px'}}>
@@ -500,14 +536,15 @@ export default function Separacao() {
         </div>
       )}
 
-      {/* MODAL DE CRIAÇÃO DA NOVA OS (AGORA COM PRIORIDADE) */}
+      {/* MODAL DE CRIAÇÃO E EDIÇÃO DA OS */}
       {modalNovaOrdem && (
         <div style={styles.modalOverlay}>
           <div style={{...styles.modalContent, maxWidth: '650px', overflow: 'visible'}}>
-            <h2 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>Gerar Nova Ordem de Serviço</h2>
+            <h2 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>
+              {idEdicao ? 'Editar Ordem de Serviço' : 'Gerar Nova Ordem de Serviço'}
+            </h2>
             
             <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
-              {/* TIPO DE OS */}
               <div style={{ flex: 1, padding: '15px', backgroundColor: '#f9fbfb', borderRadius: '8px', border: '1px solid #ecf0f1' }}>
                 <label style={styles.label}>Finalidade</label>
                 <select style={styles.input} value={tipoOS} onChange={e => setTipoOS(e.target.value)}>
@@ -516,7 +553,6 @@ export default function Separacao() {
                   <option value="DEVOLUCAO">Devolução (Retorno)</option>
                 </select>
               </div>
-              {/* PRIORIDADE */}
               <div style={{ flex: 1, padding: '15px', backgroundColor: prioridadeOS === 'Urgente' ? '#fdedec' : '#f9fbfb', borderRadius: '8px', border: prioridadeOS === 'Urgente' ? '1px solid #e74c3c' : '1px solid #ecf0f1' }}>
                 <label style={{...styles.label, color: prioridadeOS === 'Urgente' ? '#c0392b' : '#34495e'}}>
                   {prioridadeOS === 'Urgente' ? <IoWarningOutline /> : null} Nível de Prioridade
@@ -569,8 +605,8 @@ export default function Separacao() {
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
               <button type="button" onClick={() => setModalNovaOrdem(false)} style={styles.btnCancelar}>Cancelar</button>
-              <button type="button" onClick={gerarOrdem} style={{...styles.btnPrincipal, backgroundColor: '#8e44ad'}}>
-                Gerar Ordem de Serviço
+              <button type="button" onClick={salvarOrdem} style={{...styles.btnPrincipal, backgroundColor: idEdicao ? '#f1c40f' : '#8e44ad'}}>
+                {idEdicao ? 'Salvar Alterações' : 'Gerar Ordem de Serviço'}
               </button>
             </div>
           </div>
