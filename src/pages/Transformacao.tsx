@@ -16,10 +16,11 @@ interface ItemEstoque {
   lote?: string;
 }
 
+// ✨ INTERFACE ATUALIZADA PARA ACEITAR TOTAL GASTO ✨
 interface IngredienteReceita {
   idInsumo: string;
   nomeInsumo: string;
-  qtdPorUnidade: number;
+  totalGasto: number; 
 }
 
 interface LogAuditoria {
@@ -40,28 +41,25 @@ export default function Transformacao() {
   const [ingredientesReceita, setIngredientesReceita] = useState<IngredienteReceita[]>([]);
   const [auditoria, setAuditoria] = useState<LogAuditoria[]>([]);
 
-  // Campos Insumo
   const [novaMpNome, setNovaMpNome] = useState('');
   const [novaMpSku, setNovaMpSku] = useState('');
   const [novaMpLote, setNovaMpLote] = useState('');
   const [novaMpQtd, setNovaMpQtd] = useState('');
 
-  // Campos Edição Universal (MP e Acabado)
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [editNome, setEditNome] = useState('');
   const [editSku, setEditSku] = useState('');
   const [editLote, setEditLote] = useState('');
   const [editQtd, setEditQtd] = useState('');
 
-  // Motor de Transformação
+  // ✨ NOVOS ESTADOS DO MOTOR DE TRANSFORMAÇÃO ✨
   const [mpSelecionadaId, setMpSelecionadaId] = useState('');
-  const [qtdMpGastaPorUnidade, setQtdMpGastaPorUnidade] = useState('1');
+  const [qtdMpGastaTotal, setQtdMpGastaTotal] = useState('1'); // Agora é a quantidade TOTAL gasta
   const [nomeProdutoFinal, setNomeProdutoFinal] = useState('');
   const [skuProdutoFinal, setSkuProdutoFinal] = useState('');
   const [loteProdutoFinal, setLoteProdutoFinal] = useState(''); 
-  const [qtdLotesProduzir, setQtdLotesProduzir] = useState('1');
+  const [qtdTotalGerada, setQtdTotalGerada] = useState('1'); // Agora é a quantidade TOTAL produzida
 
-  // Filtros
   const [buscaEstoque, setBuscaEstoque] = useState('');
   const [filtroTipo, setFiltroTipo] = useState('');
   const [buscaAuditoria, setBuscaAuditoria] = useState('');
@@ -171,48 +169,49 @@ export default function Transformacao() {
     }
   }
 
+  // ✨ LÓGICA ATUALIZADA: ADICIONAR INSUMO COM TOTAL GASTO ✨
   function adicionarInsumoNaReceita() {
-    if (!mpSelecionadaId || Number(qtdMpGastaPorUnidade) <= 0) return toast.warn("Selecione um insumo e a quantidade gasta.");
+    if (!mpSelecionadaId || Number(qtdMpGastaTotal) <= 0) return toast.warn("Selecione um insumo e a quantidade total gasta.");
     const mp = estoque.find(m => m.id === mpSelecionadaId);
     if (!mp) return;
 
     const ingExistente = ingredientesReceita.find(ing => ing.idInsumo === mp.id);
     if (ingExistente) {
       setIngredientesReceita(ingredientesReceita.map(ing => 
-        ing.idInsumo === mp.id ? { ...ing, qtdPorUnidade: ing.qtdPorUnidade + Number(qtdMpGastaPorUnidade) } : ing
+        ing.idInsumo === mp.id ? { ...ing, totalGasto: ing.totalGasto + Number(qtdMpGastaTotal) } : ing
       ));
     } else {
-      setIngredientesReceita([...ingredientesReceita, { idInsumo: mp.id, nomeInsumo: mp.nome, qtdPorUnidade: Number(qtdMpGastaPorUnidade) }]);
+      setIngredientesReceita([...ingredientesReceita, { idInsumo: mp.id, nomeInsumo: mp.nome, totalGasto: Number(qtdMpGastaTotal) }]);
     }
-    setMpSelecionadaId(''); setQtdMpGastaPorUnidade('1');
+    setMpSelecionadaId(''); setQtdMpGastaTotal('1');
   }
 
   function removerInsumoDaReceita(idInsumo: string) {
     setIngredientesReceita(ingredientesReceita.filter(ing => ing.idInsumo !== idInsumo));
   }
 
+  // ✨ LÓGICA ATUALIZADA: EXECUTAR TRANSFORMAÇÃO DIRETO COM OS TOTAIS ✨
   async function executarTransformacao(e: React.FormEvent) {
     e.preventDefault();
-    if (ingredientesReceita.length === 0) return toast.warn("A receita está vazia!");
-    if (!nomeProdutoFinal || !skuProdutoFinal || Number(qtdLotesProduzir) <= 0) return toast.warn("Preencha Nome, SKU e Quantidade a fabricar.");
+    if (ingredientesReceita.length === 0) return toast.warn("A receita está vazia! Adicione insumos.");
+    if (!nomeProdutoFinal || !skuProdutoFinal || Number(qtdTotalGerada) <= 0) return toast.warn("Preencha Nome, SKU e Total Gerado.");
     if (!loteProdutoFinal) return toast.warn("O número do Lote é obrigatório.");
 
-    const totalAProduzir = Number(qtdLotesProduzir);
+    const totalAProduzir = Number(qtdTotalGerada);
     const nomeNormalizado = nomeProdutoFinal.toLowerCase().trim();
     const skuNormalizado = skuProdutoFinal.toLowerCase().trim();
 
     const itemExistente = estoque.find(i => i.nome.toLowerCase().trim() === nomeNormalizado || i.sku.toLowerCase().trim() === skuNormalizado);
     if (itemExistente && itemExistente.tipo === 'INSUMO') return toast.error("Este Nome/SKU já pertence a um Insumo.");
 
+    // Valida o saldo sem precisar multiplicar (pois já está em total)
     for (const ing of ingredientesReceita) {
       const mp = estoque.find(m => m.id === ing.idInsumo);
-      const necessidade = ing.qtdPorUnidade * totalAProduzir;
+      const necessidade = ing.totalGasto;
       if (!mp || mp.quantidade < necessidade) {
-        return toast.error(`Saldo insuficiente de ${ing.nomeInsumo}! Necessário: ${necessidade} un.`);
+        return toast.error(`Saldo insuficiente de ${ing.nomeInsumo}! Você precisa de ${necessidade} un, mas só tem ${mp.quantidade}.`);
       }
     }
-
-    const receitaComGastos = ingredientesReceita.map(ing => ({ ...ing, totalGasto: ing.qtdPorUnidade * totalAProduzir }));
 
     try {
       const toastId = toast.loading("Processando produção...");
@@ -221,12 +220,12 @@ export default function Transformacao() {
         produtoSku: skuProdutoFinal,
         quantidade: totalAProduzir,
         codigoLote: loteProdutoFinal,
-        receitaUsada: receitaComGastos,
+        receitaUsada: ingredientesReceita, // Array já com o 'totalGasto'
         usuario: usuarioLogado?.nome
       });
       
       toast.update(toastId, { render: `Sucesso! Fabricados ${totalAProduzir}x ${nomeProdutoFinal} (Lote: ${loteProdutoFinal}).`, type: "success", isLoading: false, autoClose: 3000 });
-      setIngredientesReceita([]); setNomeProdutoFinal(''); setSkuProdutoFinal(''); setQtdLotesProduzir('1'); setLoteProdutoFinal('');
+      setIngredientesReceita([]); setNomeProdutoFinal(''); setSkuProdutoFinal(''); setQtdTotalGerada('1'); setLoteProdutoFinal('');
       carregarDadosBanco(); 
     } catch (error) {
       toast.dismiss();
@@ -278,12 +277,12 @@ export default function Transformacao() {
           </div>
         </div>
 
-        {/* COLUNA 2: MOTOR DE TRANSFORMAÇÃO */}
+        {/* COLUNA 2: MOTOR DE TRANSFORMAÇÃO ✨ ATUALIZADO ✨ */}
         <div style={{...styles.card, border: '2px solid #8e44ad', backgroundColor: '#fafbfc', boxShadow: '0 10px 25px rgba(142, 68, 173, 0.1)'}}>
           <h2 style={{...styles.cardTitle, color: '#8e44ad', borderBottomColor: '#e8d4f4'}}>2. Motor de Transformação</h2>
           
           <div style={{ backgroundColor: '#f4ecf7', padding: '15px', borderRadius: '8px', marginBottom: '15px' }}>
-            <label style={styles.label}>Insumos para gerar 1 unidade final:</label>
+            <label style={styles.label}>1º Passo: O que será GASTO nesta operação?</label>
             <select style={{...styles.input, marginBottom: '10px'}} value={mpSelecionadaId} onChange={e => setMpSelecionadaId(e.target.value)}>
               <option value="">Selecione um insumo...</option>
               {materiasPrimas.map(mp => (
@@ -291,20 +290,20 @@ export default function Transformacao() {
               ))}
             </select>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <input type="number" style={{...styles.input, width: '100px', textAlign: 'center'}} value={qtdMpGastaPorUnidade} onChange={e => setQtdMpGastaPorUnidade(e.target.value)} min="0.01" step="0.01" />
+              <input type="number" placeholder="Qtd. Total" style={{...styles.input, width: '110px', textAlign: 'center', color: '#e74c3c', fontWeight: 'bold'}} value={qtdMpGastaTotal} onChange={e => setQtdMpGastaTotal(e.target.value)} min="0.01" step="0.01" />
               <button type="button" onClick={adicionarInsumoNaReceita} style={{...styles.btnSecundario, backgroundColor: '#8e44ad', padding: '10px 15px', flex: 1, justifyContent: 'center'}}>
-                <IoAddCircleOutline size={18} /> Adicionar à Receita
+                <IoAddCircleOutline size={18} /> Add Insumo Consumido
               </button>
             </div>
           </div>
 
           <div style={{ marginBottom: '20px', minHeight: '90px', border: '1px dashed #bdc3c7', borderRadius: '8px', padding: '10px', backgroundColor: 'white' }}>
-            {ingredientesReceita.length === 0 && <p style={{ fontSize: '12px', color: '#bdc3c7', textAlign: 'center', margin: '15px 0' }}>Sua receita está vazia.</p>}
+            {ingredientesReceita.length === 0 && <p style={{ fontSize: '12px', color: '#bdc3c7', textAlign: 'center', margin: '15px 0' }}>Nenhum insumo descontado ainda.</p>}
             {ingredientesReceita.map((ing) => (
               <div key={ing.idInsumo} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid #f4f7f6' }}>
                 <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#2c3e50' }}>{ing.nomeInsumo}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontSize: '13px', color: '#e74c3c', fontWeight: 'bold' }}>-{ing.qtdPorUnidade} un</span>
+                  <span style={{ fontSize: '13px', color: '#e74c3c', fontWeight: 'bold' }}>-{ing.totalGasto} un</span>
                   <button type="button" onClick={() => removerInsumoDaReceita(ing.idInsumo)} style={{...styles.btnAcaoIcon, color: '#e74c3c'}}><IoCloseOutline size={16}/></button>
                 </div>
               </div>
@@ -313,9 +312,9 @@ export default function Transformacao() {
 
           <form onSubmit={executarTransformacao} style={{ borderTop: '2px solid #e8d4f4', paddingTop: '15px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
-               <label style={styles.label}>Produto Final:</label>
+               <label style={styles.label}>2º Passo: Qual produto GEROU e entrou no estoque?</label>
                <select 
-                  style={{ fontSize: '12px', padding: '4px 8px', borderRadius: '6px', border: '1px solid #bdc3c7', outline: 'none', backgroundColor: '#fff', color: '#34495e', fontWeight: 'bold', cursor: 'pointer' }}
+                  style={{ fontSize: '11px', padding: '4px 8px', borderRadius: '6px', border: '1px solid #bdc3c7', outline: 'none', backgroundColor: '#fff', color: '#34495e', fontWeight: 'bold', cursor: 'pointer' }}
                   onChange={e => selecionarProdutoExistente(e.target.value)}
                >
                   <option value="">Repetir um produto já existente?</option>
@@ -324,7 +323,7 @@ export default function Transformacao() {
                   ))}
                </select>
             </div>
-            <input type="text" placeholder="Nome (Ex: Pack Lenço)" style={{...styles.input, marginBottom: '10px'}} value={nomeProdutoFinal} onChange={e => setNomeProdutoFinal(e.target.value)} />
+            <input type="text" placeholder="Nome do Produto (Ex: Display 833)" style={{...styles.input, marginBottom: '10px'}} value={nomeProdutoFinal} onChange={e => setNomeProdutoFinal(e.target.value)} />
             
             <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
               <div style={{ flex: 1.5 }}>
@@ -336,16 +335,16 @@ export default function Transformacao() {
                 <input type="text" placeholder="Ex: L-2026" style={styles.input} value={loteProdutoFinal} onChange={e => setLoteProdutoFinal(e.target.value)} required />
               </div>
               <div style={{ flex: 1 }}>
-                <label style={styles.label}>Qtd a Fabricar:</label>
-                <input type="number" style={{...styles.input, fontWeight: 'bold', color: '#8e44ad'}} value={qtdLotesProduzir} onChange={e => setQtdLotesProduzir(e.target.value)} min="1" />
+                <label style={styles.label}>Total Gerado:</label>
+                <input type="number" style={{...styles.input, fontWeight: 'bold', color: '#27ae60'}} value={qtdTotalGerada} onChange={e => setQtdTotalGerada(e.target.value)} min="1" />
               </div>
             </div>
-            <button type="submit" style={styles.btnAcaoTransformar}>Fabricar Produto <IoCubeOutline size={20} /></button>
+            <button type="submit" style={styles.btnAcaoTransformar}>Confirmar Operação <IoCheckmarkOutline size={20} /></button>
           </form>
         </div>
       </div>
 
-      {/* ✨ LAYOUT ATUALIZADO: COLUNADO E 100% LARGURA ✨ */}
+      {/* ÁREA INFERIOR: ESTOQUE E AUDITORIA EM COLUNA UNICA */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '30px', marginTop: '30px' }}>
         
         {/* TABELA DE ESTOQUE VIRTUAL */}
@@ -425,7 +424,7 @@ export default function Transformacao() {
           </div>
         </div>
 
-        {/* RELATÓRIO DE PRODUÇÃO (AUDITORIA) - AGORA EMBAIXO DO ESTOQUE */}
+        {/* RELATÓRIO DE PRODUÇÃO (AUDITORIA) */}
         <div style={{ ...styles.card, backgroundColor: '#2c3e50', color: 'white' }}>
           <h2 style={{ ...styles.cardTitle, color: 'white', borderBottomColor: '#34495e', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <IoTimeOutline size={20} /> Relatório de Produção
@@ -493,7 +492,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   lista: { flex: 1, overflowY: 'auto', maxHeight: '420px' },
   emptyText: { textAlign: 'center', color: '#bdc3c7', fontSize: '13px', marginTop: '30px' },
   listItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', border: '1px solid #ecf0f1', borderRadius: '8px', marginBottom: '10px', backgroundColor: '#fff' },
-  btnAcaoTransformar: { backgroundColor: '#8e44ad', width: '100%', color: 'white', border: 'none', padding: '15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginTop: '20px', boxShadow: '0 4px 10px rgba(142, 68, 173, 0.3)' },
+  btnAcaoTransformar: { backgroundColor: '#27ae60', width: '100%', color: 'white', border: 'none', padding: '15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginTop: '20px', boxShadow: '0 4px 10px rgba(39, 174, 96, 0.3)' },
   tabelaContainer: { backgroundColor: 'white', borderRadius: '8px', border: '1px solid #ecf0f1', overflow: 'hidden' },
   th: { padding: '15px', backgroundColor: '#f9fbfb', color: '#7f8c8d', borderBottom: '2px solid #ecf0f1', textTransform: 'uppercase', fontSize: '11px', letterSpacing: '1px' },
   tr: { borderBottom: '1px solid #ecf0f1', transition: '0.2s' },
