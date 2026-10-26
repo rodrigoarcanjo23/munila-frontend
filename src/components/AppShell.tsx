@@ -4,7 +4,7 @@ import {
   IoGridOutline, IoCubeOutline, IoClipboardOutline, IoListOutline, IoLocationOutline, IoTimerOutline, IoWarningOutline,
   IoCartOutline, IoBulbOutline, IoDocumentAttachOutline, IoBusinessOutline, IoFlaskOutline, IoPricetagsOutline,
   IoPieChartOutline, IoShieldCheckmarkOutline, IoSwapHorizontalOutline, IoPeopleOutline, IoMenuOutline,
-  IoSearchOutline, IoLogOutOutline, IoGitCompareOutline, IoWalletOutline, IoTrendingUpOutline, IoReceiptOutline, IoMoonOutline, IoSunnyOutline, IoChevronBackOutline, IoChevronForwardOutline,
+  IoSearchOutline, IoLogOutOutline, IoGitCompareOutline, IoWalletOutline, IoTrendingUpOutline, IoReceiptOutline, IoMoonOutline, IoSunnyOutline, IoAnalyticsOutline, IoChevronBackOutline, IoChevronForwardOutline,
 } from 'react-icons/io5';
 import { useAuth } from '../lib/auth';
 import { api } from '../lib/api';
@@ -14,7 +14,7 @@ interface Item { to: string; label: string; icone: ReactNode; admin?: boolean; c
 interface Grupo { titulo: string; itens: Item[] }
 
 const MENU: Grupo[] = [
-  { titulo: 'Visão geral', itens: [{ to: '/', label: 'Painel', icone: <IoGridOutline /> }] },
+  { titulo: 'Visão geral', itens: [{ to: '/', label: 'Painel', icone: <IoGridOutline /> }, { to: '/bi', label: 'Painel BI', icone: <IoAnalyticsOutline /> }] },
   {
     titulo: 'Armazém',
     itens: [

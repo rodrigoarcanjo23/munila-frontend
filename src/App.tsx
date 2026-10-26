@@ -21,6 +21,7 @@ const Fornecedores = lazy(() => import('./pages/Fornecedores'));
 const Transformacao = lazy(() => import('./pages/Transformacao'));
 const Produtos = lazy(() => import('./pages/Produtos'));
 const CurvaABC = lazy(() => import('./pages/CurvaABC'));
+const PainelBI = lazy(() => import('./pages/PainelBI'));
 const Kardex = lazy(() => import('./pages/Kardex'));
 const Historico = lazy(() => import('./pages/Historico'));
 const Gestores = lazy(() => import('./pages/Gestores'));
@@ -58,6 +59,7 @@ function Rotas() {
             <Route path="/transformacao" element={<Transformacao />} />
             <Route path="/produtos" element={<Produtos />} />
             <Route path="/curva-abc" element={<CurvaABC />} />
+            <Route path="/bi" element={<PainelBI />} />
             <Route path="/kardex" element={<Kardex />} />
             <Route path="/kardex/:id" element={<Kardex />} />
             <Route path="/historico" element={<Historico />} />
