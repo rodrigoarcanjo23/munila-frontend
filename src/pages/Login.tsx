@@ -1,70 +1,69 @@
-import React, { useState } from 'react';
-import { api } from '../api';
-import { toast } from 'react-toastify'; // <-- IMPORTAÇÃO
+import { useState, type FormEvent } from 'react';
+import { toast } from 'react-toastify';
+import { IoLockClosedOutline, IoMailOutline } from 'react-icons/io5';
+import { api, msgErro } from '../lib/api';
+import { useAuth } from '../lib/auth';
 
-export default function Login({ onLoginSucesso }: any) {
+export default function Login() {
+  const { entrar } = useAuth();
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [carregando, setCarregando] = useState(false);
 
-  async function fazerLogin(e: React.FormEvent) {
+  async function fazerLogin(e: FormEvent) {
     e.preventDefault();
     setCarregando(true);
-
     try {
-      const response = await api.post('/login', { email, senha });
-      localStorage.setItem('@Munila:user', JSON.stringify(response.data));
-      
-      toast.success(`Bem-vindo, ${response.data.nome}!`); // TOAST
-      onLoginSucesso(response.data);
-    } catch (error: any) {
-      toast.error(error.response?.data?.error || "Erro ao conectar com o servidor."); // TOAST
+      const { data } = await api.post('/login', { email: email.trim().toLowerCase(), senha });
+      entrar(data);
+      toast.success(`Bem-vindo, ${data.nome.split(' ')[0]}!`);
+    } catch (erro) {
+      toast.error(msgErro(erro, 'Não foi possível entrar.'));
     } finally {
       setCarregando(false);
     }
   }
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f4f7f6' }}>
-      <div style={{ backgroundColor: 'white', padding: '40px', borderRadius: '12px', boxShadow: '0 10px 30px rgba(0,0,0,0.1)', width: '100%', maxWidth: '400px', textAlign: 'center' }}>
-        
-        <img 
-          src="/favicon.png" 
-          alt="ViaPro ERP" 
-          style={{ width: '140px', marginBottom: '10px' }} 
-        />
-        <p style={{ color: '#7f8c8d', fontSize: '14px', marginBottom: '30px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase' }}>
-          Gestão de Armazém
-        </p>
+    <div className="login">
+      <section className="login__art" aria-hidden>
+        <div className="login__rack">
+          {['A01-P01', 'A01-P02', 'B02-P01', 'Q01-P01'].map(c => <span key={c} className="loc">{c}</span>)}
+        </div>
+        <div>
+          <h1>Cada item no endereço certo.</h1>
+          <p>Estoque, separação, inventário, compras e produção em um só lugar — do escritório ao corredor do armazém.</p>
+        </div>
+        <small style={{ color: '#7f93b2' }}>ViaPro ERP · Munila</small>
+      </section>
 
-        <form onSubmit={fazerLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-          <input 
-            type="email" 
-            placeholder="Seu e-mail" 
-            value={email} 
-            onChange={e => setEmail(e.target.value)} 
-            required 
-            style={styles.input}
-          />
-          <input 
-            type="password" 
-            placeholder="Sua senha" 
-            value={senha} 
-            onChange={e => setSenha(e.target.value)} 
-            required 
-            style={styles.input}
-          />
-          
-          <button type="submit" disabled={carregando} style={styles.btn}>
-            {carregando ? 'A Autenticar...' : 'Entrar no Sistema'}
+      <section className="login__form">
+        <form onSubmit={fazerLogin}>
+          <img src="/favicon.png" alt="ViaPro" />
+          <div>
+            <h2 style={{ font: '700 24px var(--font-cond)' }}>Entrar no sistema</h2>
+            <p className="muted" style={{ marginTop: 4 }}>Use o e-mail e a senha cadastrados pelo gestor.</p>
+          </div>
+          <div className="field">
+            <label htmlFor="email">E-mail</label>
+            <div className="input-icon">
+              <IoMailOutline />
+              <input id="email" className="input" type="email" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} required autoFocus />
+            </div>
+          </div>
+          <div className="field">
+            <label htmlFor="senha">Senha</label>
+            <div className="input-icon">
+              <IoLockClosedOutline />
+              <input id="senha" className="input" type="password" autoComplete="current-password" value={senha} onChange={e => setSenha(e.target.value)} required />
+            </div>
+          </div>
+          <button type="submit" className="btn btn--primary btn--lg btn--block" disabled={carregando}>
+            {carregando ? 'Entrando…' : 'Entrar'}
           </button>
+          <p className="muted" style={{ fontSize: 12.5 }}>O primeiro acesso do dia pode levar alguns segundos enquanto o servidor inicia.</p>
         </form>
-      </div>
+      </section>
     </div>
   );
 }
-
-const styles: { [key: string]: React.CSSProperties } = {
-  input: { padding: '15px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '15px', outline: 'none', backgroundColor: '#f9fbfb' },
-  btn: { backgroundColor: '#0288D1', color: 'white', padding: '15px', borderRadius: '8px', border: 'none', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px', transition: '0.2s' }
-};

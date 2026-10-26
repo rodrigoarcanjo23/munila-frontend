@@ -1,148 +1,69 @@
-// src/pages/Rupturas.tsx
-import React, { useState, useEffect } from 'react';
-import { api } from '../api';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { toast } from 'react-toastify'; 
+import { useMemo, useState } from 'react';
+import { IoDownloadOutline, IoDocumentTextOutline } from 'react-icons/io5';
+import { api } from '../lib/api';
+import { useCarregar } from '../lib/useCarregar';
+import { contem, dataHora, moeda, numero } from '../lib/format';
+import { exportarExcel, exportarPDF } from '../lib/exportar';
+import type { Estoque, Movimentacao } from '../lib/tipos';
+import { DataTable, type Col } from '../components/DataTable';
+import { Code, Empty, Kpi, Loading, PageHeader, Panel, SearchInput, Segmented } from '../components/ui';
 
 export default function Rupturas() {
-  const [inventarioRuptura, setInventarioRuptura] = useState<any[]>([]);
-  const [carregando, setCarregando] = useState(true);
   const [busca, setBusca] = useState('');
+  const [aba, setAba] = useState<'saldo' | 'ocorrencias'>('saldo');
+  const { dados, carregando } = useCarregar(async () => {
+    const [e, m] = await Promise.all([api.get<Estoque[]>('/estoque'), api.get<Movimentacao[]>('/movimentacoes')]);
+    return { estoque: e.data.filter(x => x.status === 'Ruptura' && x.quantidade > 0), ocorrencias: m.data.filter(x => x.tipoAcao === 'Perdas/Avarias') };
+  });
 
-  const formatarReal = (valor: number) => Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor || 0);
+  const saldo = useMemo(() => (dados?.estoque ?? []).filter(i => contem(busca, i.produto.nome, i.produto.sku)), [dados, busca]);
+  const ocorrencias = useMemo(() => (dados?.ocorrencias ?? []).filter(i => contem(busca, i.produto?.nome, i.produto?.sku, i.observacao, i.usuario?.nome)), [dados, busca]);
+  const prejuizo = saldo.reduce((a, i) => a + i.quantidade * (i.produto.precoCusto || 0), 0);
+  const inicioMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const doMes = (dados?.ocorrencias ?? []).filter(o => new Date(o.dataHora) >= inicioMes);
 
-  async function carregarRupturas() {
-    setCarregando(true);
-    try {
-      // Busca todos os estoques e filtra apenas os que têm status 'Ruptura'
-      const res = await api.get('/estoque');
-      const apenasRupturas = res.data.filter((item: any) => item.status === 'Ruptura' && item.quantidade > 0);
-      setInventarioRuptura(apenasRupturas);
-    } catch (error) { 
-      toast.error("Erro ao carregar o relatório de avarias."); 
-    } finally { 
-      setCarregando(false); 
-    }
-  }
+  const colSaldo: Col<Estoque>[] = [
+    { key: 'p', titulo: 'Produto avariado / perdido', principal: true, ordenar: i => i.produto.nome, render: i => <><div className="cell-title">{i.produto.nome}</div><div className="cell-sub"><Code>{i.produto.sku}</Code></div></> },
+    { key: 'q', titulo: 'Qtd. perdida', align: 'right', ordenar: i => i.quantidade, render: i => <span className="qty qty--bad">{numero(i.quantidade)}</span> },
+    { key: 'c', titulo: 'Custo unitário', align: 'right', ordenar: i => i.produto.precoCusto || 0, render: i => moeda(i.produto.precoCusto) },
+    { key: 't', titulo: 'Prejuízo', align: 'right', ordenar: i => i.quantidade * (i.produto.precoCusto || 0), render: i => <b className="down">{moeda(i.quantidade * (i.produto.precoCusto || 0))}</b>, rodape: moeda(prejuizo) },
+  ];
+  const colOc: Col<Movimentacao>[] = [
+    { key: 'd', titulo: 'Data', ordenar: m => m.dataHora, render: m => dataHora(m.dataHora) },
+    { key: 'p', titulo: 'Produto', principal: true, ordenar: m => m.produto?.nome, render: m => <><div className="cell-title">{m.produto?.nome}</div><div className="cell-sub">{m.observacao}</div></> },
+    { key: 'q', titulo: 'Qtd.', align: 'right', ordenar: m => m.quantidade, render: m => numero(m.quantidade) },
+    { key: 'v', titulo: 'Valor', align: 'right', ordenar: m => m.quantidade * (m.produto?.precoCusto || 0), render: m => moeda(m.quantidade * (m.produto?.precoCusto || 0)) },
+    { key: 'u', titulo: 'Registrado por', ocultarCelular: true, render: m => m.usuario?.nome },
+    { key: 'c', titulo: 'Documento', ocultarCelular: true, render: m => m.codigo ? <Code>{m.codigo}</Code> : '-' },
+  ];
+  const exportCols = [
+    { titulo: 'Produto avariado', valor: (i: Estoque) => i.produto.nome, largura: 40 }, { titulo: 'SKU', valor: (i: Estoque) => i.produto.sku },
+    { titulo: 'Quantidade perdida', valor: (i: Estoque) => i.quantidade }, { titulo: 'Custo unitário', valor: (i: Estoque) => moeda(i.produto.precoCusto) },
+    { titulo: 'Prejuízo', valor: (i: Estoque) => moeda((i.produto.precoCusto || 0) * i.quantidade) },
+  ];
 
-  useEffect(() => { carregarRupturas(); }, []);
-
-  const rupturasFiltradas = inventarioRuptura.filter(item => 
-    item.produto?.nome.toLowerCase().includes(busca.toLowerCase()) ||
-    item.produto?.sku.toLowerCase().includes(busca.toLowerCase())
-  ).sort((a, b) => a.produto?.nome.localeCompare(b.produto?.nome));
-
-  const totalPrejuizo = rupturasFiltradas.reduce((total, item) => total + (item.quantidade * (item.produto?.precoCusto || 0)), 0);
-
-  const exportarExcel = () => {
-    if (rupturasFiltradas.length === 0) return toast.warn("Não há dados para exportar."); 
-    const dadosFormatados = rupturasFiltradas.map(item => ({
-      'Produto Avariado': item.produto?.nome, 
-      'SKU': item.produto?.sku, 
-      'Quantidade Perdida': item.quantidade,
-      'Custo Unitário': formatarReal(item.produto?.precoCusto),
-      'Prejuízo Calculado': formatarReal((item.produto?.precoCusto || 0) * item.quantidade)
-    }));
-    const worksheet = XLSX.utils.json_to_sheet(dadosFormatados);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Rupturas e Avarias");
-    XLSX.writeFile(workbook, "Relatorio_Perdas_ViaPro.xlsx");
-  };
-
-  const exportarPDF = () => {
-    if (rupturasFiltradas.length === 0) return toast.warn("Não há dados para exportar."); 
-    const doc = new jsPDF();
-    doc.setFontSize(18); doc.setTextColor(231, 76, 60); doc.text("Relatório de Perdas e Avarias (Ruptura)", 14, 22);
-    doc.setFontSize(10); doc.setTextColor(127, 140, 141); doc.text(`Emitido em: ${new Date().toLocaleString('pt-BR')}`, 14, 30);
-    
-    doc.setFontSize(12); doc.setTextColor(44, 62, 80); 
-    doc.text(`Prejuízo Total Imobilizado: ${formatarReal(totalPrejuizo)}`, 14, 40);
-
-    const colunas = ["Produto", "SKU", "Qtd Perdida", "Custo Un.", "Prejuízo"];
-    const linhas = rupturasFiltradas.map(item => [
-      item.produto?.nome || 'Desconhecido', 
-      item.produto?.sku || '-', 
-      item.quantidade.toString(),
-      formatarReal(item.produto?.precoCusto),
-      formatarReal((item.produto?.precoCusto || 0) * item.quantidade)
-    ]);
-    autoTable(doc, {
-      head: [colunas], body: linhas, startY: 48, styles: { fontSize: 9, cellPadding: 4 },
-      headStyles: { fillColor: [231, 76, 60], textColor: [255, 255, 255] } 
-    });
-    doc.save("Relatorio_Perdas_ViaPro.pdf");
-  };
-
-  if (carregando) return <div>Atualizando relatório de avarias...</div>;
-
+  if (carregando && !dados) return <Loading />;
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h1 style={{ color: '#e74c3c', margin: 0 }}>⚠️ Painel de Rupturas (Perdas e Avarias)</h1>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button onClick={exportarExcel} style={styles.btnExcel}>📊 Exportar Excel</button>
-          <button onClick={exportarPDF} style={styles.btnPDF}>📄 Exportar PDF</button>
+    <>
+      <PageHeader titulo="Perdas e avarias" descricao="Itens segregados por avaria e histórico de ocorrências, com o prejuízo calculado pelo custo."
+        acoes={<>
+          <button className="btn" onClick={() => exportarExcel('Relatorio_Perdas_ViaPro', [{ nome: 'Rupturas e avarias', colunas: exportCols, linhas: saldo }])}><IoDownloadOutline /> Excel</button>
+          <button className="btn" onClick={() => exportarPDF({ arquivo: 'Relatorio_Perdas_ViaPro', titulo: 'Perdas e avarias (ruptura)', resumo: [`Prejuízo total: ${moeda(prejuizo)}`], colunas: exportCols, linhas: saldo })}><IoDocumentTextOutline /> PDF</button>
+        </>} />
+      <div className="kpis">
+        <Kpi label="Prejuízo em avarias" valor={moeda(prejuizo)} tom={prejuizo ? 'bad' : 'ok'} />
+        <Kpi label="Unidades segregadas" valor={numero(saldo.reduce((a, i) => a + i.quantidade, 0))} />
+        <Kpi label="Ocorrências no mês" valor={numero(doMes.length)} dica={moeda(doMes.reduce((a, o) => a + o.quantidade * (o.produto?.precoCusto || 0), 0))} />
+      </div>
+      <Panel flush>
+        <div className="toolbar">
+          <Segmented valor={aba} onChange={setAba} opcoes={[{ valor: 'saldo', label: 'Saldo em avaria', n: saldo.length }, { valor: 'ocorrencias', label: 'Ocorrências', n: ocorrencias.length }]} />
+          <SearchInput value={busca} onChange={setBusca} placeholder="Buscar produto" />
         </div>
-      </div>
-
-      <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#7f8c8d', textTransform: 'uppercase' }}>Prejuízo Financeiro Total</span>
-          <div style={{ fontSize: '28px', fontWeight: '900', color: '#e74c3c' }}>{formatarReal(totalPrejuizo)}</div>
-        </div>
-        <input 
-          type="text" 
-          placeholder="Buscar produto perdido..." 
-          style={{ width: '300px', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '14px' }} 
-          value={busca} 
-          onChange={(e) => setBusca(e.target.value)} 
-        />
-      </div>
-
-      <div style={styles.tableContainer}>
-        <table style={styles.table}>
-          <thead>
-            <tr>
-              <th style={styles.th}>Produto Avariado/Perdido</th>
-              <th style={styles.th}>SKU</th>
-              <th style={{...styles.th, textAlign: 'center'}}>Qtd. Perdida</th>
-              <th style={{...styles.th, textAlign: 'right'}}>Custo Unitário</th>
-              <th style={{...styles.th, textAlign: 'right'}}>Prejuízo</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rupturasFiltradas.length === 0 && (
-              <tr><td colSpan={5} style={{textAlign: 'center', padding: '20px', color: '#7f8c8d'}}>Nenhum produto em ruptura/avaria. Excelente!</td></tr>
-            )}
-            {rupturasFiltradas.map((item) => (
-              <tr key={item.id} style={styles.tr}>
-                <td style={styles.td}><strong>{item.produto?.nome}</strong></td>
-                <td style={styles.td}><span style={styles.badgeCinza}>{item.produto?.sku}</span></td>
-                <td style={{...styles.td, textAlign: 'center'}}>
-                  <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#e74c3c' }}>{item.quantidade}</span>
-                </td>
-                <td style={{...styles.td, color: '#7f8c8d', textAlign: 'right'}}>{formatarReal(item.produto?.precoCusto)}</td>
-                <td style={{...styles.td, fontWeight: 'bold', color: '#e74c3c', textAlign: 'right'}}>
-                  {formatarReal(item.quantidade * (item.produto?.precoCusto || 0))}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+        {aba === 'saldo'
+          ? <DataTable colunas={colSaldo} linhas={saldo} chave={i => i.id} ordemInicial={{ key: 't', dir: 'desc' }} vazio={<Empty titulo="Nenhum produto em avaria">Excelente! Registre perdas em Estoque → Movimentar → Perda / avaria.</Empty>} />
+          : <DataTable colunas={colOc} linhas={ocorrencias} chave={m => m.id} ordemInicial={{ key: 'd', dir: 'desc' }} />}
+      </Panel>
+    </>
   );
 }
-
-const styles: { [key: string]: React.CSSProperties } = {
-  tableContainer: { backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)', overflow: 'hidden' },
-  table: { width: '100%', borderCollapse: 'collapse', textAlign: 'left' },
-  th: { padding: '15px 20px', backgroundColor: '#fdf2e9', color: '#e74c3c', borderBottom: '2px solid #fadbd8', textTransform: 'uppercase', fontSize: '12px', letterSpacing: '1px', fontWeight: 'bold' },
-  tr: { borderBottom: '1px solid #ecf0f1', transition: '0.2s' },
-  td: { padding: '15px 20px', color: '#2c3e50', fontSize: '14px', verticalAlign: 'middle' },
-  badgeCinza: { backgroundColor: '#f1f2f6', color: '#7f8c8d', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' },
-  btnExcel: { backgroundColor: '#27ae60', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px' },
-  btnPDF: { backgroundColor: '#c0392b', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px' }
-};

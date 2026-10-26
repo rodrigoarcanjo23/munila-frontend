@@ -1,183 +1,114 @@
-import React, { useState, useEffect } from 'react';
-import { api } from '../api';
+import { useMemo, useState, type FormEvent } from 'react';
+import { toast } from 'react-toastify';
+import { IoAddOutline, IoPencilOutline, IoTrashOutline, IoPrintOutline } from 'react-icons/io5';
+import { api, msgErro } from '../lib/api';
+import { useCarregar } from '../lib/useCarregar';
+import { contem } from '../lib/format';
+import { imprimirEtiquetas } from '../lib/etiquetas';
+import type { Localizacao, Produto } from '../lib/tipos';
+import { DataTable, type Col } from '../components/DataTable';
+import { Badge, Field, Kpi, Loading, Loc, Modal, PageHeader, Panel, SearchInput, useDialogo } from '../components/ui';
 
-interface Localizacao {
-  id: string;
-  codigo: string;
-  zona: string;
-  corredor: string; // Mantemos 'corredor' no código para comunicar com o Back-end sem quebrar
-  prateleira: string;
-}
+const vazio = { codigo: '', zona: '', corredor: '', prateleira: '' };
 
-export function Locais() {
-  const [locais, setLocais] = useState<Localizacao[]>([]);
-  const [codigo, setCodigo] = useState('');
+export default function Locais() {
+  const { confirmar } = useDialogo();
+  const [busca, setBusca] = useState('');
   const [zona, setZona] = useState('');
-  const [corredor, setCorredor] = useState(''); 
-  const [prateleira, setPrateleira] = useState('');
-  
+  const [form, setForm] = useState<typeof vazio | null>(null);
   const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [selecionados, setSelecionados] = useState<string[]>([]);
 
-  useEffect(() => {
-    carregarLocais();
-  }, []);
+  const { dados, carregando, recarregar } = useCarregar(async () => {
+    const [l, p] = await Promise.all([api.get<Localizacao[]>('/localizacoes'), api.get<Produto[]>('/produtos')]);
+    return { locais: l.data, produtos: p.data };
+  });
 
-  async function carregarLocais() {
-    try {
-      const response = await api.get('/localizacoes');
-      setLocais(response.data);
-    } catch (error) {
-      console.error('Erro ao buscar locais:', error);
-    }
-  }
+  const ocupacao = useMemo(() => {
+    const m = new Map<string, number>();
+    dados?.produtos.forEach(p => { if (p.enderecoLocalizacao) m.set(p.enderecoLocalizacao.toUpperCase(), (m.get(p.enderecoLocalizacao.toUpperCase()) || 0) + 1); });
+    return m;
+  }, [dados]);
+  const zonas = [...new Set((dados?.locais ?? []).map(l => l.zona))].sort();
+  const linhas = (dados?.locais ?? []).filter(l => (!zona || l.zona === zona) && contem(busca, l.codigo, l.zona, l.corredor, l.prateleira));
+  const ocupados = (dados?.locais ?? []).filter(l => ocupacao.get(l.codigo.toUpperCase())).length;
 
-  async function handleSalvarLocal(e: React.FormEvent) {
+  async function salvar(e: FormEvent) {
     e.preventDefault();
+    if (!form) return;
     try {
-      if (editandoId) {
-        await api.put(`/localizacoes/${editandoId}`, { codigo, zona, corredor, prateleira });
-        alert('Local atualizado com sucesso!');
-      } else {
-        await api.post('/localizacoes', { codigo, zona, corredor, prateleira });
-        alert('Local criado com sucesso!');
-      }
-      
-      limparFormulario();
-      carregarLocais();
-    } catch (error) {
-      console.error('Erro ao salvar local:', error);
-      alert('Erro ao salvar o local. Verifique a conexão com o servidor.');
-    }
+      if (editandoId) await api.put(`/localizacoes/${editandoId}`, form); else await api.post('/localizacoes', form);
+      toast.success(editandoId ? 'Endereço atualizado.' : 'Endereço criado.');
+      setForm(null); setEditandoId(null); recarregar(true);
+    } catch (err) { toast.error(msgErro(err)); }
   }
 
-  function handleEditar(local: Localizacao) {
-    setCodigo(local.codigo);
-    setZona(local.zona);
-    setCorredor(local.corredor);
-    setPrateleira(local.prateleira);
-    setEditandoId(local.id);
+  async function excluir(l: Localizacao) {
+    if (!(await confirmar({ titulo: `Excluir ${l.codigo}?`, mensagem: 'O endereço será removido do cadastro.', confirmar: 'Excluir', perigo: true }))) return;
+    try { await api.delete(`/localizacoes/${l.id}`); toast.success('Endereço excluído.'); recarregar(true); } catch (err) { toast.error(msgErro(err)); }
   }
 
-  async function handleExcluir(id: string) {
-    if (window.confirm('Tem a certeza que deseja excluir esta prateleira/célula?')) {
-      try {
-        await api.delete(`/localizacoes/${id}`);
-        alert('Local excluído com sucesso!');
-        carregarLocais();
-      } catch (error) {
-        console.error('Erro ao excluir:', error);
-        alert('Não foi possível excluir. Provavelmente existem produtos guardados neste local.');
-      }
-    }
-  }
+  const etiquetas = (lista: Localizacao[]) => imprimirEtiquetas(lista.map(l => ({ codigo: l.codigo, titulo: l.codigo, linha2: `${l.zona} | ${l.corredor} | ${l.prateleira}`, destaque: true })));
 
-  function limparFormulario() {
-    setCodigo('');
-    setZona('');
-    setCorredor('');
-    setPrateleira('');
-    setEditandoId(null);
-  }
+  const colunas: Col<Localizacao>[] = [
+    { key: 'sel', titulo: <input type="checkbox" aria-label="Selecionar todos" checked={linhas.length > 0 && selecionados.length === linhas.length} onChange={e => setSelecionados(e.target.checked ? linhas.map(l => l.id) : [])} />, ocultarCelular: true,
+      render: l => <input type="checkbox" aria-label={`Selecionar ${l.codigo}`} checked={selecionados.includes(l.id)} onChange={e => setSelecionados(s => (e.target.checked ? [...s, l.id] : s.filter(x => x !== l.id)))} /> },
+    { key: 'cod', titulo: 'Endereço', principal: true, ordenar: l => l.codigo, render: l => <Loc>{l.codigo}</Loc> },
+    { key: 'zona', titulo: 'Zona', ordenar: l => l.zona, render: l => <Badge tom="primary" plain>{l.zona}</Badge> },
+    { key: 'mod', titulo: 'Módulo de armazenagem', ordenar: l => l.corredor, render: l => l.corredor },
+    { key: 'prat', titulo: 'Prateleira / célula', ordenar: l => l.prateleira, render: l => l.prateleira },
+    { key: 'oc', titulo: 'Produtos', align: 'right', ordenar: l => ocupacao.get(l.codigo.toUpperCase()) || 0, render: l => ocupacao.get(l.codigo.toUpperCase()) || <span className="muted">Livre</span> },
+  ];
 
-  // --- ESTILOS VISUAIS ---
-  const containerStyle = { padding: '10px' };
-  const cardStyle = { backgroundColor: '#ffffff', padding: '25px', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)', marginBottom: '30px' };
-  const inputContainerStyle = { display: 'flex', flexDirection: 'column' as const, gap: '8px' };
-  const labelStyle = { fontSize: '14px', fontWeight: 'bold', color: '#34495e' };
-  const inputStyle = { padding: '10px', borderRadius: '6px', border: '1px solid #bdc3c7', fontSize: '14px', outline: 'none', backgroundColor: '#f9fbfb' };
-  const thStyle = { padding: '15px', borderBottom: '2px solid #ecf0f1', textAlign: 'left' as const, color: '#7f8c8d', fontSize: '12px', textTransform: 'uppercase' as const };
-  const tdStyle = { padding: '15px', borderBottom: '1px solid #ecf0f1', color: '#2c3e50', fontSize: '14px', fontWeight: '500' };
+  if (carregando && !dados) return <Loading />;
 
   return (
-    <div style={containerStyle}>
-      <h1 style={{ color: '#2c3e50', margin: '0 0 5px 0' }}>Gestão de Locais Físicos</h1>
-      <p style={{ color: '#7f8c8d', margin: '0 0 25px 0' }}>Cadastre os módulos, prateleiras e células do seu armazém.</p>
+    <>
+      <PageHeader titulo="Endereços" descricao="Zonas, módulos e prateleiras do armazém. Imprima etiquetas com código de barras para as prateleiras."
+        acoes={<>
+          <button className="btn" onClick={() => etiquetas(selecionados.length ? linhas.filter(l => selecionados.includes(l.id)) : linhas)}><IoPrintOutline /> Etiquetas {selecionados.length ? `(${selecionados.length})` : '(todos)'}</button>
+          <button className="btn btn--primary" onClick={() => { setForm(vazio); setEditandoId(null); }}><IoAddOutline /> Novo endereço</button>
+        </>} />
 
-      {/* CARD DO FORMULÁRIO */}
-      <div style={cardStyle}>
-        <h2 style={{ margin: '0 0 20px 0', fontSize: '18px', color: '#2c3e50', borderBottom: '1px solid #ecf0f1', paddingBottom: '10px' }}>
-          {editandoId ? '✏️ A Editar Local' : 'Nova Prateleira / Célula'}
-        </h2>
-        
-        <form onSubmit={handleSalvarLocal}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
-            <div style={inputContainerStyle}>
-              <label style={labelStyle}>Código (Ex: R01-P01)</label>
-              <input required type="text" value={codigo} onChange={e => setCodigo(e.target.value)} style={inputStyle} placeholder="R01-P01" />
-            </div>
-            <div style={inputContainerStyle}>
-              <label style={labelStyle}>Zona (Ex: Pulmão, Loja)</label>
-              <input required type="text" value={zona} onChange={e => setZona(e.target.value)} style={inputStyle} placeholder="Pulmão" />
-            </div>
-            
-            {/* ALTERAÇÃO SOLICITADA PELO EDUARDO: "Módulo de Armazenamento" */}
-            <div style={inputContainerStyle}>
-              <label style={labelStyle}>Módulo de Armazenamento</label>
-              <input required type="text" value={corredor} onChange={e => setCorredor(e.target.value)} style={inputStyle} placeholder="Módulo 01" />
-            </div>
-            
-            <div style={inputContainerStyle}>
-              <label style={labelStyle}>Prateleira / Célula</label>
-              <input required type="text" value={prateleira} onChange={e => setPrateleira(e.target.value)} style={inputStyle} placeholder="A" />
-            </div>
-          </div>
-          
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px', gap: '10px' }}>
-            {editandoId && (
-              <button type="button" onClick={limparFormulario} style={{ backgroundColor: '#95a5a6', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
-                Cancelar
-              </button>
-            )}
-            <button type="submit" style={{ backgroundColor: editandoId ? '#f39c12' : '#27ae60', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>
-              {editandoId ? 'Atualizar Local' : '+ Salvar Local'}
-            </button>
-          </div>
-        </form>
+      <div className="kpis">
+        <Kpi label="Endereços cadastrados" valor={dados?.locais.length ?? 0} />
+        <Kpi label="Ocupados" valor={ocupados} tom="primary" />
+        <Kpi label="Livres" valor={(dados?.locais.length ?? 0) - ocupados} />
+        <Kpi label="Zonas" valor={zonas.length} />
       </div>
 
-      {/* CARD DA TABELA */}
-      <div style={{ ...cardStyle, padding: '0', overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead style={{ backgroundColor: '#f8f9fa' }}>
-            <tr>
-              <th style={thStyle}>Código</th>
-              <th style={thStyle}>Zona</th>
-              {/* ALTERAÇÃO SOLICITADA PELO EDUARDO: Cabeçalho da Tabela */}
-              <th style={thStyle}>Módulo de Armaz.</th>
-              <th style={thStyle}>Prateleira</th>
-              <th style={{...thStyle, textAlign: 'center'}}>Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {locais.length === 0 ? (
-              <tr>
-                <td colSpan={5} style={{ padding: '30px', textAlign: 'center', color: '#95a5a6' }}>Nenhum local cadastrado ainda.</td>
-              </tr>
-            ) : (
-              locais.map(local => (
-                <tr key={local.id} style={{ transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#f4f7f6'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}>
-                  <td style={{ ...tdStyle, fontWeight: 'bold' }}>{local.codigo}</td>
-                  <td style={tdStyle}>
-                    <span style={{ backgroundColor: '#e8f4f8', color: '#0288D1', padding: '4px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold' }}>
-                      {local.zona}
-                    </span>
-                  </td>
-                  <td style={tdStyle}>{local.corredor}</td>
-                  <td style={tdStyle}>{local.prateleira}</td>
-                  <td style={{...tdStyle, textAlign: 'center'}}>
-                    <button onClick={() => handleEditar(local)} style={{ backgroundColor: 'transparent', color: '#f39c12', border: '1px solid #f39c12', padding: '4px 10px', borderRadius: '4px', cursor: 'pointer', marginRight: '8px', fontWeight: 'bold', fontSize: '12px' }}>
-                      Editar
-                    </button>
-                    <button onClick={() => handleExcluir(local.id)} style={{ backgroundColor: '#e74c3c', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>
-                      Excluir
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+      <Panel flush>
+        <div className="toolbar">
+          <SearchInput value={busca} onChange={setBusca} placeholder="Código, zona, módulo ou prateleira" />
+          <select className="select" value={zona} onChange={e => setZona(e.target.value)} aria-label="Zona">
+            <option value="">Todas as zonas</option>
+            {zonas.map(z => <option key={z}>{z}</option>)}
+          </select>
+        </div>
+        <DataTable colunas={colunas} linhas={linhas} chave={l => l.id} ordemInicial={{ key: 'cod', dir: 'asc' }}
+          acoes={l => (
+            <div className="row" style={{ flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
+              <button className="icon-btn" title="Etiqueta" aria-label="Imprimir etiqueta" onClick={() => etiquetas([l])}><IoPrintOutline /></button>
+              <button className="icon-btn" title="Editar" aria-label="Editar" onClick={() => { setForm({ codigo: l.codigo, zona: l.zona, corredor: l.corredor, prateleira: l.prateleira }); setEditandoId(l.id); }}><IoPencilOutline /></button>
+              <button className="icon-btn icon-btn--bad" title="Excluir" aria-label="Excluir" onClick={() => excluir(l)}><IoTrashOutline /></button>
+            </div>
+          )} />
+      </Panel>
+
+      {form && (
+        <Modal aberto onFechar={() => setForm(null)} titulo={editandoId ? `Editar ${form.codigo}` : 'Novo endereço'} tamanho="md"
+          rodape={<><button className="btn" onClick={() => setForm(null)}>Cancelar</button><button className="btn btn--primary" form="form-local">{editandoId ? 'Salvar endereço' : 'Criar endereço'}</button></>}>
+          <form id="form-local" onSubmit={salvar} className="form-grid">
+            <Field label="Código" className="col-6" dica="Ex.: R01-P01"><input className="input" required value={form.codigo} onChange={e => setForm({ ...form, codigo: e.target.value.toUpperCase() })} /></Field>
+            <Field label="Zona" className="col-6" dica="Ex.: Picking, Pulmão, Quarentena">
+              <input className="input" required list="zonas" value={form.zona} onChange={e => setForm({ ...form, zona: e.target.value })} />
+              <datalist id="zonas">{zonas.map(z => <option key={z} value={z} />)}</datalist>
+            </Field>
+            <Field label="Módulo de armazenagem" className="col-6"><input className="input" required value={form.corredor} onChange={e => setForm({ ...form, corredor: e.target.value })} placeholder="Módulo 01" /></Field>
+            <Field label="Prateleira / célula" className="col-6"><input className="input" required value={form.prateleira} onChange={e => setForm({ ...form, prateleira: e.target.value })} placeholder="A" /></Field>
+          </form>
+        </Modal>
+      )}
+    </>
   );
 }

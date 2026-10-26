@@ -1,182 +1,82 @@
-import React, { useState, useEffect } from 'react';
-import { api } from '../api';
+import { useState, type FormEvent } from 'react';
+import { toast } from 'react-toastify';
+import { IoAddOutline, IoPencilOutline, IoTrashOutline, IoMailOutline, IoCallOutline, IoDownloadOutline } from 'react-icons/io5';
+import { api, msgErro } from '../lib/api';
+import { useCarregar } from '../lib/useCarregar';
+import { contem } from '../lib/format';
+import { exportarExcel } from '../lib/exportar';
+import type { Fornecedor } from '../lib/tipos';
+import { DataTable, type Col } from '../components/DataTable';
+import { Field, Loading, Modal, PageHeader, Panel, SearchInput, useDialogo } from '../components/ui';
+
+const vazio = { nomeEmpresa: '', cnpj: '', contatoNome: '', telefone: '', email: '' };
+const mascaraCNPJ = (v: string) => v.replace(/\D/g, '').slice(0, 14)
+  .replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2');
 
 export default function Fornecedores() {
-  const [fornecedores, setFornecedores] = useState<any[]>([]);
-  const [carregando, setCarregando] = useState(true);
+  const { confirmar } = useDialogo();
+  const [busca, setBusca] = useState('');
+  const [form, setForm] = useState<typeof vazio | null>(null);
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const { dados, carregando, recarregar } = useCarregar(async () => (await api.get<Fornecedor[]>('/fornecedores')).data);
+  const linhas = (dados ?? []).filter(f => contem(busca, f.nomeEmpresa, f.cnpj, f.contatoNome, f.email, f.telefone));
 
-  // Estados do Modal
-  const [modalVisivel, setModalVisivel] = useState(false);
-  const [idEdicao, setIdEdicao] = useState<string | null>(null);
-
-  // Campos do Formulário
-  const [nomeEmpresa, setNomeEmpresa] = useState('');
-  const [cnpj, setCnpj] = useState('');
-  const [contatoNome, setContatoNome] = useState('');
-  const [telefone, setTelefone] = useState('');
-  const [email, setEmail] = useState('');
-
-  async function carregarFornecedores() {
-    setCarregando(true);
-    try {
-      // Usamos a rota /fornecedores (assumindo que o back-end já a suporte ou suportará)
-      const res = await api.get('/fornecedores');
-      setFornecedores(res.data.sort((a: any, b: any) => a.nomeEmpresa.localeCompare(b.nomeEmpresa)));
-    } catch (error) {
-      console.log("A rota /fornecedores pode ainda não existir no Back-end, exibindo lista vazia por enquanto.");
-      setFornecedores([]); // Prevenção de erro caso a API ainda não tenha a rota
-    } finally {
-      setCarregando(false);
-    }
-  }
-
-  useEffect(() => { carregarFornecedores(); }, []);
-
-  function abrirModalNovo() {
-    setIdEdicao(null);
-    setNomeEmpresa(''); setCnpj(''); setContatoNome(''); setTelefone(''); setEmail('');
-    setModalVisivel(true);
-  }
-
-  function abrirModalEdicao(f: any) {
-    setIdEdicao(f.id);
-    setNomeEmpresa(f.nomeEmpresa); setCnpj(f.cnpj || ''); 
-    setContatoNome(f.contatoNome || ''); setTelefone(f.telefone || ''); setEmail(f.email || '');
-    setModalVisivel(true);
-  }
-
-  async function apagarFornecedor(id: string) {
-    if (window.confirm("Deseja mesmo remover este fornecedor?")) {
-      try {
-        await api.delete(`/fornecedores/${id}`);
-        carregarFornecedores();
-      } catch (err) { alert("Bloqueado: Este fornecedor possui histórico de compras atrelado."); }
-    }
-  }
-
-  async function salvarFornecedor(e: React.FormEvent) {
+  async function salvar(e: FormEvent) {
     e.preventDefault();
-    if (!nomeEmpresa) return alert("O Nome da Empresa é obrigatório.");
-
-    const payload = { nomeEmpresa, cnpj, contatoNome, telefone, email };
-
+    if (!form?.nomeEmpresa.trim()) return toast.warn('Informe o nome da empresa.');
     try {
-      if (idEdicao) {
-        await api.put(`/fornecedores/${idEdicao}`, payload);
-      } else {
-        await api.post('/fornecedores', payload);
-      }
-      setModalVisivel(false);
-      carregarFornecedores();
-    } catch (error: any) {
-      // Simulação para o Frontend não quebrar caso a API ainda não esteja pronta
-      alert(error.response?.data?.error || "Erro ao salvar. Verifique se a rota /fornecedores existe na API.");
-    }
+      if (editandoId) await api.put(`/fornecedores/${editandoId}`, form); else await api.post('/fornecedores', form);
+      toast.success(editandoId ? 'Fornecedor atualizado.' : 'Fornecedor cadastrado.');
+      setForm(null); recarregar(true);
+    } catch (err) { toast.error(msgErro(err)); }
+  }
+  async function excluir(f: Fornecedor) {
+    if (!(await confirmar({ titulo: `Excluir ${f.nomeEmpresa}?`, mensagem: 'Só é possível excluir fornecedores sem produtos ou pedidos vinculados.', confirmar: 'Excluir', perigo: true }))) return;
+    try { await api.delete(`/fornecedores/${f.id}`); toast.success('Fornecedor excluído.'); recarregar(true); } catch (err) { toast.error(msgErro(err)); }
   }
 
-  if (carregando) return <div>A carregar lista de fornecedores...</div>;
+  const colunas: Col<Fornecedor>[] = [
+    { key: 'nome', titulo: 'Empresa', principal: true, ordenar: f => f.nomeEmpresa, render: f => <><div className="cell-title">{f.nomeEmpresa}</div><div className="cell-sub">{f.cnpj || 'CNPJ não informado'}</div></> },
+    { key: 'contato', titulo: 'Contato', ordenar: f => f.contatoNome, render: f => f.contatoNome || '-' },
+    { key: 'tel', titulo: 'Telefone', render: f => f.telefone ? <a href={`tel:${f.telefone.replace(/[^\d+]/g, '')}`}><IoCallOutline style={{ verticalAlign: -2 }} /> {f.telefone}</a> : '-' },
+    { key: 'email', titulo: 'E-mail', ocultarCelular: true, render: f => f.email ? <a href={`mailto:${f.email}`}><IoMailOutline style={{ verticalAlign: -2 }} /> {f.email}</a> : <span className="muted">Sem e-mail (pedidos não serão enviados)</span> },
+    { key: 'prod', titulo: 'Produtos', align: 'right', ordenar: f => f._count?.produtos ?? 0, render: f => f._count?.produtos ?? 0 },
+    { key: 'ped', titulo: 'Pedidos', align: 'right', ordenar: f => f._count?.pedidosCompra ?? 0, render: f => f._count?.pedidosCompra ?? 0 },
+  ];
 
+  if (carregando && !dados) return <Loading />;
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h1 style={{ color: '#2c3e50', margin: 0 }}>Gestão de Fornecedores</h1>
-        <button onClick={abrirModalNovo} style={styles.btnPrincipal}>+ Novo Fornecedor</button>
-      </div>
-
-      <div style={styles.tableContainer}>
-        <table style={styles.table}>
-          <thead>
-            <tr>
-              <th style={styles.th}>Empresa</th>
-              <th style={styles.th}>CNPJ / NIF</th>
-              <th style={styles.th}>Pessoa de Contato</th>
-              <th style={styles.th}>Telefone / E-mail</th>
-              <th style={{...styles.th, textAlign: 'center'}}>Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {fornecedores.length === 0 && (
-              <tr><td colSpan={5} style={{textAlign: 'center', padding: '30px', color: '#7f8c8d'}}>Nenhum fornecedor cadastrado ou rota da API pendente.</td></tr>
-            )}
-            {fornecedores.map((item) => (
-              <tr key={item.id} style={styles.tr}>
-                <td style={styles.td}><strong>{item.nomeEmpresa}</strong></td>
-                <td style={styles.td}><span style={styles.badgeCinza}>{item.cnpj || 'Não informado'}</span></td>
-                <td style={styles.td}>{item.contatoNome || '-'}</td>
-                <td style={styles.td}>
-                  <div style={{ fontSize: '12px', color: '#2c3e50' }}>{item.telefone}</div>
-                  <div style={{ fontSize: '12px', color: '#7f8c8d' }}>{item.email}</div>
-                </td>
-                <td style={{...styles.td, textAlign: 'center'}}>
-                  <button onClick={() => abrirModalEdicao(item)} style={styles.btnEditar}>Editar</button>
-                  <button onClick={() => apagarFornecedor(item.id)} style={styles.btnApagar}>Excluir</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* MODAL DO FORNECEDOR */}
-      {modalVisivel && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalContent}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '15px', marginBottom: '20px' }}>
-              <h2 style={{ margin: 0, color: '#2c3e50' }}>{idEdicao ? 'Editar Fornecedor' : 'Novo Fornecedor'}</h2>
-              <button onClick={() => setModalVisivel(false)} style={styles.btnFechar}>✖</button>
+    <>
+      <PageHeader titulo="Fornecedores" descricao="Cadastro de fornecedores. O e-mail é usado para enviar automaticamente os pedidos de compra."
+        acoes={<>
+          <button className="btn" onClick={() => exportarExcel('Fornecedores_ViaPro', [{ nome: 'Fornecedores', linhas, colunas: [
+            { titulo: 'Empresa', valor: f => f.nomeEmpresa, largura: 35 }, { titulo: 'CNPJ', valor: f => f.cnpj || '' }, { titulo: 'Contato', valor: f => f.contatoNome || '' },
+            { titulo: 'Telefone', valor: f => f.telefone || '' }, { titulo: 'E-mail', valor: f => f.email || '', largura: 30 },
+          ] }])}><IoDownloadOutline /> Excel</button>
+          <button className="btn btn--primary" onClick={() => { setForm(vazio); setEditandoId(null); }}><IoAddOutline /> Novo fornecedor</button>
+        </>} />
+      <Panel flush>
+        <div className="toolbar"><SearchInput value={busca} onChange={setBusca} placeholder="Empresa, CNPJ, contato ou e-mail" /></div>
+        <DataTable colunas={colunas} linhas={linhas} chave={f => f.id} ordemInicial={{ key: 'nome', dir: 'asc' }}
+          acoes={f => (
+            <div className="row" style={{ flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
+              <button className="icon-btn" aria-label="Editar" title="Editar" onClick={() => { setForm({ nomeEmpresa: f.nomeEmpresa, cnpj: f.cnpj || '', contatoNome: f.contatoNome || '', telefone: f.telefone || '', email: f.email || '' }); setEditandoId(f.id); }}><IoPencilOutline /></button>
+              <button className="icon-btn icon-btn--bad" aria-label="Excluir" title="Excluir" onClick={() => excluir(f)}><IoTrashOutline /></button>
             </div>
-
-            <form onSubmit={salvarFornecedor} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <div style={{ display: 'flex', gap: '15px' }}>
-                <div style={{ flex: 2 }}>
-                  <label style={styles.label}>Nome da Empresa / Razão Social *</label>
-                  <input type="text" style={styles.input} value={nomeEmpresa} onChange={e => setNomeEmpresa(e.target.value)} required placeholder="Ex: Tecidos Silva Ltda" />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={styles.label}>CNPJ</label>
-                  <input type="text" style={styles.input} value={cnpj} onChange={e => setCnpj(e.target.value)} placeholder="00.000.000/0000-00" />
-                </div>
-              </div>
-
-              <div>
-                <label style={styles.label}>Pessoa de Contato (Representante)</label>
-                <input type="text" style={styles.input} value={contatoNome} onChange={e => setContatoNome(e.target.value)} placeholder="Ex: Sr. Carlos" />
-              </div>
-
-              <div style={{ display: 'flex', gap: '15px' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={styles.label}>Telefone / WhatsApp</label>
-                  <input type="text" style={styles.input} value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(00) 00000-0000" />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={styles.label}>E-mail Comercial</label>
-                  <input type="email" style={styles.input} value={email} onChange={e => setEmail(e.target.value)} placeholder="vendas@empresa.com" />
-                </div>
-              </div>
-
-              <button type="submit" style={styles.btnSalvar}>Salvar Fornecedor</button>
-            </form>
-          </div>
-        </div>
+          )} />
+      </Panel>
+      {form && (
+        <Modal aberto onFechar={() => setForm(null)} titulo={editandoId ? 'Editar fornecedor' : 'Novo fornecedor'} tamanho="md"
+          rodape={<><button className="btn" onClick={() => setForm(null)}>Cancelar</button><button className="btn btn--primary" form="form-forn">Salvar fornecedor</button></>}>
+          <form id="form-forn" onSubmit={salvar} className="form-grid">
+            <Field label="Razão social / nome da empresa" className="col-8"><input className="input" required value={form.nomeEmpresa} onChange={e => setForm({ ...form, nomeEmpresa: e.target.value })} /></Field>
+            <Field label="CNPJ" className="col-4"><input className="input" inputMode="numeric" value={form.cnpj} onChange={e => setForm({ ...form, cnpj: mascaraCNPJ(e.target.value) })} placeholder="00.000.000/0000-00" /></Field>
+            <Field label="Pessoa de contato" className="col-12"><input className="input" value={form.contatoNome} onChange={e => setForm({ ...form, contatoNome: e.target.value })} /></Field>
+            <Field label="Telefone / WhatsApp" className="col-6"><input className="input" type="tel" value={form.telefone} onChange={e => setForm({ ...form, telefone: e.target.value })} /></Field>
+            <Field label="E-mail comercial" className="col-6"><input className="input" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></Field>
+          </form>
+        </Modal>
       )}
-    </div>
+    </>
   );
 }
-
-const styles: { [key: string]: React.CSSProperties } = {
-  tableContainer: { backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)', overflow: 'hidden' },
-  table: { width: '100%', borderCollapse: 'collapse', textAlign: 'left' },
-  th: { padding: '15px 20px', backgroundColor: '#f9fbfb', color: '#7f8c8d', borderBottom: '2px solid #ecf0f1', textTransform: 'uppercase', fontSize: '12px', letterSpacing: '1px' },
-  tr: { borderBottom: '1px solid #ecf0f1' },
-  td: { padding: '15px 20px', color: '#2c3e50', fontSize: '14px', verticalAlign: 'middle' },
-  badgeCinza: { backgroundColor: '#f1f2f6', color: '#7f8c8d', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' },
-  btnPrincipal: { backgroundColor: '#8e44ad', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' },
-  btnEditar: { backgroundColor: '#f1f2f6', color: '#f39c12', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px', marginRight: '8px' },
-  btnApagar: { backgroundColor: '#fef5e7', color: '#e74c3c', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' },
-  modalOverlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
-  modalContent: { backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '100%', maxWidth: '600px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' },
-  btnFechar: { background: 'none', border: 'none', fontSize: '20px', color: '#e74c3c', cursor: 'pointer' },
-  label: { display: 'block', fontSize: '13px', fontWeight: 'bold', color: '#34495e', marginBottom: '5px', marginTop: '10px' },
-  input: { width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '15px', boxSizing: 'border-box', backgroundColor: '#fafafa' },
-  btnSalvar: { backgroundColor: '#8e44ad', color: 'white', padding: '15px', borderRadius: '8px', border: 'none', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '20px' }
-};
