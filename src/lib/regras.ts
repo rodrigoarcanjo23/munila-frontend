@@ -6,6 +6,7 @@ export const TIPOS_ENTRADA = [
   'Ajuste de Entrada de Inventário',
   'Entrada por produção',
   'Retorno de demonstração',
+  'Transferência (entrada)',
 ];
 export const TIPOS_SAIDA = [
   'Saída de mercadoria',
@@ -13,6 +14,7 @@ export const TIPOS_SAIDA = [
   'Saída para demonstração',
   'Perdas/Avarias',
   'Saída para produção',
+  'Transferência (saída)',
 ];
 export const TODOS_TIPOS = [...TIPOS_ENTRADA, ...TIPOS_SAIDA];
 export const ehEntrada = (tipo: string) => TIPOS_ENTRADA.includes(tipo);
@@ -57,3 +59,14 @@ export function tomPrioridade(p: string): Tom {
 export const PESO_PRIORIDADE: Record<string, number> = { Urgente: 3, Alta: 2, Normal: 1 };
 
 export const TIPO_OS_LABEL: Record<string, string> = { SAIDA: 'Saída', ENTRADA: 'Entrada', DEVOLUCAO: 'Devolução' };
+
+export const ORIGENS_FISCAIS = [
+  { valor: 0, label: '0 — Nacional' },
+  { valor: 1, label: '1 — Estrangeira, importação direta' },
+  { valor: 2, label: '2 — Estrangeira, adquirida no mercado interno' },
+  { valor: 3, label: '3 — Nacional, conteúdo de importação > 40%' },
+  { valor: 5, label: '5 — Nacional, conteúdo de importação ≤ 40%' },
+];
+
+/** Rótulo curto de lote/validade. */
+export const rotuloLote = (lote?: string | null) => lote || 'Sem lote';

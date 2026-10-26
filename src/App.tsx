@@ -24,6 +24,10 @@ const CurvaABC = lazy(() => import('./pages/CurvaABC'));
 const Kardex = lazy(() => import('./pages/Kardex'));
 const Historico = lazy(() => import('./pages/Historico'));
 const Gestores = lazy(() => import('./pages/Gestores'));
+const Armazens = lazy(() => import('./pages/Armazens'));
+const Financeiro = lazy(() => import('./pages/Financeiro'));
+const FluxoCaixa = lazy(() => import('./pages/FluxoCaixa'));
+const Empresa = lazy(() => import('./pages/Empresa'));
 
 function SomenteAdmin({ children }: { children: ReactNode }) {
   const { isAdmin } = useAuth();
@@ -58,6 +62,10 @@ function Rotas() {
             <Route path="/kardex/:id" element={<Kardex />} />
             <Route path="/historico" element={<Historico />} />
             <Route path="/gestores" element={<SomenteAdmin><Gestores /></SomenteAdmin>} />
+            <Route path="/armazens" element={<Armazens />} />
+            <Route path="/financeiro" element={<Financeiro />} />
+            <Route path="/financeiro/fluxo" element={<FluxoCaixa />} />
+            <Route path="/empresa" element={<SomenteAdmin><Empresa /></SomenteAdmin>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>

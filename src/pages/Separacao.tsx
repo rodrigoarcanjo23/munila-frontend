@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 import {
   IoAddOutline, IoPlayOutline, IoPauseOutline, IoPrintOutline, IoBarcodeOutline, IoPencilOutline, IoTrashOutline,
@@ -9,7 +9,34 @@ import { useAuth } from '../lib/auth';
 import { useCarregar } from '../lib/useCarregar';
 import { contem, dataHora, haQuanto, normalizar, numero } from '../lib/format';
 import { PESO_PRIORIDADE, TIPO_OS_LABEL, tomPrioridade, tomStatusOS } from '../lib/regras';
-import type { Estoque, OrdemServico, Produto } from '../lib/tipos';
+import type { Armazem, Estoque, OrdemServico, ParteLote, Produto } from '../lib/tipos';
+import { useArmazens } from '../components/EstoqueModais';
+import { dataUTC } from '../lib/format';
+import { rotuloLote } from '../lib/regras';
+
+/** Sugestão FEFO de lotes por item da ordem (somente ordens de saída). */
+type Picking = Record<string, { partes: ParteLote[]; falta: number }>;
+async function buscarPicking(ordem: OrdemServico): Promise<Picking> {
+  if (ordem.tipo !== 'SAIDA') return {};
+  try {
+    const { data } = await api.get<{ itemId: string; partes: ParteLote[]; falta: number }[]>(`/wms/ordens/${ordem.id}/picking`);
+    return Object.fromEntries(data.map(d => [d.itemId, { partes: d.partes, falta: d.falta }]));
+  } catch { return {}; }
+}
+function usePicking(ordem: OrdemServico | null) {
+  const [picking, setPicking] = useState<{ id: string | null; dados: Picking }>({ id: null, dados: {} });
+  useEffect(() => { if (ordem) buscarPicking(ordem).then(dados => setPicking({ id: ordem.id, dados })); }, [ordem]);
+  return ordem && picking.id === ordem.id ? picking.dados : {};
+}
+function LotesSugeridos({ p }: { p?: { partes: ParteLote[]; falta: number } }) {
+  if (!p || (!p.partes.length && !p.falta)) return null;
+  return (
+    <div className="row" style={{ gap: 4, marginTop: 4 }}>
+      {p.partes.map((x, i) => <Badge key={i} tom={i === 0 ? 'primary' : undefined} plain>{rotuloLote(x.lote)}: {numero(x.quantidade)}{x.validade ? ` · val. ${dataUTC(x.validade)}` : ''}</Badge>)}
+      {p.falta > 0 && <Badge tom="bad" plain>Falta {numero(p.falta)}</Badge>}
+    </div>
+  );
+}
 import { ProdutoPicker } from '../components/ProdutoPicker';
 import { Badge, Code, Empty, Field, Loading, Loc, Modal, Notice, PageHeader, SearchInput, Segmented, useDialogo } from '../components/ui';
 
@@ -26,12 +53,18 @@ export default function Separacao() {
   const [editar, setEditar] = useState<OrdemServico | 'nova' | null>(null);
   const [ver, setVer] = useState<OrdemServico | null>(null);
   const [conferir, setConferir] = useState<OrdemServico | null>(null);
+  const { armazens, padraoId } = useArmazens();
+  const pickingVer = usePicking(ver);
   const [agora] = useState(() => Date.now());
 
   const { dados, carregando, recarregar } = useCarregar(async () => {
     const [o, p, e] = await Promise.all([api.get<OrdemServico[]>('/wms/ordens'), api.get<Produto[]>('/produtos'), api.get<Estoque[]>('/estoque')]);
     const saldos = new Map<string, number>();
-    e.data.filter(x => x.status === 'Disponível').forEach(x => saldos.set(x.produtoId, (saldos.get(x.produtoId) || 0) + x.quantidade));
+    // saldo por produto em cada armazém (chave armazém|produto)
+    e.data.filter(x => x.status === 'Disponível').forEach(x => {
+      const k = `${x.armazemId}|${x.produtoId}`;
+      saldos.set(k, (saldos.get(k) || 0) + x.quantidade);
+    });
     return { ordens: o.data, produtos: p.data, saldos };
   });
 
@@ -107,7 +140,7 @@ export default function Separacao() {
         <div className="os-grid">
           {filtradas.map(o => {
             const unidades = o.itens.reduce((a, i) => a + i.quantidade, 0);
-            const semSaldo = o.tipo === 'SAIDA' && o.status !== 'Concluída' && o.itens.some(i => (dados?.saldos.get(i.produtoId) || 0) < i.quantidade);
+            const semSaldo = o.tipo === 'SAIDA' && o.status !== 'Concluída' && o.itens.some(i => (dados?.saldos.get(`${o.armazemId}|${i.produtoId}`) || 0) < i.quantidade);
             const duracao = o.iniciadaEm && o.concluidaEm ? Math.round((new Date(o.concluidaEm).getTime() - new Date(o.iniciadaEm).getTime()) / 60000) : null;
             return (
               <article key={o.id} className="os-card" data-status={o.status}>
@@ -122,6 +155,7 @@ export default function Separacao() {
                   <dt>Solicitante</dt><dd>{o.solicitante?.nome}</dd>
                   <dt>Criada</dt><dd>{dataHora(o.createdAt)} <span className="muted">({haQuanto(o.createdAt)})</span></dd>
                   <dt>Itens</dt><dd>{o.itens.length} produto(s), {numero(unidades)} un</dd>
+                  {o.armazem && <><dt>Armazém</dt><dd>{o.armazem.nome}</dd></>}
                   {o.separador && <><dt>{o.status === 'Concluída' ? 'Concluída por' : 'Operador'}</dt><dd>{o.separador.nome}</dd></>}
                   {o.status === 'Concluída' && <><dt>Concluída</dt><dd>{dataHora(o.concluidaEm || o.updatedAt)}{duracao !== null && <span className="muted"> em {duracao} min</span>}</dd></>}
                   {o.observacao && <><dt>Obs.</dt><dd>{o.observacao}</dd></>}
@@ -150,12 +184,12 @@ export default function Separacao() {
         <Modal aberto onFechar={() => setVer(null)} titulo={`Roteiro ${ver.codigo}`} descricao="Itens ordenados pelo endereço para o menor percurso no armazém." tamanho="md"
           rodape={<><button className="btn" onClick={() => imprimirZebra(ver)}><IoPrintOutline /> Imprimir</button><button className="btn btn--primary" onClick={() => setVer(null)}>Fechar</button></>}>
           <table className="table">
-            <thead><tr><th>Endereço</th><th>Produto</th><th className="num">Qtd.</th></tr></thead>
+            <thead><tr><th>Endereço</th><th>Produto e lotes (FEFO)</th><th className="num">Qtd.</th></tr></thead>
             <tbody>
               {porEndereco(ver.itens).map(i => (
                 <tr key={i.id}>
                   <td><Loc>{i.produto.enderecoLocalizacao}</Loc></td>
-                  <td><div className="cell-title">{i.produto.nome}</div><div className="cell-sub"><Code>{i.produto.sku}</Code></div></td>
+                  <td><div className="cell-title">{i.produto.nome}</div><div className="cell-sub"><Code>{i.produto.sku}</Code></div><LotesSugeridos p={pickingVer[i.id]} /></td>
                   <td className="num"><b>{numero(i.quantidade)}</b></td>
                 </tr>
               ))}
@@ -165,7 +199,7 @@ export default function Separacao() {
       )}
 
       {editar && dados && usuario && (
-        <ModalOrdem ordem={editar === 'nova' ? null : editar} produtos={dados.produtos} saldos={dados.saldos} solicitanteId={usuario.id}
+        <ModalOrdem ordem={editar === 'nova' ? null : editar} produtos={dados.produtos} saldos={dados.saldos} solicitanteId={usuario.id} armazens={armazens} padraoId={padraoId}
           onFechar={() => setEditar(null)} onSalvo={() => { setEditar(null); recarregar(true); }} />
       )}
       {conferir && usuario && (
@@ -177,9 +211,10 @@ export default function Separacao() {
 
 interface ItemCarrinho { produtoId: string; nome: string; sku: string; endereco?: string | null; quantidade: number }
 
-function ModalOrdem({ ordem, produtos, saldos, solicitanteId, onFechar, onSalvo }: {
-  ordem: OrdemServico | null; produtos: Produto[]; saldos: Map<string, number>; solicitanteId: string; onFechar: () => void; onSalvo: () => void;
+function ModalOrdem({ ordem, produtos, saldos, solicitanteId, armazens, padraoId, onFechar, onSalvo }: {
+  ordem: OrdemServico | null; produtos: Produto[]; saldos: Map<string, number>; solicitanteId: string; armazens: Armazem[]; padraoId: string; onFechar: () => void; onSalvo: () => void;
 }) {
+  const [armazemId, setArmazemId] = useState(ordem?.armazemId ?? padraoId);
   const [tipo, setTipo] = useState(ordem?.tipo ?? 'SAIDA');
   const [prioridade, setPrioridade] = useState(ordem?.prioridade ?? 'Normal');
   const [observacao, setObservacao] = useState(ordem?.observacao ?? '');
@@ -202,7 +237,7 @@ function ModalOrdem({ ordem, produtos, saldos, solicitanteId, onFechar, onSalvo 
   async function salvar() {
     if (carrinho.length === 0) return toast.warn('Adicione ao menos um produto.');
     setSalvando(true);
-    const payload = { solicitanteId, tipo, prioridade, observacao, itens: carrinho.map(c => ({ produtoId: c.produtoId, quantidade: c.quantidade })) };
+    const payload = { solicitanteId, tipo, prioridade, observacao, armazemId: armazemId || undefined, itens: carrinho.map(c => ({ produtoId: c.produtoId, quantidade: c.quantidade })) };
     try {
       if (ordem) await api.put(`/wms/ordens/${ordem.id}`, payload); else await api.post('/wms/ordens', payload);
       toast.success(ordem ? 'Ordem atualizada.' : 'Ordem criada. Os operadores foram notificados.');
@@ -214,6 +249,13 @@ function ModalOrdem({ ordem, produtos, saldos, solicitanteId, onFechar, onSalvo 
     <Modal aberto onFechar={onFechar} tamanho="lg" titulo={ordem ? `Editar ${ordem.codigo}` : 'Nova ordem de serviço'}
       rodape={<><button className="btn" onClick={onFechar}>Cancelar</button><button className="btn btn--primary" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando…' : ordem ? 'Salvar alterações' : 'Criar ordem'}</button></>}>
       <div className="form-grid">
+        {armazens.length > 1 && (
+          <Field label="Armazém" className="col-12">
+            <select className="select" value={armazemId} onChange={e => setArmazemId(e.target.value)}>
+              {armazens.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
+            </select>
+          </Field>
+        )}
         <Field label="Finalidade" className="col-4">
           <select className="select" value={tipo} onChange={e => setTipo(e.target.value)}>
             <option value="SAIDA">Saída (retirada)</option>
@@ -240,7 +282,7 @@ function ModalOrdem({ ordem, produtos, saldos, solicitanteId, onFechar, onSalvo 
             <thead><tr><th>Produto</th><th>Endereço</th><th className="num">Saldo</th><th className="num">Quantidade</th><th className="actions" /></tr></thead>
             <tbody>
               {carrinho.map(c => {
-                const saldo = saldos.get(c.produtoId) || 0;
+                const saldo = saldos.get(`${armazemId}|${c.produtoId}`) || 0;
                 const falta = tipo === 'SAIDA' && saldo < c.quantidade;
                 return (
                   <tr key={c.produtoId}>
@@ -264,6 +306,7 @@ function ModalOrdem({ ordem, produtos, saldos, solicitanteId, onFechar, onSalvo 
 /** Conferência (poka-yoke): todos os itens precisam ser marcados — por toque ou leitura do código de barras. */
 function ModalConferencia({ ordem, usuarioId, onFechar, onConcluida }: { ordem: OrdemServico; usuarioId: string; onFechar: () => void; onConcluida: () => void }) {
   const itens = useMemo(() => porEndereco(ordem.itens), [ordem]);
+  const picking = usePicking(ordem);
   const [marcados, setMarcados] = useState<string[]>(ordem.itens.filter(i => i.marcado).map(i => i.id));
   const [leitura, setLeitura] = useState('');
   const [concluindo, setConcluindo] = useState(false);
@@ -317,6 +360,7 @@ function ModalConferencia({ ordem, usuarioId, onFechar, onConcluida }: { ordem: 
               <div>
                 <div className="cell-title">{i.produto.nome}</div>
                 <div className="cell-sub row" style={{ gap: 6 }}><Code>{i.produto.sku}</Code><Loc>{i.produto.enderecoLocalizacao}</Loc></div>
+                <LotesSugeridos p={picking[i.id]} />
               </div>
               <span className="big">{numero(i.quantidade)}</span>
             </button>
@@ -327,9 +371,11 @@ function ModalConferencia({ ordem, usuarioId, onFechar, onConcluida }: { ordem: 
   );
 }
 
-function imprimirZebra(ordem: OrdemServico) {
+async function imprimirZebra(ordem: OrdemServico) {
   const janela = window.open('', '', 'width=400,height=600');
   if (!janela) return toast.error('Pop-up bloqueado pelo navegador.');
+  const picking = await buscarPicking(ordem);
+  const lotesTxt = (id: string) => (picking[id]?.partes || []).filter(p => p.lote).map(p => `LOTE ${p.lote}: ${p.quantidade}${p.validade ? ` (val ${dataUTC(p.validade)})` : ''}`).join('<br>');
   const titulo = ordem.tipo === 'ENTRADA' ? 'LISTA DE ENTRADA' : ordem.tipo === 'DEVOLUCAO' ? 'LISTA DE DEVOLUÇÃO' : 'LISTA DE PICKING';
   const d = new Date(ordem.createdAt);
   const esc = (s: string) => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!));
@@ -343,12 +389,12 @@ function imprimirZebra(ordem: OrdemServico) {
     .loc { font-weight: bold; font-size: 13px; border: 1px solid #000; padding: 1px 4px; background: #eee; display: inline-block; margin-top: 2px; }
     .c { text-align: center; margin-top: 14px; font-size: 16px; letter-spacing: 2px; border: 1px solid #000; padding: 5px; } .f { text-align: center; font-size: 10px; margin-top: 10px; }
   </style></head><body>
-    <div class="h"><p class="t">${titulo}</p><p class="s">ORDEM ${ordem.codigo} (${ordem.tipo})</p>
+    <div class="h"><p class="t">${titulo}</p><p class="s">ORDEM ${ordem.codigo} (${ordem.tipo})</p>${ordem.armazem ? `<p class="s">${esc(ordem.armazem.nome)}</p>` : ''}
     ${ordem.prioridade !== 'Normal' ? `<div class="p">PRIORIDADE: ${ordem.prioridade.toUpperCase()}</div>` : ''}
     <p class="s">Solicitante: ${esc(ordem.solicitante?.nome || '-')}</p><p class="s">${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
     ${ordem.observacao ? `<p class="s">Obs.: ${esc(ordem.observacao)}</p>` : ''}</div>
     ${porEndereco(ordem.itens).map(i => `<div class="i"><div class="l1"><span class="b"></span><span class="n">${esc(i.produto.nome)}</span><span class="q">${i.quantidade} un</span></div>
-      <div class="m">SKU: ${esc(i.produto.sku)}<br><span class="loc">LOCAL: ${esc(i.produto.enderecoLocalizacao || 'Estoque geral')}</span></div></div>`).join('')}
+      <div class="m">SKU: ${esc(i.produto.sku)}<br><span class="loc">LOCAL: ${esc(i.produto.enderecoLocalizacao || 'Estoque geral')}</span>${lotesTxt(i.id) ? `<br><b>${lotesTxt(i.id)}</b>` : ''}</div></div>`).join('')}
     <div class="c">*${ordem.codigo}*</div><div class="f">ViaPro WMS</div>
     <script>window.onload=function(){window.print();window.close();}</script></body></html>`);
   janela.document.close();

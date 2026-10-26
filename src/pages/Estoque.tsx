@@ -4,7 +4,7 @@ import { toast } from 'react-toastify';
 import {
   IoSwapVerticalOutline, IoConstructOutline, IoDownloadOutline, IoDocumentTextOutline, IoArrowDownCircleOutline,
   IoArrowUpCircleOutline, IoRepeatOutline, IoAddCircleOutline, IoRemoveCircleOutline, IoHandRightOutline,
-  IoWarningOutline, IoReturnDownBackOutline, IoReceiptOutline,
+  IoWarningOutline, IoReturnDownBackOutline, IoReceiptOutline, IoGitCompareOutline, IoEnterOutline,
 } from 'react-icons/io5';
 import { api, msgErro } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -12,7 +12,9 @@ import { useCarregar } from '../lib/useCarregar';
 import { contem, moeda, numero } from '../lib/format';
 import { estoqueMinimo, tomStatusEstoque } from '../lib/regras';
 import { exportarExcel, exportarPDF, VERDE, VERMELHO, LARANJA } from '../lib/exportar';
-import type { Categoria, Estoque as EstoqueT, Produto } from '../lib/tipos';
+import type { Armazem, Categoria, Estoque as EstoqueT, Produto } from '../lib/tipos';
+import { ModalEntrada, ModalTransferencia, SelectArmazem, useArmazens } from '../components/EstoqueModais';
+import { dataUTC } from '../lib/format';
 import { DataTable, type Col } from '../components/DataTable';
 import { Badge, Code, Field, Kpi, Loading, Loc, Modal, Notice, PageHeader, Panel, SearchInput, Segmented } from '../components/ui';
 
@@ -43,13 +45,25 @@ export default function Estoque() {
   const [categoria, setCategoria] = useState('');
   const [movimentar, setMovimentar] = useState<EstoqueT | null>(null);
   const [produzir, setProduzir] = useState(false);
+  const [armazemId, setArmazemId] = useState('');
+  const [entrada, setEntrada] = useState(false);
+  const [transferir, setTransferir] = useState<EstoqueT | 'nova' | null>(null);
+  const { armazens, padraoId } = useArmazens();
 
   const { dados, carregando, recarregar } = useCarregar(async () => {
     const [e, p, c] = await Promise.all([api.get<EstoqueT[]>('/estoque'), api.get<Produto[]>('/produtos'), api.get<Categoria[]>('/categorias')]);
     return { estoque: e.data, produtos: p.data, categorias: c.data };
   });
 
-  const estoque = useMemo(() => dados?.estoque ?? [], [dados]);
+  // Linhas por produto × armazém × lote. Lotes zerados ficam ocultos; a linha "sem lote" aparece mesmo zerada.
+  const estoque = useMemo(() => (dados?.estoque ?? [])
+    .filter(e => !armazemId || e.armazemId === armazemId)
+    .filter(e => !(e.status === 'Disponível' && e.quantidade <= 0 && e.lote)), [dados, armazemId]);
+  const totalProduto = useMemo(() => {
+    const m = new Map<string, number>();
+    estoque.filter(e => e.status === 'Disponível').forEach(e => m.set(e.produtoId, (m.get(e.produtoId) || 0) + e.quantidade));
+    return m;
+  }, [estoque]);
   const contagem = useMemo(() => {
     const c: Record<string, number> = { Todos: 0 };
     for (const e of estoque) { if (e.quantidade <= 0 && e.status !== 'Disponível') continue; c[e.status] = (c[e.status] || 0) + 1; c.Todos++; }
@@ -61,18 +75,19 @@ export default function Estoque() {
     .filter(e => e.status === 'Disponível' || e.quantidade > 0)
     .filter(e => !categoria || e.produto.categoriaId === categoria)
     .filter(e => {
-      if (filtro === 'critico') return e.status === 'Disponível' && e.quantidade <= estoqueMinimo(e.produto);
-      if (filtro === 'zerado') return e.status === 'Disponível' && e.quantidade <= 0;
+      if (filtro === 'critico') return e.status === 'Disponível' && (totalProduto.get(e.produtoId) ?? 0) <= estoqueMinimo(e.produto);
+      if (filtro === 'zerado') return e.status === 'Disponível' && (totalProduto.get(e.produtoId) ?? 0) <= 0;
       return true;
     })
-    .filter(e => contem(busca, e.produto.nome, e.produto.sku, e.produto.codigoBarras, e.status, e.produto.enderecoLocalizacao, e.localizacao?.codigo, e.produto.lote)),
-  [estoque, aba, categoria, filtro, busca]);
+    .filter(e => contem(busca, e.produto.nome, e.produto.sku, e.produto.codigoBarras, e.status, e.produto.enderecoLocalizacao, e.localizacao?.codigo, e.lote, e.armazem?.nome)),
+  [estoque, aba, categoria, filtro, busca, totalProduto]);
 
   const disponiveis = estoque.filter(e => e.status === 'Disponível');
+  const produtosDisp = [...new Map(disponiveis.map(e => [e.produtoId, e.produto])).values()];
   const resumo = {
-    skus: disponiveis.length,
+    skus: produtosDisp.filter(p => (totalProduto.get(p.id) ?? 0) > 0).length,
     unidades: disponiveis.reduce((a, e) => a + e.quantidade, 0),
-    criticos: disponiveis.filter(e => e.quantidade <= estoqueMinimo(e.produto)).length,
+    criticos: produtosDisp.filter(p => (totalProduto.get(p.id) ?? 0) <= estoqueMinimo(p)).length,
     valor: estoque.filter(e => e.status !== 'Ruptura').reduce((a, e) => a + e.quantidade * (e.produto.precoCusto || 0), 0),
   };
 
@@ -86,13 +101,18 @@ export default function Estoque() {
 
   const colunas: Col<EstoqueT>[] = [
     { key: 'produto', titulo: 'Produto', principal: true, ordenar: e => e.produto.nome, render: e => (
-      <><div className="cell-title">{e.produto.nome}</div><div className="cell-sub"><Code>{e.produto.sku}</Code>{e.produto.lote && <> &nbsp;Lote {e.produto.lote}</>}</div></>
+      <><div className="cell-title">{e.produto.nome}</div><div className="cell-sub"><Code>{e.produto.sku}</Code></div></>
     ) },
+    { key: 'lote', titulo: 'Lote / validade', ordenar: e => e.validade || e.produto.validade || 'z', render: e => (
+      <>{e.lote ? <b>{e.lote}</b> : <span className="muted">Sem lote</span>}<div className="cell-sub">{(e.validade || e.produto.validade) ? `Val. ${dataUTC(e.validade || e.produto.validade)}` : ''}</div></>
+    ) },
+    { key: 'arm', titulo: 'Armazém', ocultarCelular: !!armazemId, ordenar: e => e.armazem?.nome, render: e => e.armazem?.nome || '-' },
     { key: 'end', titulo: 'Endereço', ordenar: e => endereco(e) || 'zzz', render: e => <Loc>{endereco(e)}</Loc> },
     { key: 'cat', titulo: 'Categoria', ocultarCelular: true, ordenar: e => e.produto.categoria?.nome, render: e => e.produto.categoria?.nome || '-' },
     { key: 'qtd', titulo: 'Saldo', align: 'right', ordenar: e => e.quantidade, render: e => {
       const min = estoqueMinimo(e.produto);
-      const tom = e.status !== 'Disponível' ? '' : e.quantidade <= 0 ? 'qty--bad' : e.quantidade <= min ? 'qty--warn' : 'qty--ok';
+      const total = totalProduto.get(e.produtoId) ?? 0;
+      const tom = e.status !== 'Disponível' ? '' : total <= 0 ? 'qty--bad' : total <= min ? 'qty--warn' : 'qty--ok';
       return <span className={`qty ${tom}`}>{numero(e.quantidade)} {e.produto.unidade || 'un'}</span>;
     } },
     { key: 'min', titulo: 'Mínimo', align: 'right', ocultarCelular: true, ordenar: e => estoqueMinimo(e.produto), render: e => <span className="muted">{numero(estoqueMinimo(e.produto))}</span> },
@@ -125,7 +145,9 @@ export default function Estoque() {
             resumo: [`${resumo.skus} SKUs`, `${numero(resumo.unidades)} unidades`, `${resumo.criticos} abaixo do mínimo`],
             destacar: (e, col) => (col === 2 && e.status === 'Disponível' ? (e.quantidade <= estoqueMinimo(e.produto) ? VERMELHO : VERDE) : col === 5 && e.status !== 'Disponível' ? LARANJA : undefined),
           })}><IoDocumentTextOutline /> PDF</button>
-          <button className="btn btn--primary" onClick={() => setProduzir(true)}><IoConstructOutline /> Produzir lote</button>
+          <button className="btn" onClick={() => setTransferir('nova')}><IoGitCompareOutline /> Transferir</button>
+          <button className="btn" onClick={() => setProduzir(true)}><IoConstructOutline /> Produzir lote</button>
+          <button className="btn btn--primary" onClick={() => setEntrada(true)}><IoEnterOutline /> Nova entrada</button>
         </>}
       />
 
@@ -148,6 +170,10 @@ export default function Estoque() {
         <div className="toolbar">
           <Segmented<Aba> valor={aba} onChange={setAba} opcoes={(['Disponível', 'Em Demonstração', 'Ruptura', 'Todos'] as Aba[]).map(a => ({ valor: a, label: a === 'Ruptura' ? 'Avarias' : a === 'Em Demonstração' ? 'Demonstração' : a, n: contagem[a] || 0 }))} />
           <SearchInput value={busca} onChange={setBusca} placeholder="Nome, SKU, código de barras, endereço ou lote" />
+          <select className="select" value={armazemId} onChange={e => setArmazemId(e.target.value)} aria-label="Armazém">
+            <option value="">Todos os armazéns</option>
+            {armazens.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
+          </select>
           <select className="select" value={categoria} onChange={e => setCategoria(e.target.value)} aria-label="Categoria">
             <option value="">Todas as categorias</option>
             {dados?.categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
@@ -163,6 +189,7 @@ export default function Estoque() {
           acoes={e => (
             <div className="row" style={{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
               <button className="btn btn--sm" onClick={() => setMovimentar(e)}><IoSwapVerticalOutline /> Movimentar</button>
+              {e.status === 'Disponível' && e.quantidade > 0 && armazens.length > 1 && <button className="icon-btn" title="Transferir para outro armazém" aria-label="Transferir" onClick={() => setTransferir(e)}><IoGitCompareOutline /></button>}
               <button className="icon-btn" title="Kardex do produto" aria-label="Kardex do produto" onClick={() => navigate(`/kardex/${e.produtoId}`)}><IoReceiptOutline /></button>
             </div>
           )}
@@ -172,8 +199,14 @@ export default function Estoque() {
       {movimentar && usuario && (
         <ModalMovimento item={movimentar} usuarioId={usuario.id} onFechar={() => setMovimentar(null)} onSalvo={() => { setMovimentar(null); recarregar(true); }} />
       )}
+      {entrada && dados && <ModalEntrada produtos={dados.produtos} armazens={armazens} padraoId={armazemId || padraoId} onFechar={() => setEntrada(false)} onSalvo={() => { setEntrada(false); recarregar(true); }} />}
+      {transferir && dados && armazens.length > 0 && (
+        <ModalTransferencia produtos={dados.produtos} armazens={armazens}
+          inicial={transferir === 'nova' ? { origemId: armazemId || undefined } : { produto: transferir.produto, origemId: transferir.armazemId ?? undefined, lote: transferir.lote }}
+          onFechar={() => setTransferir(null)} onSalvo={() => { setTransferir(null); recarregar(true); }} />
+      )}
       {produzir && usuario && dados && (
-        <ModalProducao produtos={dados.produtos} estoque={estoque} usuarioId={usuario.id} onFechar={() => setProduzir(false)} onSalvo={() => { setProduzir(false); recarregar(true); }} />
+        <ModalProducao produtos={dados.produtos} estoque={dados.estoque} usuarioId={usuario.id} armazens={armazens} armazemInicial={armazemId || padraoId} onFechar={() => setProduzir(false)} onSalvo={() => { setProduzir(false); recarregar(true); }} />
       )}
     </>
   );
@@ -238,16 +271,19 @@ function ModalMovimento({ item, usuarioId, onFechar, onSalvo }: { item: EstoqueT
   );
 }
 
-function ModalProducao({ produtos, estoque, usuarioId, onFechar, onSalvo }: {
-  produtos: Produto[]; estoque: EstoqueT[]; usuarioId: string; onFechar: () => void; onSalvo: () => void;
+function ModalProducao({ produtos, estoque, usuarioId, armazens, armazemInicial, onFechar, onSalvo }: {
+  produtos: Produto[]; estoque: EstoqueT[]; usuarioId: string; armazens: Armazem[]; armazemInicial: string; onFechar: () => void; onSalvo: () => void;
 }) {
+  const [armazemId, setArmazemId] = useState(armazemInicial);
+  const [lote, setLote] = useState('');
+  const [validade, setValidade] = useState('');
   const [produtoId, setProdutoId] = useState('');
   const [qtd, setQtd] = useState('1');
   const [salvando, setSalvando] = useState(false);
   const comReceita = produtos.filter(p => p.tipo === 'ACABADO').sort((a, b) => a.nome.localeCompare(b.nome));
   const produto = produtos.find(p => p.id === produtoId);
   const n = Number(qtd) || 0;
-  const saldo = (id: string) => estoque.filter(e => e.produtoId === id && e.status === 'Disponível').reduce((a, e) => a + e.quantidade, 0);
+  const saldo = (id: string) => estoque.filter(e => e.produtoId === id && e.status === 'Disponível' && (!armazemId || e.armazemId === armazemId)).reduce((a, e) => a + e.quantidade, 0);
   const necessidades = (produto?.ingredientes || []).map(i => ({
     nome: i.produtoFilho?.nome || '-', sku: i.produtoFilho?.sku || '-', necessario: i.quantidade * n, disponivel: saldo(i.produtoFilhoId),
   }));
@@ -259,7 +295,7 @@ function ModalProducao({ produtos, estoque, usuarioId, onFechar, onSalvo }: {
     if (n <= 0) return toast.warn('A quantidade deve ser maior que zero.');
     setSalvando(true);
     try {
-      const r = await api.post('/producao/executar', { produtoFinalId: produtoId, quantidadeProduzir: n, usuarioId });
+      const r = await api.post('/producao/executar', { produtoFinalId: produtoId, quantidadeProduzir: n, usuarioId, armazemId, lote: lote || undefined, validade: validade || undefined });
       toast.success(r.data.mensagem || 'Lote produzido. Matéria-prima baixada.');
       onSalvo();
     } catch (err) {
@@ -289,6 +325,9 @@ function ModalProducao({ produtos, estoque, usuarioId, onFechar, onSalvo }: {
           <Field label="Quantidade a produzir" className="col-4">
             <input className="input" type="number" min={1} value={qtd} onChange={e => setQtd(e.target.value)} required />
           </Field>
+          <SelectArmazem armazens={armazens} value={armazemId} onChange={setArmazemId} className="col-4" />
+          <Field label="Lote do produto final" className="col-4"><input className="input" value={lote} onChange={e => setLote(e.target.value.toUpperCase())} placeholder="Opcional" /></Field>
+          <Field label="Validade" className="col-4"><input className="input" type="date" value={validade} onChange={e => setValidade(e.target.value)} /></Field>
         </div>
         {produto && !produto.ingredientes?.length && <Notice tom="warn">Este produto não tem receita. Cadastre a receita em Produtos → Editar.</Notice>}
         {necessidades.length > 0 && (

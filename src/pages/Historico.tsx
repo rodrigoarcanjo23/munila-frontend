@@ -31,7 +31,7 @@ export default function Historico() {
 
   const colunas: Col<Movimentacao>[] = [
     { key: 'd', titulo: 'Data e hora', ordenar: m => m.dataHora, render: m => dataHora(m.dataHora) },
-    { key: 'p', titulo: 'Produto', principal: true, ordenar: m => m.produto?.nome, render: m => <><div className="cell-title">{m.produto?.nome}</div>{m.observacao && <div className="cell-sub">{m.observacao}</div>}</> },
+    { key: 'p', titulo: 'Produto', principal: true, ordenar: m => m.produto?.nome, render: m => <><div className="cell-title">{m.produto?.nome}</div><div className="cell-sub">{[m.lote && `Lote ${m.lote}`, m.observacao].filter(Boolean).join(' · ')}</div></> },
     { key: 'a', titulo: 'Ação', ordenar: m => m.tipoAcao, render: m => <Badge tom={ehEntrada(m.tipoAcao) ? 'ok' : 'bad'}>{m.tipoAcao}</Badge> },
     { key: 'doc', titulo: 'Documento', ordenar: m => m.codigo || '', render: m => (m.codigo ? <Code>{m.codigo}</Code> : '-') },
     { key: 'q', titulo: 'Qtd.', align: 'right', ordenar: m => m.quantidade, render: m => <span className={ehEntrada(m.tipoAcao) ? 'up' : 'down'}>{ehEntrada(m.tipoAcao) ? '+' : '−'}{numero(m.quantidade)}</span> },

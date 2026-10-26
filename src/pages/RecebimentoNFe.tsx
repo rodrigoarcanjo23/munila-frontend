@@ -6,13 +6,15 @@ import { useAuth } from '../lib/auth';
 import { useCarregar } from '../lib/useCarregar';
 import { dataHora, moeda, normalizar, numero } from '../lib/format';
 import type { Produto } from '../lib/tipos';
+import { useArmazens } from '../components/EstoqueModais';
 import { Badge, Code, Empty, Field, Kpi, Loading, Notice, PageHeader, Panel, useDialogo } from '../components/ui';
 
 interface ItemNF {
-  n: number; cProd: string; cEAN: string; xProd: string; uCom: string; qCom: number; vUnCom: number; vProd: number;
+  n: string; lote: string; validade: string; cProd: string; cEAN: string; xProd: string; uCom: string; qCom: number; vUnCom: number; vProd: number;
   produtoId: string; fator: number; automatico: boolean;
 }
-interface NotaFiscal { numero: string; serie: string; emitente: string; cnpj: string; chave: string; emissao: string; valorTotal: number; itens: ItemNF[] }
+interface Duplicata { numero: string; vencimento: string; valor: number }
+interface NotaFiscal { numero: string; serie: string; emitente: string; cnpj: string; chave: string; emissao: string; valorTotal: number; itens: ItemNF[]; duplicatas: Duplicata[] }
 
 const txt = (el: Element | null | undefined, tag: string) => el?.getElementsByTagName(tag)[0]?.textContent?.trim() ?? '';
 
@@ -24,21 +26,31 @@ function lerXML(xml: string, produtos: Produto[]): NotaFiscal {
   if (!inf) throw new Error('Este XML não é uma NF-e (infNFe não encontrado).');
   const ide = inf.getElementsByTagName('ide')[0];
   const emit = inf.getElementsByTagName('emit')[0];
-  const itens = Array.from(inf.getElementsByTagName('det')).map((det, i) => {
+  // Cada <det> vira uma linha; se o item tiver vários lotes (<rastro>), vira uma linha por lote.
+  const itens = Array.from(inf.getElementsByTagName('det')).flatMap((det, i) => {
     const prod = det.getElementsByTagName('prod')[0];
     const cEAN = txt(prod, 'cEAN');
     const cProd = txt(prod, 'cProd');
     const achado = produtos.find(p => (cEAN && cEAN !== 'SEM GTIN' && p.codigoBarras === cEAN) || normalizar(p.sku) === normalizar(cProd));
-    return {
-      n: i + 1, cProd, cEAN: cEAN === 'SEM GTIN' ? '' : cEAN, xProd: txt(prod, 'xProd'), uCom: txt(prod, 'uCom'),
+    const base = {
+      cProd, cEAN: cEAN === 'SEM GTIN' ? '' : cEAN, xProd: txt(prod, 'xProd'), uCom: txt(prod, 'uCom'),
       qCom: Number(txt(prod, 'qCom')) || 0, vUnCom: Number(txt(prod, 'vUnCom')) || 0, vProd: Number(txt(prod, 'vProd')) || 0,
       produtoId: achado?.id ?? '', fator: 1, automatico: Boolean(achado),
     };
+    const rastros = Array.from(prod.getElementsByTagName('rastro'));
+    if (rastros.length === 0) return [{ ...base, n: String(i + 1), lote: '', validade: '' }];
+    return rastros.map((r, j) => ({
+      ...base, n: rastros.length > 1 ? `${i + 1}.${j + 1}` : String(i + 1),
+      lote: txt(r, 'nLote').toUpperCase(), validade: txt(r, 'dVal').slice(0, 10), qCom: Number(txt(r, 'qLote')) || base.qCom,
+    }));
   });
+  const duplicatas = Array.from(inf.getElementsByTagName('dup')).map(d => ({
+    numero: txt(d, 'nDup'), vencimento: txt(d, 'dVenc').slice(0, 10), valor: Number(txt(d, 'vDup')) || 0,
+  }));
   return {
     numero: txt(ide, 'nNF'), serie: txt(ide, 'serie'), emitente: txt(emit, 'xNome'), cnpj: txt(emit, 'CNPJ'),
     chave: (inf.getAttribute('Id') || '').replace(/^NFe/, ''), emissao: txt(ide, 'dhEmi') || txt(ide, 'dEmi'),
-    valorTotal: Number(txt(inf.getElementsByTagName('ICMSTot')[0], 'vNF')) || itens.reduce((a, i) => a + i.vProd, 0), itens,
+    valorTotal: Number(txt(inf.getElementsByTagName('ICMSTot')[0], 'vNF')) || itens.reduce((a, i) => a + i.vProd, 0), itens, duplicatas,
   };
 }
 
@@ -48,6 +60,9 @@ export default function RecebimentoNFe() {
   const [nota, setNota] = useState<NotaFiscal | null>(null);
   const [arrastando, setArrastando] = useState(false);
   const [atualizarCusto, setAtualizarCusto] = useState(true);
+  const [gerarTitulos, setGerarTitulos] = useState(true);
+  const { armazens, padraoId } = useArmazens();
+  const [armazemId, setArmazemId] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [resultado, setResultado] = useState<{ codigo: string; unidades: number } | null>(null);
   const { dados: produtos, carregando } = useCarregar(async () => (await api.get<Produto[]>('/produtos')).data);
@@ -60,7 +75,7 @@ export default function RecebimentoNFe() {
     } catch (e) { toast.error((e as Error).message); }
   }
 
-  const atualizarItem = (n: number, patch: Partial<ItemNF>) => setNota(x => x && { ...x, itens: x.itens.map(i => (i.n === n ? { ...i, ...patch } : i)) });
+  const atualizarItem = (n: string, patch: Partial<ItemNF>) => setNota(x => x && { ...x, itens: x.itens.map(i => (i.n === n ? { ...i, ...patch } : i)) });
   const vinculados = nota?.itens.filter(i => i.produtoId) ?? [];
 
   async function confirmarEntrada() {
@@ -73,11 +88,12 @@ export default function RecebimentoNFe() {
     setEnviando(true);
     try {
       const { data } = await api.post('/recebimentos/nfe', {
-        usuarioId: usuario?.id, numero: nota.numero, emitente: nota.emitente, chave: nota.chave, atualizarCusto,
-        itens: vinculados.map(i => ({ produtoId: i.produtoId, quantidade: Math.round(i.qCom * i.fator), custoUnitario: i.fator ? i.vUnCom / i.fator : i.vUnCom })),
+        usuarioId: usuario?.id, numero: nota.numero, emitente: nota.emitente, cnpjEmitente: nota.cnpj, chave: nota.chave, atualizarCusto,
+        armazemId: armazemId || padraoId || undefined, gerarTitulos, duplicatas: nota.duplicatas,
+        itens: vinculados.map(i => ({ produtoId: i.produtoId, quantidade: Math.round(i.qCom * i.fator), custoUnitario: i.fator ? i.vUnCom / i.fator : i.vUnCom, lote: i.lote || undefined, validade: i.validade || undefined })),
       });
       setResultado(data);
-      toast.success(`Entrada ${data.codigo} registrada: ${data.unidades} unidades.`);
+      toast.success(`Entrada ${data.codigo} registrada: ${data.unidades} unidades${data.titulos ? ` e ${data.titulos} título(s) a pagar` : ''}.`);
     } catch (e) { toast.error(msgErro(e)); } finally { setEnviando(false); }
   }
 
@@ -114,18 +130,25 @@ export default function RecebimentoNFe() {
 
           <Panel flush titulo="Itens da nota" descricao="Confira o vínculo de cada item. Use o fator quando o fornecedor vende em caixa (ex.: 1 CX = 12 UN)."
             acoes={<>
+              <select className="select" style={{ width: 'auto' }} value={armazemId || padraoId} onChange={e => setArmazemId(e.target.value)} aria-label="Armazém de destino">
+                {armazens.map(a => <option key={a.id} value={a.id}>Entrar em: {a.nome}</option>)}
+              </select>
               <label className="check"><input type="checkbox" checked={atualizarCusto} onChange={e => setAtualizarCusto(e.target.checked)} /> Atualizar custo dos produtos</label>
               <button className="btn btn--primary" onClick={confirmarEntrada} disabled={enviando || !!resultado}><IoCheckmarkDoneOutline /> {enviando ? 'Registrando…' : 'Registrar entrada'}</button>
             </>}>
             {nota.itens.length === 0 ? <Empty titulo="A nota não tem itens" /> : (
               <div className="table-wrap">
                 <table className="table table--cards">
-                  <thead><tr><th>#</th><th>Item na nota</th><th className="num">Qtd. nota</th><th className="num">Unitário</th><th>Produto no sistema</th><th className="num">Fator</th><th className="num">Entra no estoque</th></tr></thead>
+                  <thead><tr><th>#</th><th>Item na nota</th><th>Lote / validade</th><th className="num">Qtd. nota</th><th className="num">Unitário</th><th>Produto no sistema</th><th className="num">Fator</th><th className="num">Entra no estoque</th></tr></thead>
                   <tbody>
                     {nota.itens.map(i => (
                       <tr key={i.n}>
                         <td data-label="#">{i.n}</td>
                         <td data-primary=""><div className="cell-title">{i.xProd}</div><div className="cell-sub"><Code>{i.cProd}</Code> {i.cEAN && <>EAN {i.cEAN}</>}</div></td>
+                        <td data-label="Lote">
+                          <input className="input" style={{ height: 32, width: 110 }} value={i.lote} placeholder="Sem lote" onChange={e => atualizarItem(i.n, { lote: e.target.value.toUpperCase() })} aria-label="Lote" />
+                          <input className="input mt-8" style={{ height: 32, width: 140 }} type="date" value={i.validade} onChange={e => atualizarItem(i.n, { validade: e.target.value })} aria-label="Validade" />
+                        </td>
                         <td className="num" data-label="Qtd. nota">{numero(i.qCom, i.qCom % 1 ? 2 : 0)} {i.uCom}</td>
                         <td className="num" data-label="Unitário">{moeda(i.vUnCom)}</td>
                         <td data-label="Produto">
@@ -146,6 +169,15 @@ export default function RecebimentoNFe() {
               </div>
             )}
           </Panel>
+          {nota.duplicatas.length > 0 && (
+            <Panel flush className="mt-16" titulo="Duplicatas (cobrança)" descricao="Viram contas a pagar no financeiro ao registrar a entrada."
+              acoes={<label className="check"><input type="checkbox" checked={gerarTitulos} onChange={e => setGerarTitulos(e.target.checked)} /> Lançar no contas a pagar</label>}>
+              <table className="table">
+                <thead><tr><th>Duplicata</th><th>Vencimento</th><th className="num">Valor</th></tr></thead>
+                <tbody>{nota.duplicatas.map(d => <tr key={d.numero + d.vencimento}><td>{d.numero}</td><td>{d.vencimento.split('-').reverse().join('/')}</td><td className="num">{moeda(d.valor)}</td></tr>)}</tbody>
+              </table>
+            </Panel>
+          )}
           {nota.chave && <p className="muted mt-8" style={{ fontSize: 12 }}>Chave de acesso: {nota.chave}</p>}
         </>
       )}

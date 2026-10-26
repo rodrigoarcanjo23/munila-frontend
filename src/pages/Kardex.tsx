@@ -5,7 +5,7 @@ import { IoDownloadOutline, IoDocumentTextOutline } from 'react-icons/io5';
 import { api } from '../lib/api';
 import { useCarregar } from '../lib/useCarregar';
 import { useCores } from '../lib/useCores';
-import { contem, data, dataHora, moeda, numero } from '../lib/format';
+import { contem, data, dataHora, dataUTC, moeda, numero } from '../lib/format';
 import { estoqueMinimo } from '../lib/regras';
 import { exportarExcel, exportarPDF } from '../lib/exportar';
 import type { Produto } from '../lib/tipos';
@@ -13,8 +13,9 @@ import { DataTable, type Col } from '../components/DataTable';
 import { ProdutoPicker } from '../components/ProdutoPicker';
 import { Code, Empty, Kpi, Loading, Loc, PageHeader, Panel, SearchInput } from '../components/ui';
 
-interface LinhaK { id: string; dataHora: string; tipoAcao: string; codigo?: string | null; observacao?: string | null; usuario?: string; entrada: number; saida: number; saldo: number }
-interface Resp { produto: Produto; saldoAtual: number; saldoInicial: number; saldosPorStatus: Record<string, number>; linhas: LinhaK[] }
+interface LinhaK { id: string; dataHora: string; tipoAcao: string; codigo?: string | null; observacao?: string | null; usuario?: string; entrada: number; saida: number; saldo: number; lote?: string | null; armazem?: string | null }
+interface LoteK { armazem: string; armazemId: string | null; lote: string | null; validade: string | null; quantidade: number }
+interface Resp { produto: Produto; saldoAtual: number; saldoInicial: number; saldosPorStatus: Record<string, number>; linhas: LinhaK[]; lotes?: LoteK[] }
 
 /** Kardex: extrato de entradas e saídas do produto com saldo após cada lançamento. */
 export default function Kardex() {
@@ -49,6 +50,7 @@ function Extrato({ id }: { id: string }) {
     { key: 'd', titulo: 'Data', ordenar: l => l.dataHora, render: l => dataHora(l.dataHora) },
     { key: 't', titulo: 'Movimento', principal: true, render: l => <><div className="cell-title">{l.tipoAcao}</div>{l.observacao && <div className="cell-sub">{l.observacao}</div>}</> },
     { key: 'doc', titulo: 'Documento', render: l => (l.codigo ? <Code>{l.codigo}</Code> : '-') },
+    { key: 'lote', titulo: 'Armazém / lote', ocultarCelular: true, render: l => <>{l.armazem || '-'}<div className="cell-sub">{l.lote ? `Lote ${l.lote}` : ''}</div></> },
     { key: 'e', titulo: 'Entrada', align: 'right', render: l => (l.entrada ? <span className="up">+{numero(l.entrada)}</span> : '') },
     { key: 's', titulo: 'Saída', align: 'right', render: l => (l.saida ? <span className="down">−{numero(l.saida)}</span> : '') },
     { key: 'saldo', titulo: 'Saldo', align: 'right', render: l => <b>{numero(l.saldo)}</b> },
@@ -77,6 +79,23 @@ function Extrato({ id }: { id: string }) {
           {Object.entries(dados.saldosPorStatus).filter(([s, q]) => s !== 'Disponível' && q > 0).map(([s, q]) => <Kpi key={s} label={s} valor={numero(q)} tom={s === 'Ruptura' ? 'bad' : 'warn'} />)}
         </div>
       </Panel>
+
+      {(dados.lotes?.length ?? 0) > 0 && (
+        <Panel flush titulo="Saldo por armazém e lote" descricao="Na ordem em que sai (vence primeiro, sai primeiro)" className="mb-16">
+          <table className="table">
+            <thead><tr><th>Armazém</th><th>Lote</th><th>Validade</th><th className="num">Saldo</th></tr></thead>
+            <tbody>
+              {dados.lotes!.map((l, i) => (
+                <tr key={i}>
+                  <td>{l.armazem}</td><td>{l.lote ? <b>{l.lote}</b> : <span className="muted">Sem lote</span>}</td>
+                  <td>{l.validade ? <span className={new Date(l.validade) < new Date() ? 'down' : ''}>{dataUTC(l.validade)}</span> : '-'}</td>
+                  <td className="num"><b>{numero(l.quantidade)}</b></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Panel>
+      )}
 
       {dados.linhas.length > 1 && (
         <Panel titulo="Evolução do saldo" className="mb-16">

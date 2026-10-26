@@ -9,7 +9,7 @@ import { DataTable, type Col } from '../components/DataTable';
 import { Badge, Code, Empty, Kpi, Loading, Loc, PageHeader, Panel, SearchInput, Segmented } from '../components/ui';
 
 interface ItemValidade {
-  produtoId: string; sku: string; nome: string; lote?: string | null; categoria: string; endereco?: string | null;
+  id: string; armazem: string; produtoId: string; sku: string; nome: string; lote?: string | null; categoria: string; endereco?: string | null;
   validade: string; diasParaVencer: number; saldo: number; valor: number; faixa: string;
 }
 
@@ -23,12 +23,13 @@ export default function Validade() {
   const [comSaldo, setComSaldo] = useState(true);
   const { dados, carregando } = useCarregar(async () => (await api.get<ItemValidade[]>('/gerencial/validade')).data);
 
-  const itens = useMemo(() => (dados ?? []).filter(i => (!comSaldo || i.saldo > 0) && (faixa === 'Todas' || i.faixa === faixa) && contem(busca, i.nome, i.sku, i.lote, i.endereco)), [dados, faixa, busca, comSaldo]);
+  const itens = useMemo(() => (dados ?? []).filter(i => (!comSaldo || i.saldo > 0) && (faixa === 'Todas' || i.faixa === faixa) && contem(busca, i.nome, i.sku, i.lote, i.endereco, i.armazem)), [dados, faixa, busca, comSaldo]);
   const porFaixa = (f: string) => (dados ?? []).filter(i => i.faixa === f && (!comSaldo || i.saldo > 0));
 
   const colunas: Col<ItemValidade>[] = [
     { key: 'prod', titulo: 'Produto', principal: true, ordenar: i => i.nome, render: i => <><div className="cell-title">{i.nome}</div><div className="cell-sub"><Code>{i.sku}</Code>{i.lote && <> &nbsp;Lote {i.lote}</>}</div></> },
-    { key: 'end', titulo: 'Endereço', render: i => <Loc>{i.endereco}</Loc> },
+    { key: 'arm', titulo: 'Armazém', ordenar: i => i.armazem, render: i => i.armazem },
+    { key: 'end', titulo: 'Endereço', ocultarCelular: true, render: i => <Loc>{i.endereco}</Loc> },
     { key: 'val', titulo: 'Validade', ordenar: i => i.validade, render: i => dataUTC(i.validade) },
     { key: 'dias', titulo: 'Prazo', align: 'right', ordenar: i => i.diasParaVencer, render: i => <Badge tom={tom(i.faixa)}>{i.diasParaVencer < 0 ? `vencido há ${-i.diasParaVencer} d` : `${i.diasParaVencer} dias`}</Badge> },
     { key: 'saldo', titulo: 'Saldo', align: 'right', ordenar: i => i.saldo, render: i => numero(i.saldo) },
@@ -38,9 +39,9 @@ export default function Validade() {
   if (carregando && !dados) return <Loading />;
   return (
     <>
-      <PageHeader titulo="Controle de validade" descricao="Produtos por prazo de vencimento, para priorizar a saída (FEFO) e evitar perdas."
+      <PageHeader titulo="Controle de validade" descricao="Saldo por lote e armazém, ordenado pelo vencimento. A separação já sugere sair primeiro o lote que vence antes (FEFO)."
         acoes={<button className="btn" onClick={() => exportarExcel('Validade_ViaPro', [{ nome: 'Validade', linhas: itens, colunas: [
-          { titulo: 'Produto', valor: i => i.nome, largura: 40 }, { titulo: 'SKU', valor: i => i.sku }, { titulo: 'Lote', valor: i => i.lote || '-' },
+          { titulo: 'Produto', valor: i => i.nome, largura: 40 }, { titulo: 'SKU', valor: i => i.sku }, { titulo: 'Lote', valor: i => i.lote || '-' }, { titulo: 'Armazém', valor: i => i.armazem },
           { titulo: 'Validade', valor: i => dataUTC(i.validade) }, { titulo: 'Dias', valor: i => i.diasParaVencer }, { titulo: 'Saldo', valor: i => i.saldo }, { titulo: 'Valor', valor: i => moeda(i.valor) },
         ] }])}><IoDownloadOutline /> Excel</button>} />
 
@@ -57,7 +58,7 @@ export default function Validade() {
           <SearchInput value={busca} onChange={setBusca} placeholder="Produto, SKU, lote ou endereço" />
           <label className="check"><input type="checkbox" checked={comSaldo} onChange={e => setComSaldo(e.target.checked)} /> Só com saldo</label>
         </div>
-        <DataTable colunas={colunas} linhas={itens} chave={i => i.produtoId} ordemInicial={{ key: 'dias', dir: 'asc' }} onLinha={i => navigate(`/kardex/${i.produtoId}`)}
+        <DataTable colunas={colunas} linhas={itens} chave={i => i.id} ordemInicial={{ key: 'dias', dir: 'asc' }} onLinha={i => navigate(`/kardex/${i.produtoId}`)}
           vazio={<Empty titulo="Nenhum produto nesta faixa">Informe a data de validade no cadastro do produto para acompanhar aqui.</Empty>} />
       </Panel>
     </>

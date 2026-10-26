@@ -9,7 +9,7 @@ import { compacto, contem, moeda, numero, pct } from '../lib/format';
 import { exportarExcel, exportarPDF } from '../lib/exportar';
 import type { Categoria, Estoque } from '../lib/tipos';
 import { DataTable, type Col } from '../components/DataTable';
-import { Code, Kpi, Loading, PageHeader, Panel, SearchInput, Segmented } from '../components/ui';
+import { Code, Empty, Kpi, Loading, PageHeader, Panel, SearchInput, Segmented } from '../components/ui';
 
 interface Painel {
   dias: number;
@@ -32,7 +32,7 @@ export default function Dashboard() {
   const [busca, setBusca] = useState('');
   const [categoria, setCategoria] = useState('');
 
-  const { dados, carregando, recarregar } = useCarregar(async () => {
+  const { dados, carregando, erro, recarregar } = useCarregar(async () => {
     const [painel, estoque, categorias] = await Promise.all([
       api.get<Painel>(`/dashboard/painel?dias=${dias}`),
       api.get<Estoque[]>('/estoque'),
@@ -68,7 +68,12 @@ export default function Dashboard() {
   const margem = (c: LinhaCapital) => (c.valorImobilizado > 0 ? ((c.receitaPotencial - c.valorImobilizado) / c.valorImobilizado) * 100 : 0);
 
   if (carregando && !dados) return <Loading />;
-  if (!dados) return null;
+  if (!dados) return (
+    <>
+      <PageHeader titulo="Painel" />
+      <Panel><Empty titulo="Não foi possível montar o painel">{erro}<div className="mt-16"><button className="btn btn--primary" onClick={() => recarregar()}><IoRefreshOutline /> Tentar de novo</button></div></Empty></Panel>
+    </>
+  );
   const { kpis, alertas, serie, valorPorCategoria, topSaidas } = dados.painel;
   const k = (n: string) => Number(kpis[n] || 0);
 
@@ -111,6 +116,7 @@ export default function Dashboard() {
         <Kpi label="Abaixo do mínimo" valor={numero(k('criticos'))} dica={`${numero(k('zerados'))} com saldo zerado`} tom={k('criticos') ? 'warn' : 'ok'} onClick={() => navigate('/estoque?filtro=critico')} />
         <Kpi label="Perdas no mês" valor={moeda(k('perdasMes'))} dica={`${numero(k('rupturaQtd'))} un em avaria`} tom={k('perdasMes') ? 'bad' : undefined} onClick={() => navigate('/rupturas')} />
         <Kpi label="Compras em aberto" valor={moeda(k('caixaComprometido'))} dica={`${k('pedidosPendentes')} pedidos · ${k('pedidosAtrasados')} atrasados`} tom={k('pedidosAtrasados') ? 'warn' : undefined} onClick={() => navigate('/compras')} />
+        <Kpi label="Contas vencidas" valor={moeda(k('pagarVencido'))} dica={`${moeda(k('pagar7dias'))} a pagar em 7 dias`} tom={k('pagarVencido') ? 'bad' : undefined} onClick={() => navigate('/financeiro')} />
         <Kpi label="Ordens na fila" valor={numero(k('osPendentes') + k('osEmSeparacao'))} dica={kpis.tempoMedioSeparacaoMin !== null ? `Separação média: ${k('tempoMedioSeparacaoMin')} min` : `${k('osEmSeparacao')} em separação`} tom={k('osUrgentes') ? 'bad' : undefined} onClick={() => navigate('/separacao')} />
       </div>
 

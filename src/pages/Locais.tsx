@@ -7,12 +7,14 @@ import { contem } from '../lib/format';
 import { imprimirEtiquetas } from '../lib/etiquetas';
 import type { Localizacao, Produto } from '../lib/tipos';
 import { DataTable, type Col } from '../components/DataTable';
+import { useArmazens } from '../components/EstoqueModais';
 import { Badge, Field, Kpi, Loading, Loc, Modal, PageHeader, Panel, SearchInput, useDialogo } from '../components/ui';
 
-const vazio = { codigo: '', zona: '', corredor: '', prateleira: '' };
+const vazio = { codigo: '', zona: '', corredor: '', prateleira: '', armazemId: '' };
 
 export default function Locais() {
   const { confirmar } = useDialogo();
+  const { armazens } = useArmazens();
   const [busca, setBusca] = useState('');
   const [zona, setZona] = useState('');
   const [form, setForm] = useState<typeof vazio | null>(null);
@@ -30,7 +32,7 @@ export default function Locais() {
     return m;
   }, [dados]);
   const zonas = [...new Set((dados?.locais ?? []).map(l => l.zona))].sort();
-  const linhas = (dados?.locais ?? []).filter(l => (!zona || l.zona === zona) && contem(busca, l.codigo, l.zona, l.corredor, l.prateleira));
+  const linhas = (dados?.locais ?? []).filter(l => (!zona || l.zona === zona) && contem(busca, l.codigo, l.zona, l.corredor, l.prateleira, l.armazem?.nome));
   const ocupados = (dados?.locais ?? []).filter(l => ocupacao.get(l.codigo.toUpperCase())).length;
 
   async function salvar(e: FormEvent) {
@@ -54,6 +56,7 @@ export default function Locais() {
     { key: 'sel', titulo: <input type="checkbox" aria-label="Selecionar todos" checked={linhas.length > 0 && selecionados.length === linhas.length} onChange={e => setSelecionados(e.target.checked ? linhas.map(l => l.id) : [])} />, ocultarCelular: true,
       render: l => <input type="checkbox" aria-label={`Selecionar ${l.codigo}`} checked={selecionados.includes(l.id)} onChange={e => setSelecionados(s => (e.target.checked ? [...s, l.id] : s.filter(x => x !== l.id)))} /> },
     { key: 'cod', titulo: 'Endereço', principal: true, ordenar: l => l.codigo, render: l => <Loc>{l.codigo}</Loc> },
+    { key: 'arm', titulo: 'Armazém', ordenar: l => l.armazem?.nome, render: l => l.armazem?.nome || <span className="muted">Não definido</span> },
     { key: 'zona', titulo: 'Zona', ordenar: l => l.zona, render: l => <Badge tom="primary" plain>{l.zona}</Badge> },
     { key: 'mod', titulo: 'Módulo de armazenagem', ordenar: l => l.corredor, render: l => l.corredor },
     { key: 'prat', titulo: 'Prateleira / célula', ordenar: l => l.prateleira, render: l => l.prateleira },
@@ -89,7 +92,7 @@ export default function Locais() {
           acoes={l => (
             <div className="row" style={{ flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
               <button className="icon-btn" title="Etiqueta" aria-label="Imprimir etiqueta" onClick={() => etiquetas([l])}><IoPrintOutline /></button>
-              <button className="icon-btn" title="Editar" aria-label="Editar" onClick={() => { setForm({ codigo: l.codigo, zona: l.zona, corredor: l.corredor, prateleira: l.prateleira }); setEditandoId(l.id); }}><IoPencilOutline /></button>
+              <button className="icon-btn" title="Editar" aria-label="Editar" onClick={() => { setForm({ codigo: l.codigo, zona: l.zona, corredor: l.corredor, prateleira: l.prateleira, armazemId: l.armazemId || '' }); setEditandoId(l.id); }}><IoPencilOutline /></button>
               <button className="icon-btn icon-btn--bad" title="Excluir" aria-label="Excluir" onClick={() => excluir(l)}><IoTrashOutline /></button>
             </div>
           )} />
@@ -103,6 +106,12 @@ export default function Locais() {
             <Field label="Zona" className="col-6" dica="Ex.: Picking, Pulmão, Quarentena">
               <input className="input" required list="zonas" value={form.zona} onChange={e => setForm({ ...form, zona: e.target.value })} />
               <datalist id="zonas">{zonas.map(z => <option key={z} value={z} />)}</datalist>
+            </Field>
+            <Field label="Armazém" className="col-12">
+              <select className="select" value={form.armazemId} onChange={e => setForm({ ...form, armazemId: e.target.value })}>
+                <option value="">Não definido</option>
+                {armazens.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
+              </select>
             </Field>
             <Field label="Módulo de armazenagem" className="col-6"><input className="input" required value={form.corredor} onChange={e => setForm({ ...form, corredor: e.target.value })} placeholder="Módulo 01" /></Field>
             <Field label="Prateleira / célula" className="col-6"><input className="input" required value={form.prateleira} onChange={e => setForm({ ...form, prateleira: e.target.value })} placeholder="A" /></Field>

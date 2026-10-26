@@ -9,7 +9,7 @@ import { api, msgErro } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useCarregar } from '../lib/useCarregar';
 import { contem, data, dataUTC, hojeISO, isoParaInput, moeda, numero, paraNumero, pct } from '../lib/format';
-import { descricaoLimpa, estoqueMinimo, procedencia } from '../lib/regras';
+import { ORIGENS_FISCAIS, descricaoLimpa, estoqueMinimo, procedencia } from '../lib/regras';
 import { exportarExcel, exportarPDF } from '../lib/exportar';
 import { imprimirEtiquetas } from '../lib/etiquetas';
 import type { Categoria, Fornecedor, Localizacao, Produto } from '../lib/tipos';
@@ -158,6 +158,7 @@ function ModalProduto({ produto, produtos, categorias, locais, fornecedores, onF
     leadTimeDias: produto?.leadTimeDias != null ? String(produto.leadTimeDias) : '', fornecedorId: produto?.fornecedorId ?? '',
     precoCusto: produto?.precoCusto ? String(produto.precoCusto).replace('.', ',') : '', precoVenda: produto?.precoVenda ? String(produto.precoVenda).replace('.', ',') : '',
     estoqueInicial: '0', localizacaoId: '',
+    ncm: produto?.ncm ?? '', cest: produto?.cest ?? '', origemFiscal: produto?.origemFiscal != null ? String(produto.origemFiscal) : '', cfopPadrao: produto?.cfopPadrao ?? '',
   });
   const [receita, setReceita] = useState<Ingrediente[]>(
     (produto?.ingredientes ?? []).map(i => ({ produtoFilhoId: i.produtoFilhoId, nome: i.produtoFilho?.nome ?? '-', sku: i.produtoFilho?.sku ?? '-', quantidade: i.quantidade })),
@@ -194,7 +195,7 @@ function ModalProduto({ produto, produtos, categorias, locais, fornecedores, onF
       estoqueMinimo: f.estoqueMinimo === '' ? null : Number(f.estoqueMinimo),
       estoqueMaximo: f.estoqueMaximo === '' ? null : Number(f.estoqueMaximo),
       leadTimeDias: f.leadTimeDias === '' ? null : Number(f.leadTimeDias),
-      validade: f.validade || null, fornecedorId: f.fornecedorId || null,
+      validade: f.validade || null, fornecedorId: f.fornecedorId || null, origemFiscal: f.origemFiscal === '' ? null : Number(f.origemFiscal),
       ingredientes: f.tipo === 'ACABADO' ? receita.map(r => ({ produtoFilhoId: r.produtoFilhoId, quantidade: r.quantidade })) : [],
       estoqueInicial: novo ? Number(f.estoqueInicial) || 0 : undefined,
       localizacaoId: novo ? f.localizacaoId || null : undefined,
@@ -276,6 +277,17 @@ function ModalProduto({ produto, produtos, categorias, locais, fornecedores, onF
         <Field label="Preço de custo (R$)" className="col-4"><input className="input" inputMode="decimal" value={f.precoCusto} onChange={set('precoCusto')} placeholder="0,00" /></Field>
         <Field label="Preço de venda (R$)" className="col-4"><input className="input" inputMode="decimal" value={f.precoVenda} onChange={set('precoVenda')} placeholder="0,00" /></Field>
         <Field label="Margem sobre o custo" className="col-4"><div className="input" style={{ display: 'flex', alignItems: 'center', background: 'var(--surface-2)' }}><b className={margem >= 0 ? 'up' : 'down'}>{pct(margem)}</b></div></Field>
+
+        <div className="form-section">Fiscal (para NF-e)</div>
+        <Field label="NCM" className="col-3"><input className="input" inputMode="numeric" value={f.ncm} onChange={set('ncm')} placeholder="0000.00.00" /></Field>
+        <Field label="CEST" className="col-3"><input className="input" inputMode="numeric" value={f.cest} onChange={set('cest')} placeholder="Opcional" /></Field>
+        <Field label="CFOP padrão" className="col-2"><input className="input" inputMode="numeric" value={f.cfopPadrao} onChange={set('cfopPadrao')} placeholder="5102" /></Field>
+        <Field label="Origem" className="col-4">
+          <select className="select" value={f.origemFiscal} onChange={set('origemFiscal')}>
+            <option value="">Selecione…</option>
+            {ORIGENS_FISCAIS.map(o => <option key={o.valor} value={o.valor}>{o.label}</option>)}
+          </select>
+        </Field>
 
         {novo && <>
           <div className="form-section">Saldo inicial</div>

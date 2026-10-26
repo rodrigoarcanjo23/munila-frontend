@@ -9,7 +9,7 @@ import type { Fornecedor } from '../lib/tipos';
 import { DataTable, type Col } from '../components/DataTable';
 import { Field, Loading, Modal, PageHeader, Panel, SearchInput, useDialogo } from '../components/ui';
 
-const vazio = { nomeEmpresa: '', cnpj: '', contatoNome: '', telefone: '', email: '' };
+const vazio = { nomeEmpresa: '', cnpj: '', contatoNome: '', telefone: '', email: '', prazoPagamentoDias: '' };
 const mascaraCNPJ = (v: string) => v.replace(/\D/g, '').slice(0, 14)
   .replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2');
 
@@ -25,7 +25,8 @@ export default function Fornecedores() {
     e.preventDefault();
     if (!form?.nomeEmpresa.trim()) return toast.warn('Informe o nome da empresa.');
     try {
-      if (editandoId) await api.put(`/fornecedores/${editandoId}`, form); else await api.post('/fornecedores', form);
+      const payload = { ...form, prazoPagamentoDias: form.prazoPagamentoDias === '' ? null : Number(form.prazoPagamentoDias) };
+      if (editandoId) await api.put(`/fornecedores/${editandoId}`, payload); else await api.post('/fornecedores', payload);
       toast.success(editandoId ? 'Fornecedor atualizado.' : 'Fornecedor cadastrado.');
       setForm(null); recarregar(true);
     } catch (err) { toast.error(msgErro(err)); }
@@ -60,7 +61,7 @@ export default function Fornecedores() {
         <DataTable colunas={colunas} linhas={linhas} chave={f => f.id} ordemInicial={{ key: 'nome', dir: 'asc' }}
           acoes={f => (
             <div className="row" style={{ flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
-              <button className="icon-btn" aria-label="Editar" title="Editar" onClick={() => { setForm({ nomeEmpresa: f.nomeEmpresa, cnpj: f.cnpj || '', contatoNome: f.contatoNome || '', telefone: f.telefone || '', email: f.email || '' }); setEditandoId(f.id); }}><IoPencilOutline /></button>
+              <button className="icon-btn" aria-label="Editar" title="Editar" onClick={() => { setForm({ nomeEmpresa: f.nomeEmpresa, cnpj: f.cnpj || '', contatoNome: f.contatoNome || '', telefone: f.telefone || '', email: f.email || '', prazoPagamentoDias: f.prazoPagamentoDias != null ? String(f.prazoPagamentoDias) : '' }); setEditandoId(f.id); }}><IoPencilOutline /></button>
               <button className="icon-btn icon-btn--bad" aria-label="Excluir" title="Excluir" onClick={() => excluir(f)}><IoTrashOutline /></button>
             </div>
           )} />
@@ -71,7 +72,8 @@ export default function Fornecedores() {
           <form id="form-forn" onSubmit={salvar} className="form-grid">
             <Field label="Razão social / nome da empresa" className="col-8"><input className="input" required value={form.nomeEmpresa} onChange={e => setForm({ ...form, nomeEmpresa: e.target.value })} /></Field>
             <Field label="CNPJ" className="col-4"><input className="input" inputMode="numeric" value={form.cnpj} onChange={e => setForm({ ...form, cnpj: mascaraCNPJ(e.target.value) })} placeholder="00.000.000/0000-00" /></Field>
-            <Field label="Pessoa de contato" className="col-12"><input className="input" value={form.contatoNome} onChange={e => setForm({ ...form, contatoNome: e.target.value })} /></Field>
+            <Field label="Pessoa de contato" className="col-8"><input className="input" value={form.contatoNome} onChange={e => setForm({ ...form, contatoNome: e.target.value })} /></Field>
+            <Field label="Prazo de pagamento (dias)" className="col-4" dica="Usado no contas a pagar"><input className="input" type="number" min={0} value={form.prazoPagamentoDias} onChange={e => setForm({ ...form, prazoPagamentoDias: e.target.value })} placeholder="30" /></Field>
             <Field label="Telefone / WhatsApp" className="col-6"><input className="input" type="tel" value={form.telefone} onChange={e => setForm({ ...form, telefone: e.target.value })} /></Field>
             <Field label="E-mail comercial" className="col-6"><input className="input" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></Field>
           </form>

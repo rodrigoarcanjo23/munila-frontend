@@ -10,6 +10,7 @@ import { exportarExcel, exportarPDF } from '../lib/exportar';
 import { procedencia } from '../lib/regras';
 import type { Fornecedor, PedidoCompra, Produto } from '../lib/tipos';
 import { DataTable, type Col } from '../components/DataTable';
+import { SelectArmazem, useArmazens } from '../components/EstoqueModais';
 import { Badge, Code, Field, Kpi, Loading, Modal, Notice, PageHeader, Panel, SearchInput, Segmented, useDialogo } from '../components/ui';
 
 const hoje0 = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
@@ -162,6 +163,15 @@ function ModalPedido({ pedido, fornecedores, produtos, onFechar, onSalvo }: { pe
 
 function ModalReceber({ pedido, onFechar, onSalvo }: { pedido: PedidoCompra; onFechar: () => void; onSalvo: () => void }) {
   const { usuario } = useAuth();
+  const { armazens, padraoId } = useArmazens();
+  const [armazemId, setArmazemId] = useState('');
+  const [lote, setLote] = useState('');
+  const [validade, setValidade] = useState('');
+  const [nf, setNf] = useState('');
+  const [gerarTitulo, setGerarTitulo] = useState(true);
+  const prazo = pedido.fornecedor?.prazoPagamentoDias ?? 30;
+  const [vencimento, setVencimento] = useState(new Date(Date.now() + prazo * 86400000).toLocaleDateString('sv-SE'));
+  const [parcelas, setParcelas] = useState('1');
   const [cega, setCega] = useState(true);
   const [qtd, setQtd] = useState('');
   const [obs, setObs] = useState('');
@@ -175,7 +185,11 @@ function ModalReceber({ pedido, onFechar, onSalvo }: { pedido: PedidoCompra; onF
     if (n === null || n < 0) return toast.warn('Informe a quantidade contada no recebimento.');
     setSalvando(true);
     try {
-      const { data } = await api.put(`/pedidos-compra/${pedido.id}/receber`, { usuarioId: usuario?.id, quantidadeRecebida: n, observacao: obs, atualizarCusto });
+      const { data } = await api.put(`/pedidos-compra/${pedido.id}/receber`, {
+        usuarioId: usuario?.id, quantidadeRecebida: n, observacao: obs, atualizarCusto, armazemId: armazemId || padraoId || undefined,
+        lote: lote || undefined, validade: validade || undefined, notaFiscal: nf || undefined,
+        gerarTitulo, vencimento: `${vencimento}T12:00:00`, parcelas: Number(parcelas) || 1,
+      });
       toast[data.divergencia ? 'warn' : 'success'](data.divergencia ? `Recebido com divergência: ${data.divergencia}.` : 'Mercadoria recebida e estoque atualizado.');
       onSalvo();
     } catch (err) { toast.error(msgErro(err)); } finally { setSalvando(false); }
@@ -189,6 +203,16 @@ function ModalReceber({ pedido, onFechar, onSalvo }: { pedido: PedidoCompra; onF
         {!cega && <div className="col-12"><Notice tom="info">Quantidade pedida: <b>{numero(pedido.quantidade)}</b></Notice></div>}
         <Field label="Quantidade contada na doca" className="col-6"><input className="input input--lg" type="number" min={0} value={qtd} onChange={e => setQtd(e.target.value)} required autoFocus /></Field>
         <Field label="Observação" className="col-6"><input className="input input--lg" style={{ fontSize: 15, fontWeight: 400 }} value={obs} onChange={e => setObs(e.target.value)} placeholder="NF, transportadora…" /></Field>
+        <SelectArmazem armazens={armazens} value={armazemId || padraoId} onChange={setArmazemId} label="Armazém de destino" className="col-6" />
+        <Field label="Nota fiscal" className="col-6"><input className="input" value={nf} onChange={e => setNf(e.target.value)} placeholder="Nº da NF" /></Field>
+        <Field label="Lote" className="col-6"><input className="input" value={lote} onChange={e => setLote(e.target.value.toUpperCase())} placeholder="Sem lote" /></Field>
+        <Field label="Validade" className="col-6"><input className="input" type="date" value={validade} onChange={e => setValidade(e.target.value)} /></Field>
+        <div className="form-section">Financeiro</div>
+        <div className="col-12"><label className="check"><input type="checkbox" checked={gerarTitulo} onChange={e => setGerarTitulo(e.target.checked)} /> Lançar no contas a pagar (valor proporcional ao recebido)</label></div>
+        {gerarTitulo && <>
+          <Field label="1º vencimento" className="col-6" dica={`Prazo do fornecedor: ${prazo} dias`}><input className="input" type="date" value={vencimento} onChange={e => setVencimento(e.target.value)} /></Field>
+          <Field label="Parcelas" className="col-6"><input className="input" type="number" min={1} max={24} value={parcelas} onChange={e => setParcelas(e.target.value)} /></Field>
+        </>}
         <div className="col-12"><label className="check"><input type="checkbox" checked={atualizarCusto} onChange={e => setAtualizarCusto(e.target.checked)} /> Atualizar o custo do produto com o custo deste pedido ({moeda(pedido.custoTotal / pedido.quantidade)}/un)</label></div>
         {!cega && diverge && <div className="col-12"><Notice tom="warn">A quantidade difere do pedido. A divergência será registrada e somente o contado entra no estoque.</Notice></div>}
       </form>

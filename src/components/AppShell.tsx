@@ -4,7 +4,7 @@ import {
   IoGridOutline, IoCubeOutline, IoClipboardOutline, IoListOutline, IoLocationOutline, IoTimerOutline, IoWarningOutline,
   IoCartOutline, IoBulbOutline, IoDocumentAttachOutline, IoBusinessOutline, IoFlaskOutline, IoPricetagsOutline,
   IoPieChartOutline, IoShieldCheckmarkOutline, IoSwapHorizontalOutline, IoPeopleOutline, IoMenuOutline,
-  IoSearchOutline, IoLogOutOutline, IoMoonOutline, IoSunnyOutline, IoChevronBackOutline, IoChevronForwardOutline,
+  IoSearchOutline, IoLogOutOutline, IoGitCompareOutline, IoWalletOutline, IoTrendingUpOutline, IoReceiptOutline, IoMoonOutline, IoSunnyOutline, IoChevronBackOutline, IoChevronForwardOutline,
 } from 'react-icons/io5';
 import { useAuth } from '../lib/auth';
 import { api } from '../lib/api';
@@ -19,6 +19,7 @@ const MENU: Grupo[] = [
     titulo: 'Armazém',
     itens: [
       { to: '/estoque', label: 'Estoque', icone: <IoCubeOutline /> },
+      { to: '/armazens', label: 'Armazéns e transferências', icone: <IoGitCompareOutline /> },
       { to: '/separacao', label: 'Ordens de separação', icone: <IoClipboardOutline />, contador: 'os' },
       { to: '/inventario', label: 'Inventário', icone: <IoListOutline /> },
       { to: '/locais', label: 'Endereços', icone: <IoLocationOutline /> },
@@ -48,6 +49,19 @@ const MENU: Grupo[] = [
       { to: '/curva-abc', label: 'Curva ABC', icone: <IoPieChartOutline /> },
       { to: '/kardex', label: 'Kardex', icone: <IoSwapHorizontalOutline /> },
       { to: '/historico', label: 'Auditoria', icone: <IoShieldCheckmarkOutline /> },
+    ],
+  },
+  {
+    titulo: 'Financeiro',
+    itens: [
+      { to: '/financeiro', label: 'Contas a pagar e receber', icone: <IoWalletOutline /> },
+      { to: '/financeiro/fluxo', label: 'Fluxo de caixa', icone: <IoTrendingUpOutline /> },
+    ],
+  },
+  {
+    titulo: 'Administração',
+    itens: [
+      { to: '/empresa', label: 'Empresa e fiscal', icone: <IoReceiptOutline />, admin: true },
       { to: '/gestores', label: 'Usuários e acessos', icone: <IoPeopleOutline />, admin: true },
     ],
   },
