@@ -1,0 +1,238 @@
+/* ============================================================
+   PCP — quadro de ordens, gaveta da OP, programação (Gantt),
+   plano mestre, MRP, recursos e fichas técnicas.
+   ============================================================ */
+
+.pcp-nota { font-size: 12.5px; margin-top: 10px; line-height: 1.45; }
+.select--sm { height: 30px; font-size: 12.5px; padding: 0 28px 0 8px; min-width: 150px; }
+
+/* tons de situação (sempre com rótulo ao lado) */
+.gantt-tom--muted { --c: var(--text-3); --c-soft: var(--muted-soft); }
+.gantt-tom--info { --c: var(--info); --c-soft: var(--info-soft); }
+.gantt-tom--primary { --c: var(--primary); --c-soft: var(--primary-soft); }
+.gantt-tom--warn { --c: var(--warn); --c-soft: var(--warn-soft); }
+.gantt-tom--ok { --c: var(--ok); --c-soft: var(--ok-soft); }
+.gantt-tom--bad { --c: var(--bad); --c-soft: var(--bad-soft); }
+
+/* ---------------- progresso compacto */
+.op-prog { display: flex; align-items: center; gap: 8px; min-width: 120px; }
+.op-prog .meter { flex: 1; }
+.op-prog span { font-size: 12px; color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* ---------------- quadro (kanban) */
+.pcp-quadro { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; align-items: start; }
+.pcp-col { background: var(--surface-2); border: 1px solid var(--line); border-top: 3px solid var(--c, var(--line-strong)); border-radius: var(--radius-lg); min-width: 0; }
+.pcp-col--planejada { --c: var(--text-3); }
+.pcp-col--liberada { --c: var(--info); }
+.pcp-col--producao { --c: var(--primary); }
+.pcp-col--pausada { --c: var(--warn); }
+.pcp-col--concluida { --c: var(--ok); }
+.pcp-col header { display: grid; grid-template-columns: 1fr auto; padding: 10px 12px 8px; gap: 0 8px; }
+.pcp-col h2 { font: 600 14.5px var(--font-cond); }
+.pcp-col__n { font: 700 14px var(--font-cond); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 8px; align-self: start; font-variant-numeric: tabular-nums; }
+.pcp-col header small { color: var(--text-3); font-size: 11.5px; grid-column: 1 / -1; }
+.pcp-col__lista { display: flex; flex-direction: column; gap: 8px; padding: 0 8px 10px; max-height: 620px; overflow-y: auto; }
+.pcp-col__vazio { color: var(--text-3); font-size: 12.5px; text-align: center; padding: 18px 0; border: 1px dashed var(--line-strong); border-radius: var(--radius); }
+.pcp-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; cursor: pointer; display: flex; flex-direction: column; gap: 6px; }
+.pcp-card:hover { border-color: var(--line-strong); box-shadow: 0 2px 6px rgba(21, 35, 59, .06); }
+.pcp-card:focus-visible { box-shadow: var(--focus); outline: none; }
+.pcp-card--atrasada { border-left: 3px solid var(--bad); }
+.pcp-card__top { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.pcp-card h3 { font: 600 13.5px/1.3 var(--font); color: var(--text); }
+.pcp-card__meta { display: flex; justify-content: space-between; gap: 6px; font-size: 12px; color: var(--text-3); flex-wrap: wrap; }
+.pcp-card__rodape { display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-wrap: wrap; padding-top: 6px; border-top: 1px dashed var(--line); }
+.pcp-card__rodape .btn { margin-left: auto; }
+
+/* ---------------- carga dos recursos (tabela) */
+.pcp-carga { display: grid; gap: 4px; }
+.pcp-carga__linha { display: grid; grid-template-columns: minmax(130px, 1.4fr) repeat(var(--n), minmax(58px, 1fr)); gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.pcp-carga__linha:last-child { border-bottom: 0; }
+.pcp-carga__cab { font-size: 11.5px; color: var(--text-3); padding-top: 0; }
+.pcp-carga__rec { font-size: 13px; display: flex; flex-direction: column; min-width: 0; }
+.pcp-carga__rec small { font-size: 11.5px; color: var(--text-3); }
+.pcp-carga__cel { display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+.pcp-carga__barra { display: block; height: 8px; border-radius: 4px; background: var(--muted-soft); overflow: hidden; }
+.pcp-carga__barra i { display: block; height: 100%; border-radius: 4px; background: var(--ok); }
+.pcp-carga__cel--warn .pcp-carga__barra i { background: var(--warn); }
+.pcp-carga__cel--bad .pcp-carga__barra i { background: var(--bad); }
+.pcp-carga__pct { display: inline-flex; align-items: center; gap: 3px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pcp-carga__cel--warn .pcp-carga__pct { color: var(--warn); }
+.pcp-carga__cel--bad .pcp-carga__pct { color: var(--bad); }
+.pcp-carga__sem { color: var(--text-3); }
+
+/* ---------------- gaveta da OP */
+.op-produto-sel { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); }
+.op-produto-sel .btn { margin-left: auto; }
+.op-mini th, .op-mini td { padding: 7px 8px; }
+.op-acoes { display: flex; gap: 8px; flex-wrap: wrap; width: 100%; }
+.op-acoes__perigo { color: var(--bad); margin-left: auto; }
+.op-detalhe { display: flex; flex-direction: column; gap: 14px; }
+.op-cab { display: flex; flex-direction: column; gap: 12px; }
+.op-cab__nums { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.op-cab__nums > div { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 12px; }
+.op-cab__nums span { display: block; font-size: 12px; color: var(--text-3); }
+.op-cab__nums b { font: 700 22px var(--font-cond); font-variant-numeric: tabular-nums; }
+.op-cab__meter { height: 8px; }
+.op-info { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 16px; margin: 0; }
+.op-info dt { font-size: 12px; color: var(--text-3); }
+.op-info dd { margin: 2px 0 0; font-size: 13.5px; font-weight: 500; }
+.op-sub { font: 600 15px var(--font-cond); margin-top: 6px; }
+.op-tabela { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.op-tabela .table td, .op-tabela .table th { padding: 8px 10px; }
+.op-tabela td:first-child { min-width: 170px; }
+.op-lotes { min-width: 130px; display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; }
+.op-lotes small { color: var(--text-3); }
+.op-apontar { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.op-apontar .op-sub { margin-top: 0; }
+.op-apontar__rodape { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.op-nota { font-size: 12px; }
+.op-hist { list-style: none; margin: 0; padding: 0; }
+.op-hist li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.op-hist li:last-child { border-bottom: 0; }
+
+/* ---------------- programação (Gantt) */
+.gantt { overflow-x: auto; --rot: 190px; }
+.gantt__cab, .gantt__linha { display: grid; grid-template-columns: var(--rot) calc(var(--col) * var(--dias)); min-width: calc(var(--rot) + var(--col) * var(--dias)); }
+.gantt__cab { position: sticky; top: 0; background: var(--surface); z-index: 2; border-bottom: 1px solid var(--line); }
+.gantt__rotulo { position: sticky; left: 0; z-index: 3; background: var(--surface); border-right: 1px solid var(--line); padding: 8px 12px; display: flex; flex-direction: column; justify-content: center; font-size: 12.5px; min-width: 0; }
+.gantt__cab .gantt__rotulo { color: var(--text-3); font-size: 12px; }
+.gantt__rotulo b { font-size: 13.5px; }
+.gantt__rotulo span { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gantt__rotulo small { color: var(--text-3); font-size: 11.5px; }
+.gantt__dias { display: grid; grid-template-columns: repeat(var(--dias), var(--col)); }
+.gantt__dias span { text-align: center; font: 600 13px var(--font-cond); padding: 6px 0; color: var(--text-2); display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+.gantt__dias small { font: 500 10.5px var(--font); color: var(--text-3); }
+.gantt__dias .is-fds { background: var(--surface-2); color: var(--text-3); }
+.gantt__dias .is-seg { box-shadow: inset 1px 0 0 var(--line-strong); }
+.gantt__dias .is-hoje { color: var(--primary); }
+.gantt__dias .is-hoje small { color: var(--primary); font-weight: 700; }
+.gantt__linha { border-bottom: 1px solid var(--line); }
+.gantt__area { position: relative; min-height: 60px; }
+.gantt__area.is-alvo { background: color-mix(in srgb, var(--primary) 5%, transparent); }
+.gantt__fundo { position: absolute; top: 0; bottom: 0; width: var(--col); pointer-events: none; }
+.gantt__fundo.is-fds { background: var(--surface-2); }
+.gantt__fundo.is-seg { box-shadow: inset 1px 0 0 var(--line); }
+.gantt__hoje { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--primary); opacity: .55; pointer-events: none; z-index: 1; }
+.gantt__fantasma { position: absolute; top: 2px; bottom: 2px; width: var(--col); border: 2px dashed var(--primary); border-radius: 6px; pointer-events: none; }
+.gantt__barra {
+  position: absolute; height: 28px; border: 1px solid var(--c); background: var(--c-soft); color: var(--text); border-radius: 6px;
+  font: 500 12px var(--font); text-align: left; padding: 0 8px; display: flex; align-items: center; gap: 6px; overflow: hidden; white-space: nowrap; cursor: grab; z-index: 1;
+}
+.gantt__barra b { font: 600 11.5px var(--font-mono); position: relative; }
+.gantt__barra span:not(.gantt__progresso) { overflow: hidden; text-overflow: ellipsis; position: relative; color: var(--text-2); }
+.gantt__progresso { position: absolute; left: 0; top: 0; bottom: 0; background: var(--c); opacity: .18; }
+.gantt__barra.is-atrasada { box-shadow: inset 3px 0 0 var(--bad), 0 0 0 1px var(--bad); }
+.gantt__barra.is-arrastando { opacity: .4; }
+.gantt__barra:focus-visible { box-shadow: var(--focus); outline: none; }
+.gantt__carga { position: absolute; left: 0; height: 6px; width: 100%; pointer-events: none; }
+.gantt__carga-cel { position: absolute; top: 0; height: 6px; width: calc(var(--col) - 4px); border-radius: 3px; pointer-events: auto; }
+.gantt__carga-cel.is-nd { background: transparent; }
+.gantt__carga-cel.is-ok, .gantt-legenda .is-ok { background: color-mix(in srgb, var(--ok) 55%, var(--surface)); }
+.gantt__carga-cel.is-warn, .gantt-legenda .is-warn { background: var(--warn); }
+.gantt__carga-cel.is-bad, .gantt-legenda .is-bad { background: var(--bad); }
+.gantt-bandeja { display: flex; flex-wrap: wrap; gap: 8px; }
+.gantt-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px dashed var(--c); background: var(--c-soft); border-radius: 6px; padding: 5px 10px; font: 500 12.5px var(--font); color: var(--text); cursor: grab; }
+.gantt-legenda { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 10px; font-size: 12.5px; color: var(--text-2); align-items: center; }
+.gantt-legenda > span { display: inline-flex; align-items: center; gap: 6px; }
+.gantt-legenda i { display: inline-block; width: 14px; height: 10px; border-radius: 3px; border: 1px solid var(--c, transparent); background: var(--c-soft, transparent); }
+.gantt-legenda .gantt-leg-atraso { border: 1px solid var(--bad); box-shadow: inset 3px 0 0 var(--bad); }
+.gantt-legenda__carga i { height: 6px; border: 0; }
+
+/* ---------------- plano mestre e grade do MRP */
+.pcp-gerar { margin-left: auto; }
+.pcp-gerar .select { min-width: 160px; }
+.mps-scroll { overflow-x: auto; }
+.mps { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+.mps th, .mps td { padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.mps thead th { font-size: 11.5px; font-weight: 500; color: var(--text-3); text-align: right; background: var(--surface-2); position: sticky; top: 0; }
+.mps thead th b { display: block; font: 600 14px var(--font-cond); color: var(--text); }
+.mps thead th.is-atual b { color: var(--primary); }
+.mps__fixa { position: sticky; left: 0; background: var(--surface); text-align: left !important; z-index: 1; min-width: 220px; max-width: 280px; white-space: normal !important; border-right: 1px solid var(--line); vertical-align: top; }
+.mps thead .mps__fixa { background: var(--surface-2); z-index: 2; }
+.mps__tipo { color: var(--text-2); font-size: 12.5px; text-align: left; min-width: 128px; }
+.mps tbody tr.mps__inicio td, .mps tbody tr.mps__inicio th { border-top: 2px solid var(--line-strong); }
+.mps tbody tr:not(.mps__fim) td { border-bottom-style: dashed; }
+.mps__info { font-size: 11.5px; color: var(--text-3); margin-top: 4px; line-height: 1.4; }
+.mps__input { padding: 3px 4px !important; }
+.mps__input input {
+  width: 100%; min-width: 64px; height: 30px; text-align: right; border: 1px solid var(--line); border-radius: 5px; background: var(--surface);
+  font: 600 13px var(--font); color: var(--text); padding: 0 8px; font-variant-numeric: tabular-nums;
+}
+.mps__input input::placeholder { color: var(--text-3); font-weight: 400; }
+.mps__input input:focus { border-color: var(--primary); box-shadow: var(--focus); outline: none; }
+.mps__input input.is-mudou { background: var(--tag); border-color: var(--tag); color: var(--tag-ink); }
+.mps__abaixo { color: var(--bad); font-weight: 700; }
+.mps__abaixo svg { vertical-align: -2px; margin-right: 3px; }
+.mps tfoot th, .mps tfoot td { border-bottom: 0; border-top: 2px solid var(--line-strong); background: var(--surface-2); }
+.mps .num { text-align: right; }
+.mrp-grade .mps__fixa { font-weight: 500; font-size: 12.5px; color: var(--text-2); min-width: 180px; }
+
+/* ---------------- recursos */
+.rec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.rec-card { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.rec-card.is-inativo { opacity: .6; }
+.rec-card header { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+.rec-card h3 { font: 600 16px var(--font-cond); margin-top: 6px; }
+.rec-nums { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 0; }
+.rec-nums > div { background: var(--surface-2); border-radius: var(--radius-sm); padding: 6px 8px; }
+.rec-nums dt { font-size: 11px; color: var(--text-3); overflow-wrap: anywhere; }
+.rec-nums dd { margin: 0; font: 700 17px var(--font-cond); font-variant-numeric: tabular-nums; }
+.rec-carga { display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
+.rec-carga__barras { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.rec-carga__sem { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.rec-carga__col { width: 100%; max-width: 46px; height: 54px; background: var(--muted-soft); border-radius: 4px; display: flex; align-items: flex-end; overflow: hidden; }
+.rec-carga__col i { display: block; width: 100%; background: var(--ok); border-radius: 4px 4px 0 0; }
+.rec-carga__sem.is-warn .rec-carga__col i { background: var(--warn); }
+.rec-carga__sem.is-bad .rec-carga__col i { background: var(--bad); }
+.rec-carga__sem.is-warn b { color: var(--warn); }
+.rec-carga__sem.is-bad b { color: var(--bad); }
+.rec-carga__sem small { color: var(--text-3); }
+.rec-obs { font-size: 12.5px; }
+
+/* ---------------- fichas técnicas */
+.bom { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 12px; align-items: start; }
+.bom__lista ul { list-style: none; margin: 0; padding: 4px; max-height: 70vh; overflow-y: auto; }
+.bom__lista button { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; background: none; border: 0; border-radius: var(--radius); padding: 9px 10px; cursor: pointer; font: inherit; color: inherit; }
+.bom__lista button:hover { background: var(--surface-2); }
+.bom__lista button.is-ativo { background: var(--primary-soft); box-shadow: inset 3px 0 0 var(--primary); }
+.bom__det { padding: 16px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.bom__cab { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+.bom__cab h2 { font: 700 20px var(--font-cond); }
+.bom__nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin: 0; }
+.bom__nums > div { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 12px; }
+.bom__nums dt { font-size: 12px; color: var(--text-3); }
+.bom__nums dd { margin: 2px 0 0; font: 700 19px var(--font-cond); font-variant-numeric: tabular-nums; }
+.bom__nums small { font: 600 12px var(--font); }
+.bom__aviso { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--warn-soft); border-radius: var(--radius); padding: 8px 12px; font-size: 13px; }
+
+/* ---------------- responsivo */
+@media (max-width: 1280px) {
+  .pcp-quadro { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .pcp-quadro { grid-template-columns: repeat(5, minmax(250px, 1fr)); overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 6px; }
+  .pcp-col { scroll-snap-align: start; }
+  .bom { grid-template-columns: 1fr; }
+  .bom__lista ul { max-height: 260px; }
+}
+@media (max-width: 719px) {
+  .op-cab__nums { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pcp-carga { overflow-x: auto; }
+  .pcp-carga__linha { min-width: calc(130px + var(--n) * 64px); }
+  .gantt { --rot: 112px; }
+  .gantt__rotulo span, .gantt__rotulo small { display: none; }
+  .pcp-gerar { margin-left: 0; width: 100%; }
+  .pcp-gerar .select { flex: 1; }
+  .mps__fixa { min-width: 150px; }
+  .rec-nums { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .op-acoes__perigo { margin-left: 0; }
+}
+
+/* Central: os 7 indicadores cabem numa linha em telas largas */
+@media (min-width: 720px) { .pcp-kpis { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); } }
+
+/* carga: no celular rola na horizontal em vez de alargar a página */
+.pcp-carga { overflow-x: auto; }
+@media (max-width: 719px) {
+  .pcp-carga__linha { grid-template-columns: minmax(96px, 1.1fr) repeat(var(--n), minmax(52px, 1fr)); gap: 6px; }
+}

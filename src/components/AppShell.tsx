@@ -4,7 +4,7 @@ import {
   IoGridOutline, IoCubeOutline, IoClipboardOutline, IoListOutline, IoLocationOutline, IoTimerOutline, IoWarningOutline,
   IoCartOutline, IoBulbOutline, IoDocumentAttachOutline, IoBusinessOutline, IoFlaskOutline, IoPricetagsOutline,
   IoPieChartOutline, IoShieldCheckmarkOutline, IoSwapHorizontalOutline, IoPeopleOutline, IoMenuOutline,
-  IoSearchOutline, IoLogOutOutline, IoGitCompareOutline, IoWalletOutline, IoTrendingUpOutline, IoReceiptOutline, IoMoonOutline, IoSunnyOutline, IoAnalyticsOutline, IoChevronBackOutline, IoChevronForwardOutline,
+  IoSearchOutline, IoLogOutOutline, IoGitCompareOutline, IoWalletOutline, IoTrendingUpOutline, IoReceiptOutline, IoMoonOutline, IoSunnyOutline, IoAnalyticsOutline, IoSpeedometerOutline, IoConstructOutline, IoCalendarOutline, IoLayersOutline, IoCalculatorOutline, IoGitNetworkOutline, IoHammerOutline, IoChevronBackOutline, IoChevronForwardOutline,
 } from 'react-icons/io5';
 import { useAuth } from '../lib/auth';
 import { api } from '../lib/api';
@@ -34,6 +34,18 @@ const MENU: Grupo[] = [
       { to: '/compras/sugestao', label: 'Sugestão de compras', icone: <IoBulbOutline /> },
       { to: '/recebimento-nfe', label: 'Entrada por NF-e', icone: <IoDocumentAttachOutline /> },
       { to: '/fornecedores', label: 'Fornecedores', icone: <IoBusinessOutline /> },
+    ],
+  },
+  {
+    titulo: 'PCP',
+    itens: [
+      { to: '/pcp', label: 'Central do PCP', icone: <IoSpeedometerOutline /> },
+      { to: '/pcp/ordens', label: 'Ordens de produção', icone: <IoConstructOutline /> },
+      { to: '/pcp/programacao', label: 'Programação', icone: <IoCalendarOutline /> },
+      { to: '/pcp/plano', label: 'Plano mestre', icone: <IoLayersOutline /> },
+      { to: '/pcp/mrp', label: 'MRP', icone: <IoCalculatorOutline /> },
+      { to: '/pcp/estruturas', label: 'Fichas técnicas', icone: <IoGitNetworkOutline /> },
+      { to: '/pcp/recursos', label: 'Recursos e capacidade', icone: <IoHammerOutline /> },
     ],
   },
   {

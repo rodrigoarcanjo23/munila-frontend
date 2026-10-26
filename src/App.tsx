@@ -22,6 +22,13 @@ const Transformacao = lazy(() => import('./pages/Transformacao'));
 const Produtos = lazy(() => import('./pages/Produtos'));
 const CurvaABC = lazy(() => import('./pages/CurvaABC'));
 const PainelBI = lazy(() => import('./pages/PainelBI'));
+const PCPCentral = lazy(() => import('./pages/pcp/PCPCentral'));
+const PCPOrdens = lazy(() => import('./pages/pcp/PCPOrdens'));
+const PCPProgramacao = lazy(() => import('./pages/pcp/PCPProgramacao'));
+const PCPPlano = lazy(() => import('./pages/pcp/PCPPlano'));
+const PCPMRP = lazy(() => import('./pages/pcp/PCPMRP'));
+const PCPEstruturas = lazy(() => import('./pages/pcp/PCPEstruturas'));
+const PCPRecursos = lazy(() => import('./pages/pcp/PCPRecursos'));
 const Kardex = lazy(() => import('./pages/Kardex'));
 const Historico = lazy(() => import('./pages/Historico'));
 const Gestores = lazy(() => import('./pages/Gestores'));
@@ -60,6 +67,13 @@ function Rotas() {
             <Route path="/produtos" element={<Produtos />} />
             <Route path="/curva-abc" element={<CurvaABC />} />
             <Route path="/bi" element={<PainelBI />} />
+            <Route path="/pcp" element={<PCPCentral />} />
+            <Route path="/pcp/ordens" element={<PCPOrdens />} />
+            <Route path="/pcp/programacao" element={<PCPProgramacao />} />
+            <Route path="/pcp/plano" element={<PCPPlano />} />
+            <Route path="/pcp/mrp" element={<PCPMRP />} />
+            <Route path="/pcp/estruturas" element={<PCPEstruturas />} />
+            <Route path="/pcp/recursos" element={<PCPRecursos />} />
             <Route path="/kardex" element={<Kardex />} />
             <Route path="/kardex/:id" element={<Kardex />} />
             <Route path="/historico" element={<Historico />} />
