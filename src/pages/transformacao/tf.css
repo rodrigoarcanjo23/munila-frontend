@@ -188,7 +188,7 @@
 ul.tf-rend-lista, ul.tf-barras, ul.tf-pendencias, ul.tf-lista, ol.tf-versoes, .tf-receita__equacao ul, ol.tf-trilha--grande { padding-left: 0; margin: 0; }
 .tf-rend-lista__id { align-items: flex-start; }
 .tf-lista > li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.tf-lista > li > span { flex: 1 1 auto; min-width: 0; }
+.tf-lista > li > span:nth-child(2) { flex: 1 1 auto; min-width: 0; }
 @media (max-width: 719px) {
   .tf-wizard .form-grid > *, .modal .form-grid > * { grid-column: span 12; }
 }
