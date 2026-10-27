@@ -10,6 +10,8 @@ import Login from './pages/Login';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Estoque = lazy(() => import('./pages/Estoque'));
 const Separacao = lazy(() => import('./pages/Separacao'));
+const Layout = lazy(() => import('./pages/wms/Layout'));
+const Ondas = lazy(() => import('./pages/wms/Ondas'));
 const Inventario = lazy(() => import('./pages/Inventario'));
 const Locais = lazy(() => import('./pages/Locais'));
 const Validade = lazy(() => import('./pages/Validade'));
@@ -54,6 +56,8 @@ function Rotas() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/estoque" element={<Estoque />} />
             <Route path="/separacao" element={<Separacao />} />
+            <Route path="/ondas" element={<Ondas />} />
+            <Route path="/layout" element={<Layout />} />
             <Route path="/inventario" element={<Inventario />} />
             <Route path="/inventario/:id" element={<Inventario />} />
             <Route path="/locais" element={<Locais />} />

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
   IoAddOutline, IoPlayOutline, IoPauseOutline, IoPrintOutline, IoBarcodeOutline, IoPencilOutline, IoTrashOutline,
-  IoListOutline, IoCheckmarkDoneOutline, IoWarningOutline,
+  IoListOutline, IoCheckmarkDoneOutline, IoWarningOutline, IoGitMergeOutline,
 } from 'react-icons/io5';
 import { api, msgErro } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -45,6 +46,7 @@ const porEndereco = <T extends { produto: Produto }>(itens: T[]) =>
   [...itens].sort((a, b) => (a.produto.enderecoLocalizacao || 'ZZZ').localeCompare(b.produto.enderecoLocalizacao || 'ZZZ'));
 
 export default function Separacao() {
+  const navigate = useNavigate();
   const { usuario } = useAuth();
   const { confirmar } = useDialogo();
   const [aba, setAba] = useState<Aba>('Pendente');
@@ -114,7 +116,10 @@ export default function Separacao() {
       <PageHeader
         titulo="Ordens de separação"
         descricao="Retiradas, entradas e devoluções do armazém, com roteiro por endereço e conferência item a item."
-        acoes={<button className="btn btn--primary" onClick={() => setEditar('nova')}><IoAddOutline /> Nova ordem</button>}
+        acoes={<>
+          <button className="btn" onClick={() => navigate('/ondas')}><IoGitMergeOutline /> Separar em onda</button>
+          <button className="btn btn--primary" onClick={() => setEditar('nova')}><IoAddOutline /> Nova ordem</button>
+        </>}
       />
 
       <div className="panel mb-16">
@@ -148,6 +153,7 @@ export default function Separacao() {
                   <Code>{o.codigo}</Code>
                   <Badge tom={tomStatusOS(o.status)}>{o.status}</Badge>
                   {o.prioridade !== 'Normal' && <Badge tom={tomPrioridade(o.prioridade)} plain>{o.prioridade}</Badge>}
+                  {o.ondaId && o.status !== 'Concluída' && <Badge tom="info" plain>Em onda</Badge>}
                   <span className="spacer" />
                   <Badge tom={o.tipo === 'SAIDA' ? 'bad' : o.tipo === 'ENTRADA' ? 'ok' : 'info'} plain>{TIPO_OS_LABEL[o.tipo] || o.tipo}</Badge>
                 </div>

@@ -46,6 +46,7 @@ export interface OrdemServico {
   solicitante?: { nome: string }; separador?: { nome: string } | null; itens: ItemOS[]; observacao?: string | null;
   iniciadaEm?: string | null; concluidaEm?: string | null; createdAt: string; updatedAt: string;
   armazemId?: string | null; armazem?: Armazem | null;
+  ondaId?: string | null; // ✨ FASE 7: ordem agrupada numa onda de separação
 }
 
 export interface LogAuditoria { id: string; acao: string; itemNome: string; usuarioNome: string; motivo: string; dataHora: string }

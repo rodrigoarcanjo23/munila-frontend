@@ -4,7 +4,7 @@ import {
   IoGridOutline, IoCubeOutline, IoClipboardOutline, IoListOutline, IoLocationOutline, IoTimerOutline, IoWarningOutline,
   IoCartOutline, IoBulbOutline, IoDocumentAttachOutline, IoBusinessOutline, IoFlaskOutline, IoPricetagsOutline,
   IoPieChartOutline, IoShieldCheckmarkOutline, IoSwapHorizontalOutline, IoPeopleOutline, IoMenuOutline,
-  IoSearchOutline, IoLogOutOutline, IoGitCompareOutline, IoWalletOutline, IoTrendingUpOutline, IoReceiptOutline, IoMoonOutline, IoSunnyOutline, IoAnalyticsOutline, IoSpeedometerOutline, IoConstructOutline, IoCalendarOutline, IoLayersOutline, IoCalculatorOutline, IoGitNetworkOutline, IoHammerOutline, IoChevronBackOutline, IoChevronForwardOutline,
+  IoSearchOutline, IoLogOutOutline, IoGitCompareOutline, IoWalletOutline, IoTrendingUpOutline, IoReceiptOutline, IoMoonOutline, IoSunnyOutline, IoAnalyticsOutline, IoSpeedometerOutline, IoConstructOutline, IoCalendarOutline, IoLayersOutline, IoCalculatorOutline, IoGitNetworkOutline, IoHammerOutline, IoChevronBackOutline, IoChevronForwardOutline, IoGitMergeOutline, IoMapOutline,
 } from 'react-icons/io5';
 import { useAuth } from '../lib/auth';
 import { api } from '../lib/api';
@@ -21,6 +21,8 @@ const MENU: Grupo[] = [
       { to: '/estoque', label: 'Estoque', icone: <IoCubeOutline /> },
       { to: '/armazens', label: 'Armazéns e transferências', icone: <IoGitCompareOutline /> },
       { to: '/separacao', label: 'Ordens de separação', icone: <IoClipboardOutline />, contador: 'os' },
+      { to: '/ondas', label: 'Ondas de separação', icone: <IoGitMergeOutline /> },
+      { to: '/layout', label: 'Mapa e slotting', icone: <IoMapOutline /> },
       { to: '/inventario', label: 'Inventário', icone: <IoListOutline /> },
       { to: '/locais', label: 'Endereços', icone: <IoLocationOutline /> },
       { to: '/validade', label: 'Validade', icone: <IoTimerOutline /> },
