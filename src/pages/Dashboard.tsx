@@ -1,121 +1,70 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
-  IoDownloadOutline, IoDocumentTextOutline, IoRefreshOutline, IoCheckmarkCircleOutline, IoArrowUpOutline, IoArrowDownOutline,
-  IoAnalyticsOutline, IoConstructOutline, IoFlaskOutline, IoClipboardOutline, IoWalletOutline, IoCartOutline,
+  IoRefreshOutline, IoCheckmarkCircleOutline, IoAnalyticsOutline, IoArrowForwardOutline, IoPersonOutline,
 } from 'react-icons/io5';
 import { api } from '../lib/api';
 import { useCarregar } from '../lib/useCarregar';
-import { useCores } from '../lib/useCores';
-import { compacto, contem, haQuanto, moeda, numero, pct } from '../lib/format';
-import { exportarExcel, exportarPDF } from '../lib/exportar';
-import type { Categoria, Estoque } from '../lib/tipos';
-import { DataTable, type Col } from '../components/DataTable';
-import { Badge, Code, Empty, Kpi, Loading, PageHeader, Panel, SearchInput, Segmented } from '../components/ui';
+import { compacto, dataUTC, haQuanto, iniciais, moeda, numero, pct } from '../lib/format';
+import { Badge, Code, Empty, Kpi, Loading, PageHeader, Panel } from '../components/ui';
 import './Dashboard.css';
 
-type Faixa = 'saudavel' | 'risco' | 'excesso' | 'parado' | 'novo';
-interface Resumo { entradas: number; saidas: number; valorEntradas: number; valorSaidas: number; consumo: number; valorConsumo: number; perdas: number; valorPerdas: number }
 interface Painel {
-  dias: number;
   kpis: Record<string, number | null>;
   alertas: { nivel: 'critico' | 'atencao' | 'info'; titulo: string; rota: string }[];
-  serie: { data: string; entradas: number; saidas: number; valorEntradas: number; valorSaidas: number }[];
-  valorPorCategoria: { categoria: string; valor: number }[];
-  topSaidas: { produtoId: string; nome: string; sku: string; quantidade: number; valor: number; saldo: number; coberturaDias: number | null }[];
-  periodo: { atual: Resumo; anterior: Resumo };
   hoje: { entradas: number; saidas: number; movimentos: number; usuarios: number; separacoesConcluidas: number; recebimentos: number; porHora: { hora: number; movimentos: number }[] };
-  saude: { faixas: { chave: Faixa; rotulo: string; descricao: string; produtos: number; valor: number }[]; coberturaMediaDias: number | null; concentracao: { top10Pct: number; itens80: number; itensComValor: number } };
-  faixaProduto: Record<string, Faixa>;
-  parados: { produtoId: string; nome: string; sku: string; saldo: number; valor: number; ultimaSaida: string | null }[];
-  excessos: { produtoId: string; nome: string; sku: string; saldo: number; valor: number; coberturaDias: number | null }[];
-  riscoRuptura: { produtoId: string; nome: string; sku: string; saldo: number; consumoDia: number; coberturaDias: number; leadTimeDias: number; pedidoAberto: number; minimo: number }[];
-  riscoRupturaTotal: number;
-  validade: { chave: string; rotulo: string; lotes: number; unidades: number; valor: number }[];
-  qualidade: { itens: { chave: string; rotulo: string; quantidade: number; impacto: string; rota: string }[]; indice: number; capitalSemPreco: number };
-  modulos: {
-    pcp: { abertas: number; emProducao: number; atrasadas: number };
-    transformacao: { aguardando: number; planejadas: number };
-    inventario: { codigo: string; concluidoEm: string; itens: number; acuracia: number | null } | null;
+  equipe: { usuarioId: string; nome: string; cargo: string; movimentos: number; entradas: number; saidas: number; separacoes: number; linhas: number; minutosSeparando: number }[];
+  separacao: {
+    pendentes: number; emSeparacao: number; urgentes: number; linhas: number; maisAntigaH: number | null;
+    ordens: { id: string; codigo: string; status: string; prioridade: string; tipo: string; solicitante: string; separador: string | null; linhas: number; marcadas: number; unidades: number; criadaEm: string; iniciadaEm: string | null }[];
   };
-  atividade: { id: string; dataHora: string; tipo: string; quantidade: number; entrada: boolean; produto: { id: string; nome: string; sku: string }; usuario: string; codigo: string | null; lote: string | null }[];
+  recebimentos: {
+    atrasados: number; hoje: number; semana: number; semData: number; valorHojeEAtrasado: number;
+    pedidos: { id: string; codigo: string | null; fornecedor: string; produto: { id: string; nome: string; sku: string }; quantidade: number; valor: number; dataPrevisao: string | null }[];
+  };
+  producao: {
+    abertas: number; emProducao: number; atrasadas: number; entregaHoje: number;
+    ordens: { id: string; codigo: string; produto: { nome: string; sku: string }; status: string; prioridade: string; planejada: number; produzida: number; entregaPrevista: string | null; recurso: string | null; atrasada: boolean }[];
+  };
+  fora: {
+    demonstracao: { unidades: number; valor: number; porResponsavel: { responsavel: string; unidades: number; valor: number; produtos: number }[] };
+    avaria: { unidades: number; valor: number; produtos: { produtoId: string; nome: string; sku: string; unidades: number; valor: number }[] };
+  };
+  financeiro: { pagar: number; receber: number; vencidos: number; pagarVencido: number; receberVencido: number; titulos: { id: string; tipo: 'PAGAR' | 'RECEBER'; descricao: string; quem: string | null; valor: number; vencimento: string; documento: string | null; parcela: string | null }[] };
+  filas: { transformacao: { aguardando: number; planejadas: number }; inventario: { abertos: number; itensAContar: number } };
+  qualidade: { indice: number; total: number; itens: { chave: string; rotulo: string; impacto: string; quantidade: number }[] };
+  atividade: { id: string; dataHora: string; tipo: string; quantidade: number; entrada: boolean; produto: { id: string; nome: string; sku: string }; usuario: string; valor: number }[];
 }
 
-interface LinhaCapital {
-  produtoId: string; nome: string; sku: string; categoriaId: string; categoriaNome: string;
-  quantidade: number; precoCusto: number; precoVenda: number; valorImobilizado: number; receitaPotencial: number; faixa: Faixa | null;
+const TOM_PRIORIDADE: Record<string, 'bad' | 'warn' | undefined> = { Urgente: 'bad', Alta: 'warn' };
+const hojeISO = () => new Date().toLocaleDateString('sv-SE');
+/** "hoje", "amanhã", "atrasado 3 d", "05/11 · em 4 d" para datas de agenda (só a data, sem hora). */
+function quando(iso: string | null) {
+  if (!iso) return { texto: 'sem data', tom: '' };
+  const d = Math.round((new Date(iso.slice(0, 10) + 'T12:00:00').getTime() - new Date(hojeISO() + 'T12:00:00').getTime()) / 86400000);
+  if (d < 0) return { texto: `atrasado ${-d} d`, tom: 'down' };
+  if (d === 0) return { texto: 'hoje', tom: 'qty--warn' };
+  if (d === 1) return { texto: 'amanhã', tom: '' };
+  return { texto: `${dataUTC(iso).slice(0, 5)} · em ${d} d`, tom: 'muted' };
 }
+const duracao = (h: number | null) => (h === null ? '-' : h < 1 ? `${Math.round(h * 60)} min` : h < 48 ? `${numero(h, h < 10 ? 1 : 0)} h` : `${numero(h / 24, 0)} dias`);
 
-const ROTULO_FAIXA: Record<Faixa, string> = { saudavel: 'Saudável', risco: 'Risco de ruptura', excesso: 'Excesso', parado: 'Parado', novo: 'Sem histórico' };
-const TOM_FAIXA: Record<Faixa, 'ok' | 'bad' | 'warn' | undefined> = { saudavel: 'ok', risco: 'bad', excesso: 'warn', parado: undefined, novo: undefined };
-
-/** Variação % entre dois períodos; null quando não há base de comparação. */
-const variacao = (atual: number, anterior: number) => (anterior > 0 ? ((atual - anterior) / anterior) * 100 : null);
-
-function Delta({ atual, anterior, ruimSubir }: { atual: number; anterior: number; ruimSubir?: boolean }) {
-  const v = variacao(atual, anterior);
-  if (v === null) return <span className="muted">sem base de comparação</span>;
-  if (Math.abs(v) < 0.5) return <span className="delta">estável vs. período anterior</span>;
-  const tom = ruimSubir === undefined ? '' : (v > 0) === ruimSubir ? 'delta--ruim' : 'delta--bom';
-  return <span className={`delta ${tom}`}>{v > 0 ? <IoArrowUpOutline /> : <IoArrowDownOutline />}{pct(Math.abs(v), 0)} vs. período anterior</span>;
-}
-
-function Modulo({ icone, titulo, valor, detalhe, tom, para }: { icone: ReactNode; titulo: string; valor: ReactNode; detalhe: ReactNode; tom?: 'bad' | 'warn' | 'ok'; para: string }) {
-  return (
-    <Link to={para} className={`painel-modulo ${tom ? `painel-modulo--${tom}` : ''}`}>
-      <span className="painel-modulo__icone">{icone}</span>
-      <span className="painel-modulo__texto"><span>{titulo}</span><small>{detalhe}</small></span>
-      <b>{valor}</b>
-    </Link>
-  );
+function Contador({ rotulo, valor, tom }: { rotulo: string; valor: ReactNode; tom?: string }) {
+  return <div className="contador"><span>{rotulo}</span><b className={tom}>{valor}</b></div>;
 }
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const cores = useCores();
-  const [dias, setDias] = useState<'7' | '30' | '90'>('30');
-  const [medida, setMedida] = useState<'un' | 'rs'>('rs');
-  const [faixaAberta, setFaixaAberta] = useState<Faixa>('parado');
-  const [busca, setBusca] = useState('');
-  const [categoria, setCategoria] = useState('');
-  const [filtroFaixa, setFiltroFaixa] = useState<'todas' | Faixa | 'sempreco'>('todas');
-
   const { dados, carregando, erro, recarregar } = useCarregar(async () => {
-    const [painel, estoque, categorias] = await Promise.all([
-      api.get<Painel>(`/dashboard/painel?dias=${dias}`),
-      api.get<Estoque[]>('/estoque'),
-      api.get<Categoria[]>('/categorias'),
-    ]);
-    return { painel: painel.data, estoque: estoque.data, categorias: categorias.data, em: new Date() };
-  }, [dias]);
+    const r = await api.get<Painel>('/dashboard/painel?dias=7');
+    return { painel: r.data, em: new Date() };
+  });
 
-  // Capital imobilizado por produto (Disponível + Em Demonstração).
-  const capital = useMemo<LinhaCapital[]>(() => {
-    if (!dados) return [];
-    const mapa = new Map<string, LinhaCapital>();
-    for (const e of dados.estoque) {
-      if (e.status !== 'Disponível' && e.status !== 'Em Demonstração') continue;
-      const p = e.produto;
-      const l = mapa.get(p.id) ?? {
-        produtoId: p.id, nome: p.nome, sku: p.sku, categoriaId: p.categoriaId, categoriaNome: p.categoria?.nome || '-',
-        quantidade: 0, precoCusto: p.precoCusto || 0, precoVenda: p.precoVenda || 0, valorImobilizado: 0, receitaPotencial: 0, faixa: dados.painel.faixaProduto?.[p.id] ?? null,
-      };
-      l.quantidade += e.quantidade;
-      l.valorImobilizado += e.quantidade * (p.precoCusto || 0);
-      l.receitaPotencial += e.quantidade * (p.precoVenda || 0);
-      mapa.set(p.id, l);
-    }
-    return [...mapa.values()];
-  }, [dados]);
-
-  const capitalFiltrado = useMemo(
-    () => capital.filter(c => contem(busca, c.nome, c.sku) && (!categoria || c.categoriaId === categoria)
-      && (filtroFaixa === 'todas' || (filtroFaixa === 'sempreco' ? c.precoVenda <= 0 : c.faixa === filtroFaixa))),
-    [capital, busca, categoria, filtroFaixa],
-  );
-  const totais = capitalFiltrado.reduce((a, c) => ({ q: a.q + c.quantidade, custo: a.custo + c.valorImobilizado, venda: a.venda + c.receitaPotencial }), { q: 0, custo: 0, venda: 0 });
-  const margem = (c: LinhaCapital) => (c.valorImobilizado > 0 ? ((c.receitaPotencial - c.valorImobilizado) / c.valorImobilizado) * 100 : 0);
+  // A central costuma ficar aberta numa tela do armazém: atualiza sozinha a cada 2 minutos.
+  useEffect(() => {
+    const t = setInterval(() => { if (document.visibilityState === 'visible') recarregar(true); }, 120000);
+    return () => clearInterval(t);
+  }, [recarregar]);
 
   if (carregando && !dados) return <Loading />;
   if (!dados) return (
@@ -125,67 +74,36 @@ export default function Dashboard() {
     </>
   );
   const p = dados.painel;
-  const { kpis, alertas, serie, valorPorCategoria, topSaidas } = p;
-  const k = (n: string) => Number(kpis[n] || 0);
-  const at = p.periodo.atual, ant = p.periodo.anterior;
-  const capitalTotal = p.saude.faixas.reduce((a, f) => a + f.valor, 0);
-  const corFaixa: Record<Faixa, string> = { saudavel: cores.ok, risco: cores.bad, excesso: cores.warn, parado: cores['text-3'], novo: cores.line };
-  const maxValidade = Math.max(1, ...p.validade.map(v => v.valor));
+  const k = (n: string) => Number(p.kpis[n] || 0);
+  const { separacao: sep, recebimentos: rec, producao: prod, fora, financeiro: fin } = p;
   const maxHora = Math.max(1, ...p.hoje.porHora.map(h => h.movimentos));
-  const listaFaixa = faixaAberta === 'parado' ? p.parados : faixaAberta === 'excesso' ? p.excessos : [];
-  const semPreco = p.qualidade.itens.find(q => q.chave === 'preco')?.quantidade ?? 0;
-
-  const colunas: Col<LinhaCapital>[] = [
-    { key: 'nome', titulo: 'Produto', principal: true, ordenar: c => c.nome, render: c => <><div className="cell-title">{c.nome}</div><div className="cell-sub"><Code>{c.sku}</Code></div></> },
-    { key: 'cat', titulo: 'Categoria', ocultarCelular: true, ordenar: c => c.categoriaNome, render: c => c.categoriaNome },
-    { key: 'f', titulo: 'Situação', ocultarCelular: true, ordenar: c => c.faixa ?? '', render: c => (c.faixa ? <Badge tom={TOM_FAIXA[c.faixa]} plain>{ROTULO_FAIXA[c.faixa]}</Badge> : <span className="muted">-</span>) },
-    { key: 'q', titulo: 'Qtd.', align: 'right', ordenar: c => c.quantidade, render: c => numero(c.quantidade), rodape: numero(totais.q) },
-    { key: 'cu', titulo: 'Custo un.', align: 'right', ocultarCelular: true, ordenar: c => c.precoCusto, render: c => moeda(c.precoCusto) },
-    { key: 'ct', titulo: 'Imobilizado', align: 'right', ordenar: c => c.valorImobilizado, render: c => <b>{moeda(c.valorImobilizado)}</b>, rodape: moeda(totais.custo) },
-    { key: 'pv', titulo: 'Receita potencial', align: 'right', ocultarCelular: true, ordenar: c => c.receitaPotencial, render: c => moeda(c.receitaPotencial), rodape: moeda(totais.venda) },
-    { key: 'm', titulo: 'Margem', align: 'right', ordenar: margem, render: c => (c.precoVenda > 0 ? <span className={margem(c) >= 50 ? 'up' : 'muted'}>{pct(margem(c))}</span> : <span className="muted">sem preço</span>) },
-  ];
-
-  const colunasExport = [
-    { titulo: 'Produto', valor: (c: LinhaCapital) => c.nome, largura: 45 },
-    { titulo: 'SKU', valor: (c: LinhaCapital) => c.sku },
-    { titulo: 'Categoria', valor: (c: LinhaCapital) => c.categoriaNome, largura: 20 },
-    { titulo: 'Situação', valor: (c: LinhaCapital) => (c.faixa ? ROTULO_FAIXA[c.faixa] : '') },
-    { titulo: 'Quantidade', valor: (c: LinhaCapital) => c.quantidade },
-    { titulo: 'Custo unitário', valor: (c: LinhaCapital) => moeda(c.precoCusto) },
-    { titulo: 'Imobilizado', valor: (c: LinhaCapital) => moeda(c.valorImobilizado) },
-    { titulo: 'Margem', valor: (c: LinhaCapital) => (c.precoVenda > 0 ? pct(margem(c)) : 'sem preço') },
-  ];
-
-  const tooltipStyle = { background: cores.surface, border: `1px solid ${cores.line}`, borderRadius: 8, fontSize: 13 };
-  const chaveE = medida === 'rs' ? 'valorEntradas' : 'entradas';
-  const chaveS = medida === 'rs' ? 'valorSaidas' : 'saidas';
-  const fmt = (v: number) => (medida === 'rs' ? moeda(v) : `${numero(v)} un`);
+  const maxEquipe = Math.max(1, ...p.equipe.map(e => e.movimentos + e.separacoes));
 
   return (
     <>
       <PageHeader
         titulo="Painel"
-        descricao={<>Situação do armazém, das compras e da operação. Atualizado às {dados.em.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.</>}
+        descricao={<>Central da operação: filas, agenda e equipe de hoje. Atualizado às {dados.em.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} e a cada 2 minutos. Tendências e análises ficam no <Link to="/bi">Painel BI</Link>.</>}
         acoes={<>
-          <Segmented valor={dias} onChange={setDias} opcoes={[{ valor: '7', label: '7 dias' }, { valor: '30', label: '30 dias' }, { valor: '90', label: '90 dias' }]} />
           <button className="btn" onClick={() => recarregar()}><IoRefreshOutline /> Atualizar</button>
           <button className="btn hide-sm" onClick={() => navigate('/bi')}><IoAnalyticsOutline /> Painel BI</button>
         </>}
       />
 
-      {/* -------- Indicadores principais -------- */}
+      {/* -------- O que está na fila agora -------- */}
       <div className="kpis kpis--painel">
-        <Kpi label="Capital em estoque (custo)" valor={moeda(k('valorCusto'))} tom="primary"
-          dica={p.saude.coberturaMediaDias !== null ? `Cobre ~${numero(p.saude.coberturaMediaDias)} dias de consumo` : `${numero(k('unidades'))} unidades disponíveis`} />
-        <Kpi label="Margem potencial" valor={moeda(k('margemPrecificada'))}
-          dica={k('capitalSemPreco') > 0.5 ? `${moeda(k('capitalSemPreco'))} em produtos sem preço de venda` : `Receita potencial ${moeda(k('valorVenda'))}`}
-          tom={k('capitalSemPreco') > k('valorCusto') * 0.2 ? 'warn' : undefined} onClick={semPreco ? () => setFiltroFaixa('sempreco') : undefined} />
-        <Kpi label={`Consumo em ${p.dias} dias`} valor={moeda(at.valorConsumo)} dica={<Delta atual={at.valorConsumo} anterior={ant.valorConsumo} />} onClick={() => navigate('/curva-abc')} />
-        <Kpi label="Abaixo do mínimo" valor={numero(k('criticos'))} dica={`${numero(k('zerados'))} com saldo zerado`} tom={k('criticos') ? 'warn' : 'ok'} onClick={() => navigate('/estoque?filtro=critico')} />
-        <Kpi label={`Perdas em ${p.dias} dias`} valor={moeda(at.valorPerdas)} dica={<Delta atual={at.valorPerdas} anterior={ant.valorPerdas} ruimSubir />} tom={at.valorPerdas ? 'bad' : undefined} onClick={() => navigate('/rupturas')} />
-        <Kpi label="Compras em aberto" valor={moeda(k('caixaComprometido'))} dica={`${k('pedidosPendentes')} pedidos · ${k('pedidosAtrasados')} atrasados`} tom={k('pedidosAtrasados') ? 'warn' : undefined} onClick={() => navigate('/compras')} />
-        <Kpi label="Fila de separação" valor={numero(k('osPendentes') + k('osEmSeparacao'))} dica={kpis.tempoMedioSeparacaoMin !== null ? `Média de ${k('tempoMedioSeparacaoMin')} min por ordem` : `${k('osEmSeparacao')} em separação`} tom={k('osUrgentes') ? 'bad' : undefined} onClick={() => navigate('/separacao')} />
+        <Kpi label="Separação na fila" valor={numero(sep.pendentes + sep.emSeparacao)} tom={sep.urgentes ? 'bad' : undefined} onClick={() => navigate('/separacao')}
+          dica={sep.urgentes ? `${sep.urgentes} urgente(s) · ${numero(sep.linhas)} linhas a separar` : `${sep.emSeparacao} em andamento · ${numero(sep.linhas)} linhas`} />
+        <Kpi label="Recebimentos hoje" valor={numero(rec.hoje + rec.atrasados)} tom={rec.atrasados ? 'warn' : undefined} onClick={() => navigate('/compras')}
+          dica={rec.atrasados ? `${rec.atrasados} atrasado(s) · ${moeda(rec.valorHojeEAtrasado)}` : `${rec.semana} previsto(s) nos próximos 7 dias`} />
+        <Kpi label="Produção em aberto" valor={numero(prod.abertas)} tom={prod.atrasadas ? 'warn' : undefined} onClick={() => navigate('/pcp/ordens')}
+          dica={`${prod.emProducao} em produção · ${prod.atrasadas} atrasada(s)`} />
+        <Kpi label="Repor estoque" valor={numero(k('criticos'))} tom={k('zerados') ? 'bad' : k('criticos') ? 'warn' : 'ok'} onClick={() => navigate('/compras/sugestao')}
+          dica={`abaixo do mínimo · ${numero(k('zerados'))} zerado(s)`} />
+        <Kpi label="Fora do disponível" valor={`${numero(fora.demonstracao.unidades + fora.avaria.unidades)} un`} onClick={() => navigate('/rupturas')}
+          dica={`${numero(fora.demonstracao.unidades)} em demonstração · ${numero(fora.avaria.unidades)} em avaria`} tom={fora.avaria.unidades ? 'warn' : undefined} />
+        <Kpi label="A pagar na semana" valor={moeda(fin.pagar)} tom={fin.pagarVencido ? 'bad' : undefined} onClick={() => navigate('/financeiro')}
+          dica={fin.pagarVencido ? `${moeda(fin.pagarVencido)} já vencido` : fin.receberVencido ? `${moeda(fin.receberVencido)} a receber em atraso` : `${moeda(fin.receber)} a receber`} />
       </div>
 
       {/* -------- Pulso de hoje -------- */}
@@ -196,7 +114,7 @@ export default function Dashboard() {
           <div><dt>Entradas</dt><dd>{numero(p.hoje.entradas)} <small>un</small></dd></div>
           <div><dt>Saídas</dt><dd>{numero(p.hoje.saidas)} <small>un</small></dd></div>
           <div><dt>Separações concluídas</dt><dd>{numero(p.hoje.separacoesConcluidas)}</dd></div>
-          <div><dt>Recebimentos</dt><dd>{numero(p.hoje.recebimentos)}</dd></div>
+          <div><dt>Recebimentos feitos</dt><dd>{numero(p.hoje.recebimentos)}</dd></div>
           <div><dt>Pessoas operando</dt><dd>{numero(p.hoje.usuarios)}</dd></div>
         </dl>
         <div className="painel-hoje__horas" role="img" aria-label="Movimentos por hora hoje">
@@ -209,181 +127,26 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* -------- Movimentação + alertas -------- */}
+      {/* -------- Fila de separação + alertas -------- */}
       <div className="grid grid-main-side mb-16">
-        <Panel titulo="Entradas e saídas" descricao={`${fmt(medida === 'rs' ? at.valorEntradas : at.entradas)} entraram e ${fmt(medida === 'rs' ? at.valorSaidas : at.saidas)} saíram em ${p.dias} dias`}
-          acoes={<Segmented valor={medida} onChange={setMedida} opcoes={[{ valor: 'rs', label: 'R$' }, { valor: 'un', label: 'Unidades' }]} />}>
-          <div className="legend mb-8"><span><i style={{ background: cores.primary }} />Entradas</span><span><i style={{ background: cores.warn }} />Saídas</span></div>
-          <div className="chart-box">
-            <ResponsiveContainer>
-              <BarChart data={serie} margin={{ top: 8, right: 8, left: medida === 'rs' ? 4 : -12, bottom: 0 }} barGap={2} barCategoryGap={p.dias > 30 ? '15%' : '25%'}>
-                <CartesianGrid stroke={cores.line} vertical={false} />
-                <XAxis dataKey="data" tickFormatter={d => d.slice(8, 10) + '/' + d.slice(5, 7)} tick={{ fill: cores['text-3'], fontSize: 12 }} axisLine={false} tickLine={false} minTickGap={18} />
-                <YAxis tick={{ fill: cores['text-3'], fontSize: 12 }} axisLine={false} tickLine={false} allowDecimals={false} tickFormatter={v => (medida === 'rs' ? compacto(Number(v)) : numero(Number(v)))} width={medida === 'rs' ? 52 : 48} />
-                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: cores.line, opacity: 0.35 }} labelFormatter={d => String(d).split('-').reverse().join('/')} formatter={v => fmt(Number(v))} />
-                <Bar dataKey={chaveE} name="Entradas" fill={cores.primary} radius={[3, 3, 0, 0]} maxBarSize={14} />
-                <Bar dataKey={chaveS} name="Saídas" fill={cores.warn} radius={[3, 3, 0, 0]} maxBarSize={14} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Panel>
-
-        <Panel titulo="O que precisa de atenção" descricao={alertas.length ? `${alertas.length} ponto(s), do mais grave ao informativo` : undefined} flush>
-          {alertas.length === 0
-            ? <div className="empty"><IoCheckmarkCircleOutline style={{ color: 'var(--ok)', opacity: 1 }} /><b>Tudo em ordem</b>Nenhum alerta no momento.</div>
-            : <ul className="alert-list painel-alertas">{alertas.map(a => <li key={a.titulo}><Link to={a.rota}><span className={`dot dot--${a.nivel}`} /><span className="sr-only">{a.nivel === 'critico' ? 'Crítico: ' : a.nivel === 'atencao' ? 'Atenção: ' : ''}</span>{a.titulo}</Link></li>)}</ul>}
-        </Panel>
-      </div>
-
-      {/* -------- Saúde do estoque + risco de ruptura -------- */}
-      <div className="grid grid-2 mb-16">
-        <Panel titulo="Saúde do estoque" descricao={`Onde está o capital de ${moeda(capitalTotal)}. ${p.saude.concentracao.itens80} de ${p.saude.concentracao.itensComValor} produtos concentram 80% do valor.`}>
-          {capitalTotal <= 0 ? <p className="muted">Sem saldo valorizado.</p> : (
-            <>
-              <div className="saude-barra" role="img" aria-label={p.saude.faixas.filter(f => f.valor > 0).map(f => `${f.rotulo} ${pct((f.valor / capitalTotal) * 100, 0)}`).join(', ')}>
-                {p.saude.faixas.filter(f => f.valor > 0).map(f => (
-                  <i key={f.chave} style={{ width: `${(f.valor / capitalTotal) * 100}%`, background: corFaixa[f.chave] }} title={`${f.rotulo}: ${moeda(f.valor)}`} />
-                ))}
-              </div>
-              <ul className="saude-lista">
-                {p.saude.faixas.map(f => (
-                  <li key={f.chave}>
-                    <button type="button" className={faixaAberta === f.chave ? 'is-ativo' : ''} onClick={() => (f.chave === 'parado' || f.chave === 'excesso' ? setFaixaAberta(f.chave) : f.chave === 'risco' ? document.getElementById('risco')?.scrollIntoView({ behavior: 'smooth', block: 'center' }) : setFiltroFaixa(f.chave))} disabled={!f.produtos}>
-                      <i style={{ background: corFaixa[f.chave] }} />
-                      <span><b>{f.rotulo}</b><small>{f.descricao}</small></span>
-                      <span className="num"><b>{moeda(f.valor)}</b><small>{numero(f.produtos)} produto(s) · {pct(capitalTotal ? (f.valor / capitalTotal) * 100 : 0, 0)}</small></span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              {(faixaAberta === 'parado' || faixaAberta === 'excesso') && (
-                <div className="saude-detalhe">
-                  <div className="row" style={{ justifyContent: 'space-between' }}>
-                    <b>{faixaAberta === 'parado' ? 'Maiores valores parados' : 'Maiores excessos'}</b>
-                    <button className="btn btn--sm btn--ghost" onClick={() => { setFiltroFaixa(faixaAberta); document.getElementById('capital')?.scrollIntoView({ behavior: 'smooth' }); }}>Ver todos</button>
-                  </div>
-                  {listaFaixa.length === 0 ? <p className="muted">Nenhum produto nesta situação.</p> : (
-                    <table className="table table--compacta">
-                      <tbody>
-                        {listaFaixa.map(l => (
-                          <tr key={l.produtoId} onClick={() => navigate(`/kardex/${l.produtoId}`)} style={{ cursor: 'pointer' }}>
-                            <td><div className="cell-title">{l.nome}</div><div className="cell-sub"><Code>{l.sku}</Code> · {numero(l.saldo)} un</div></td>
-                            <td className="num muted">{'ultimaSaida' in l ? (l.ultimaSaida ? `última saída ${haQuanto(l.ultimaSaida)}` : 'nunca saiu') : l.coberturaDias !== null ? `${numero(l.coberturaDias)} dias de estoque` : ''}</td>
-                            <td className="num"><b>{moeda(l.valor)}</b></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-        </Panel>
-
-        <div id="risco">
-          <Panel titulo="Risco de ruptura" flush
-            descricao={p.riscoRupturaTotal ? `${p.riscoRupturaTotal} produto(s) acabam antes de o reabastecimento chegar (prazo de reposição + 7 dias de segurança)` : 'Nenhum produto acaba antes do próximo reabastecimento'}
-            acoes={<button className="btn btn--sm" onClick={() => navigate('/compras/sugestao')}><IoCartOutline /> Sugestão de compras</button>}>
-            {p.riscoRuptura.length === 0 ? <div className="empty"><IoCheckmarkCircleOutline style={{ color: 'var(--ok)', opacity: 1 }} /><b>Cobertura em dia</b>Todos os itens com consumo têm saldo para o prazo de reposição.</div> : (
-              <table className="table risco-tabela">
-                <thead><tr><th>Produto</th><th>Dura</th><th className="num hide-sm">Consumo/dia</th><th className="num">Pedido aberto</th></tr></thead>
-                <tbody>
-                  {p.riscoRuptura.map(r => {
-                    const fracao = Math.min(1, r.coberturaDias / (r.leadTimeDias + 7));
-                    return (
-                      <tr key={r.produtoId} onClick={() => navigate(`/kardex/${r.produtoId}`)} style={{ cursor: 'pointer' }}>
-                        <td><div className="cell-title">{r.nome}</div><div className="cell-sub"><Code>{r.sku}</Code> · saldo {numero(r.saldo)}</div></td>
-                        <td>
-                          <div className="cobertura" title={`Dura ${r.coberturaDias} dias; reposição leva ${r.leadTimeDias} dias`}>
-                            <div className="cobertura__trilho"><i className={r.coberturaDias < r.leadTimeDias ? 'is-bad' : 'is-warn'} style={{ width: `${Math.max(4, fracao * 100)}%` }} /><b style={{ left: `${(r.leadTimeDias / (r.leadTimeDias + 7)) * 100}%` }} /></div>
-                            <span className={r.coberturaDias < r.leadTimeDias ? 'down' : ''}>{r.coberturaDias === 0 ? 'acabou' : `${r.coberturaDias} d`}<small className="muted"> / {r.leadTimeDias} d</small></span>
-                          </div>
-                        </td>
-                        <td className="num hide-sm">{numero(r.consumoDia, 1)}</td>
-                        <td className="num">{r.pedidoAberto ? <Badge tom="info" plain>{numero(r.pedidoAberto)} un</Badge> : <Badge tom="bad" plain>Sem pedido</Badge>}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </Panel>
-        </div>
-      </div>
-
-      {/* -------- Validade, módulos, cadastro -------- */}
-      <div className="grid grid-3 mb-16">
-        <Panel titulo="Validade em risco" descricao="Valor de custo dos lotes com saldo"
-          acoes={<button className="btn btn--sm btn--ghost" onClick={() => navigate('/validade')}>Abrir</button>}>
-          <ul className="validade-lista">
-            {p.validade.map((v, i) => (
-              <li key={v.chave}>
-                <span>{v.rotulo}<small>{numero(v.lotes)} lote(s) · {numero(v.unidades)} un</small></span>
-                <span className="validade-lista__barra"><i className={`validade--${i}`} style={{ width: `${(v.valor / maxValidade) * 100}%` }} /></span>
-                <b className={i === 0 && v.valor > 0 ? 'down' : ''}>{moeda(v.valor)}</b>
-              </li>
-            ))}
-          </ul>
-        </Panel>
-
-        <Panel titulo="Outras áreas" descricao="Resumo dos módulos de produção, inventário e financeiro" flush>
-          <div className="painel-modulos">
-            <Modulo icone={<IoConstructOutline />} titulo="Produção (PCP)" para="/pcp" valor={numero(p.modulos.pcp.abertas)}
-              detalhe={`${p.modulos.pcp.emProducao} em produção · ${p.modulos.pcp.atrasadas} atrasada(s)`} tom={p.modulos.pcp.atrasadas ? 'warn' : undefined} />
-            <Modulo icone={<IoFlaskOutline />} titulo="Transformação" para="/transformacao?aba=ordens" valor={numero(p.modulos.transformacao.aguardando + p.modulos.transformacao.planejadas)}
-              detalhe={`${p.modulos.transformacao.aguardando} aguardando aprovação · ${p.modulos.transformacao.planejadas} planejada(s)`} tom={p.modulos.transformacao.aguardando ? 'warn' : undefined} />
-            <Modulo icone={<IoClipboardOutline />} titulo="Acurácia do inventário" para="/inventario"
-              valor={p.modulos.inventario?.acuracia != null ? pct(p.modulos.inventario.acuracia, 0) : '-'}
-              detalhe={p.modulos.inventario ? `${p.modulos.inventario.codigo}: ${p.modulos.inventario.itens} item(ns) contado(s) ${haQuanto(p.modulos.inventario.concluidoEm)}` : `Nenhum inventário concluído · ${k('inventariosAbertos')} em andamento`}
-              tom={p.modulos.inventario?.acuracia != null ? (p.modulos.inventario.acuracia >= 95 ? 'ok' : p.modulos.inventario.acuracia >= 85 ? 'warn' : 'bad') : undefined} />
-            <Modulo icone={<IoWalletOutline />} titulo="A pagar em 7 dias" para="/financeiro" valor={compacto(k('pagar7dias'))}
-              detalhe={k('pagarVencido') ? `${moeda(k('pagarVencido'))} vencido` : `A receber em 7 dias: ${moeda(k('receber7dias'))}`} tom={k('pagarVencido') ? 'bad' : undefined} />
-          </div>
-        </Panel>
-
-        <Panel titulo="Qualidade do cadastro" descricao="Dados que faltam e o que isso afeta">
-          <div className="qualidade-indice">
-            <b className={p.qualidade.indice >= 90 ? 'up' : p.qualidade.indice >= 70 ? 'qty--warn' : 'down'}>{pct(p.qualidade.indice, 0)}</b>
-            <span>dos campos importantes preenchidos</span>
-          </div>
-          <ul className="qualidade-lista">
-            {p.qualidade.itens.filter(q => q.quantidade > 0).map(q => (
-              <li key={q.chave}><Link to={q.rota}><span><span><b>{numero(q.quantidade)}</b> · {q.rotulo}</span><small>{q.impacto}</small></span></Link></li>
-            ))}
-            {p.qualidade.itens.every(q => q.quantidade === 0) && <li className="muted">Cadastro completo.</li>}
-          </ul>
-        </Panel>
-      </div>
-
-      {/* -------- Categoria, consumo, atividade -------- */}
-      <div className="grid grid-3 mb-16">
-        <Panel titulo="Capital por categoria" descricao="Saldo disponível × custo unitário">
-          {valorPorCategoria.length === 0 ? <p className="muted">Sem saldo valorizado.</p> : (
-            <div className="chart-box" style={{ height: Math.max(160, valorPorCategoria.length * 40) }}>
-              <ResponsiveContainer>
-                <BarChart data={valorPorCategoria} layout="vertical" margin={{ top: 0, right: 48, left: 0, bottom: 0 }}>
-                  <XAxis type="number" hide />
-                  <YAxis type="category" dataKey="categoria" width={110} tick={{ fill: cores['text-2'], fontSize: 12 }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={v => moeda(Number(v))} cursor={{ fill: cores.line, opacity: 0.4 }} />
-                  <Bar dataKey="valor" name="Valor" fill={cores.primary} radius={[0, 4, 4, 0]} barSize={18} label={{ position: 'right', formatter: (v: unknown) => compacto(Number(v)), fill: cores['text-2'], fontSize: 12 }} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </Panel>
-
-        <Panel titulo="Mais consumidos" descricao={`Saídas em ${p.dias} dias e quanto o saldo ainda dura`} flush>
-          {topSaidas.length === 0 ? <div className="empty">Sem saídas no período.</div> : (
+        <Panel flush titulo="Fila de separação" descricao={sep.maisAntigaH !== null ? `Por prioridade e antiguidade. A mais antiga espera há ${duracao(sep.maisAntigaH)}.` : 'Por prioridade e antiguidade'}
+          acoes={<button className="btn btn--sm" onClick={() => navigate('/separacao')}>Abrir separação <IoArrowForwardOutline /></button>}>
+          {sep.ordens.length === 0 ? <div className="empty"><IoCheckmarkCircleOutline style={{ color: 'var(--ok)', opacity: 1 }} /><b>Fila zerada</b>Nenhuma ordem aguardando separação.</div> : (
             <table className="table table--compacta">
+              <thead><tr><th>Ordem</th><th>Prioridade</th><th className="hide-sm">Pedida por</th><th className="hide-sm">Andamento</th><th className="num">Espera</th></tr></thead>
               <tbody>
-                {topSaidas.map(t => (
-                  <tr key={t.produtoId} onClick={() => navigate(`/kardex/${t.produtoId}`)} style={{ cursor: 'pointer' }}>
-                    <td>
-                      <div className="cell-title">{t.nome}</div>
-                      <div className="meter mt-8"><i style={{ width: `${(t.quantidade / topSaidas[0].quantidade) * 100}%` }} /></div>
+                {sep.ordens.map(o => (
+                  <tr key={o.id} onClick={() => navigate('/separacao')} style={{ cursor: 'pointer' }}>
+                    <td><Code>{o.codigo}</Code><div className="cell-sub">{numero(o.linhas)} linha(s) · {numero(o.unidades)} un</div></td>
+                    <td><Badge tom={TOM_PRIORIDADE[o.prioridade]} plain>{o.prioridade}</Badge></td>
+                    <td className="hide-sm">{o.solicitante}</td>
+                    <td className="hide-sm">
+                      {o.status === 'Em Separação' ? (
+                        <div className="andamento"><div className="meter"><i style={{ width: `${o.linhas ? (o.marcadas / o.linhas) * 100 : 0}%` }} /></div><span>{o.marcadas}/{o.linhas}</span></div>
+                      ) : <span className="muted">aguardando</span>}
+                      {o.separador && <div className="cell-sub">{o.separador}</div>}
                     </td>
-                    <td className="num"><b>{numero(t.quantidade)}</b> un<div className="cell-sub">{t.coberturaDias !== null ? <span className={t.coberturaDias < 15 ? 'down' : ''}>dura {numero(t.coberturaDias)} d</span> : ''}</div></td>
+                    <td className="num nowrap">{haQuanto(o.criadaEm).replace(/^há /, '')}</td>
                   </tr>
                 ))}
               </tbody>
@@ -391,6 +154,136 @@ export default function Dashboard() {
           )}
         </Panel>
 
+        <Panel titulo="O que precisa de atenção" descricao={p.alertas.length ? `${p.alertas.length} ponto(s), do mais grave ao informativo` : undefined} flush>
+          {p.alertas.length === 0
+            ? <div className="empty"><IoCheckmarkCircleOutline style={{ color: 'var(--ok)', opacity: 1 }} /><b>Tudo em ordem</b>Nenhum alerta no momento.</div>
+            : <ul className="alert-list painel-alertas">{p.alertas.map(a => <li key={a.titulo}><Link to={a.rota}><span className={`dot dot--${a.nivel}`} /><span className="sr-only">{a.nivel === 'critico' ? 'Crítico: ' : a.nivel === 'atencao' ? 'Atenção: ' : ''}</span>{a.titulo}</Link></li>)}</ul>}
+        </Panel>
+      </div>
+
+      {/* -------- Agenda de recebimentos + produção -------- */}
+      <div className="grid grid-2 mb-16">
+        <Panel flush titulo="Agenda de recebimentos" descricao="Pedidos de compra pendentes, do mais urgente ao mais distante"
+          acoes={<button className="btn btn--sm" onClick={() => navigate('/compras')}>Pedidos <IoArrowForwardOutline /></button>}>
+          <div className="contadores">
+            <Contador rotulo="Atrasados" valor={rec.atrasados} tom={rec.atrasados ? 'down' : ''} />
+            <Contador rotulo="Hoje" valor={rec.hoje} tom={rec.hoje ? 'qty--warn' : ''} />
+            <Contador rotulo="Próximos 7 dias" valor={rec.semana} />
+            <Contador rotulo="Sem data" valor={rec.semData} />
+          </div>
+          {rec.pedidos.length === 0 ? <div className="empty">Nenhum pedido de compra pendente.</div> : (
+            <table className="table table--compacta">
+              <tbody>
+                {rec.pedidos.map(r => {
+                  const q = quando(r.dataPrevisao);
+                  return (
+                    <tr key={r.id} onClick={() => navigate('/compras')} style={{ cursor: 'pointer' }}>
+                      <td><div className="cell-title">{r.produto.nome}</div><div className="cell-sub">{r.fornecedor}{r.codigo ? ` · ${r.codigo}` : ''}</div></td>
+                      <td className="num">{numero(r.quantidade)} un<div className="cell-sub">{moeda(r.valor)}</div></td>
+                      <td className="num nowrap"><span className={q.tom}>{q.texto}</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </Panel>
+
+        <Panel flush titulo="Produção em andamento" descricao="Ordens abertas: atrasadas primeiro, depois as que estão na linha"
+          acoes={<button className="btn btn--sm" onClick={() => navigate('/pcp')}>Central do PCP <IoArrowForwardOutline /></button>}>
+          <div className="contadores">
+            <Contador rotulo="Abertas" valor={prod.abertas} />
+            <Contador rotulo="Em produção" valor={prod.emProducao} />
+            <Contador rotulo="Entregam hoje" valor={prod.entregaHoje} tom={prod.entregaHoje ? 'qty--warn' : ''} />
+            <Contador rotulo="Atrasadas" valor={prod.atrasadas} tom={prod.atrasadas ? 'down' : ''} />
+          </div>
+          {prod.ordens.length === 0 ? <div className="empty">Nenhuma ordem de produção aberta.</div> : (
+            <table className="table table--compacta">
+              <tbody>
+                {prod.ordens.map(o => {
+                  const q = quando(o.entregaPrevista);
+                  const feito = o.planejada ? Math.min(100, (o.produzida / o.planejada) * 100) : 0;
+                  return (
+                    <tr key={o.id} onClick={() => navigate('/pcp/ordens')} style={{ cursor: 'pointer' }}>
+                      <td><div className="cell-title">{o.produto.nome}</div><div className="cell-sub"><Code>{o.codigo}</Code> · {o.status}{o.recurso ? ` · ${o.recurso}` : ''}</div></td>
+                      <td style={{ width: '28%' }}><div className="andamento"><div className="meter"><i style={{ width: `${feito}%` }} /></div><span>{numero(o.produzida)}/{numero(o.planejada)}</span></div></td>
+                      <td className="num nowrap"><span className={o.atrasada ? 'down' : q.tom}>{o.entregaPrevista ? q.texto.replace('atrasado', 'atrasada') : 'sem data'}</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </Panel>
+      </div>
+
+      {/* -------- Equipe, financeiro e material fora do disponível -------- */}
+      <div className="grid grid-3 mb-16">
+        <Panel flush titulo="Equipe hoje" descricao="Quem está operando e quanto já fez">
+          {p.equipe.length === 0 ? <div className="empty"><IoPersonOutline /><b>Ninguém operou ainda hoje</b>Os lançamentos e separações aparecem aqui ao longo do dia.</div> : (
+            <ul className="equipe">
+              {p.equipe.map(e => (
+                <li key={e.usuarioId}>
+                  <span className="avatar">{iniciais(e.nome)}</span>
+                  <span className="equipe__texto">
+                    <b>{e.nome}</b>
+                    <small>{e.separacoes ? `${e.separacoes} separação(ões) · ${e.linhas} linhas${e.minutosSeparando ? ` · ${duracao(e.minutosSeparando / 60)}` : ''}` : e.cargo}</small>
+                    <span className="meter"><i style={{ width: `${((e.movimentos + e.separacoes) / maxEquipe) * 100}%` }} /></span>
+                  </span>
+                  <span className="equipe__num"><b>{numero(e.movimentos)}</b><small>lançamentos</small></span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+
+        <Panel flush titulo="Agenda financeira" descricao="Vencidos e próximos 7 dias"
+          acoes={<button className="btn btn--sm btn--ghost" onClick={() => navigate('/financeiro')}>Abrir</button>}>
+          <div className="contadores">
+            <Contador rotulo="A pagar" valor={`R$ ${compacto(fin.pagar)}`} tom={fin.pagarVencido ? 'down' : ''} />
+            <Contador rotulo="A receber" valor={`R$ ${compacto(fin.receber)}`} tom={fin.receber ? 'up' : ''} />
+            <Contador rotulo="Vencidos" valor={fin.vencidos} tom={fin.vencidos ? 'down' : ''} />
+          </div>
+          {fin.titulos.length === 0 ? <div className="empty">Nada vencendo nos próximos 7 dias.</div> : (
+            <ul className="agenda">
+              {fin.titulos.map(t => {
+                const q = quando(t.vencimento);
+                return (
+                  <li key={t.id}>
+                    <span className={`agenda__tipo ${t.tipo === 'PAGAR' ? 'is-pagar' : 'is-receber'}`}>{t.tipo === 'PAGAR' ? 'Pagar' : 'Receber'}</span>
+                    <span className="agenda__texto"><b>{t.quem ?? t.descricao}</b><small>{t.quem ? t.descricao : ''}{t.parcela ? ` · ${t.parcela}` : ''}</small></span>
+                    <span className="agenda__valor"><b>{moeda(t.valor)}</b><small className={q.tom}>{q.texto.replace('atrasado', 'vencido')}</small></span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Panel>
+
+        <Panel titulo="Fora do disponível" descricao="Material da empresa que não está na prateleira">
+          <div className="fora">
+            <div className="fora__bloco">
+              <div className="fora__cab"><b>Em demonstração</b><span>{numero(fora.demonstracao.unidades)} un · {moeda(fora.demonstracao.valor)}</span></div>
+              {fora.demonstracao.porResponsavel.length === 0 ? <p className="muted">Nada em demonstração.</p> : (
+                <ul>{fora.demonstracao.porResponsavel.map(r => <li key={r.responsavel}><span>{r.responsavel}<small>{r.produtos} produto(s)</small></span><b>{numero(r.unidades)} un</b></li>)}</ul>
+              )}
+            </div>
+            <div className="fora__bloco">
+              <div className="fora__cab"><b>Em avaria</b><span>{numero(fora.avaria.unidades)} un · {moeda(fora.avaria.valor)}</span></div>
+              {fora.avaria.produtos.length === 0 ? <p className="muted">Nenhuma avaria pendente.</p> : (
+                <ul>{fora.avaria.produtos.map(a => <li key={a.produtoId}><Link to={`/kardex/${a.produtoId}`}>{a.nome}<small>{a.sku}</small></Link><b>{numero(a.unidades)} un</b></li>)}</ul>
+              )}
+            </div>
+            <div className="fora__links">
+              <Link to="/transformacao?aba=ordens">Transformações aguardando aprovação: <b>{p.filas.transformacao.aguardando}</b></Link>
+              <Link to="/inventario">Inventário: <b>{numero(p.filas.inventario.itensAContar)}</b> item(ns) a contar</Link>
+            </div>
+          </div>
+        </Panel>
+      </div>
+
+      {/* -------- Atividade + qualidade do cadastro -------- */}
+      <div className="grid grid-main-side">
         <Panel titulo="Atividade recente" descricao="Últimos lançamentos no estoque" flush acoes={<button className="btn btn--sm btn--ghost" onClick={() => navigate('/historico')}>Histórico</button>}>
           {p.atividade.length === 0 ? <div className="empty">Nenhum lançamento ainda.</div> : (
             <ol className="atividade">
@@ -398,43 +291,34 @@ export default function Dashboard() {
                 <li key={a.id}>
                   <span className={`atividade__sinal ${a.entrada ? 'is-entrada' : 'is-saida'}`} aria-label={a.entrada ? 'Entrada' : 'Saída'}>{a.entrada ? '+' : '−'}</span>
                   <span className="atividade__texto">
-                    <b>{numero(a.quantidade)} un</b> {a.produto.nome}
+                    <span><b>{numero(a.quantidade)} un</b> <Link to={`/kardex/${a.produto.id}`}>{a.produto.nome}</Link></span>
                     <small>{a.tipo} · {a.usuario} · {haQuanto(a.dataHora)}</small>
                   </span>
+                  <span className="atividade__valor">{a.valor ? moeda(a.valor) : ''}</span>
                 </li>
               ))}
             </ol>
           )}
         </Panel>
-      </div>
 
-      {/* -------- Capital por produto -------- */}
-      <div id="capital">
-        <Panel
-          flush
-          titulo="Capital imobilizado por produto"
-          descricao={`${capitalFiltrado.length} produtos · ${moeda(totais.custo)} em custo`}
-          acoes={<>
-            <button className="btn btn--sm" onClick={() => exportarExcel('Relatorio_Gerencial_ViaPro', [{ nome: 'Capital imobilizado', colunas: colunasExport, linhas: capitalFiltrado }])}><IoDownloadOutline /> Excel</button>
-            <button className="btn btn--sm" onClick={() => exportarPDF({ arquivo: 'Relatorio_Financeiro_ViaPro', titulo: 'Capital imobilizado em estoque', paisagem: true, resumo: [`Custo total: ${moeda(totais.custo)}`, `Itens: ${numero(totais.q)} un`], colunas: colunasExport, linhas: capitalFiltrado })}><IoDocumentTextOutline /> PDF</button>
-          </>}
-        >
-          <div className="toolbar">
-            <SearchInput value={busca} onChange={setBusca} placeholder="Buscar por nome ou SKU" />
-            <select className="select" value={categoria} onChange={e => setCategoria(e.target.value)} aria-label="Categoria">
-              <option value="">Todas as categorias</option>
-              {dados.categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-            </select>
-            <select className="select" value={filtroFaixa} onChange={e => setFiltroFaixa(e.target.value as typeof filtroFaixa)} aria-label="Situação">
-              <option value="todas">Todas as situações</option>
-              {(Object.keys(ROTULO_FAIXA) as Faixa[]).map(f => <option key={f} value={f}>{ROTULO_FAIXA[f]}</option>)}
-              <option value="sempreco">Sem preço de venda</option>
-            </select>
+        <Panel titulo="Qualidade do cadastro" descricao="Clique para abrir só os produtos com a pendência">
+          <div className="qualidade-indice">
+            <b className={p.qualidade.indice >= 90 ? 'up' : p.qualidade.indice >= 70 ? 'qty--warn' : 'down'}>{pct(p.qualidade.indice, 0)}</b>
+            <span>dos campos importantes preenchidos em {numero(p.qualidade.total)} produtos</span>
           </div>
-          <DataTable colunas={colunas} linhas={capitalFiltrado} chave={c => c.produtoId} ordemInicial={{ key: 'ct', dir: 'desc' }} porPagina={15} onLinha={c => navigate(`/kardex/${c.produtoId}`)} />
+          <ul className="qualidade-lista">
+            {p.qualidade.itens.filter(q => q.quantidade > 0).map(q => (
+              <li key={q.chave}>
+                <Link to={`/produtos?pendencia=${q.chave}`}>
+                  <span><span><b>{numero(q.quantidade)}</b> · {q.rotulo}</span><small>{q.impacto}</small></span>
+                  <IoArrowForwardOutline aria-hidden />
+                </Link>
+              </li>
+            ))}
+            {p.qualidade.itens.every(q => q.quantidade === 0) && <li className="muted">Cadastro completo.</li>}
+          </ul>
         </Panel>
       </div>
-      <p className="muted painel-rodape">Cobertura = saldo ÷ maior ritmo de consumo entre os últimos 30 e 90 dias.</p>
     </>
   );
 }

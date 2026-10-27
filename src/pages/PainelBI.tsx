@@ -13,6 +13,7 @@ import type { Categoria } from '../lib/tipos';
 import { DataTable, type Col } from '../components/DataTable';
 import { Badge, Code, Empty, Loading, Panel, SearchInput, Segmented } from '../components/ui';
 import './PainelBI.css';
+import { CapitalMargem } from './bi/CapitalMargem';
 
 // ------------------------------------------------------------------ tipos da resposta de /bi/painel
 type Nivel = 'critico' | 'atencao' | 'oportunidade' | 'info';
@@ -99,7 +100,7 @@ const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const HORAS = Array.from({ length: 16 }, (_, i) => i + 6); // 6h às 21h
 
 const SECOES = [
-  ['recomendacoes', 'Recomendações'], ['demanda', 'Demanda'], ['ruptura', 'Ruptura'], ['matriz', 'ABC × XYZ'], ['saude', 'Saúde do estoque'],
+  ['recomendacoes', 'Recomendações'], ['demanda', 'Demanda'], ['ruptura', 'Ruptura'], ['matriz', 'ABC × XYZ'], ['saude', 'Saúde do estoque'], ['capital', 'Capital e margem'],
   ['pcp', 'PCP'], ['fornecedores', 'Fornecedores'], ['operacao', 'Operação'], ['base', 'Base analítica'],
 ] as const;
 
@@ -180,6 +181,9 @@ export default function PainelBI() {
       <Ruptura itens={dados.itens} />
       <Matriz dados={dados} onFiltrar={filtrarMatriz} />
       <SaudeEstoque dados={dados} />
+      <Secao id="capital" titulo="Capital e margem" descricao="Quanto está imobilizado a custo, quanto vale a preço de venda e a margem que isso representa. Respeita os filtros de armazém e categoria.">
+        <CapitalMargem armazemId={armazemId} categoriaId={categoriaId} />
+      </Secao>
       <PCP dados={dados} />
       <Fornecedores fornecedores={dados.fornecedores} />
       <Operacao dados={dados} filtrado={!!armazemId} />

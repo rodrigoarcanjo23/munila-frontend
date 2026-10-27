@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
   IoAddOutline, IoDownloadOutline, IoDocumentTextOutline, IoPencilOutline, IoTrashOutline, IoReceiptOutline,
@@ -26,6 +26,13 @@ export default function Produtos() {
   const [tipo, setTipo] = useState('');
   const [editando, setEditando] = useState<Produto | 'novo' | null>(null);
   const [selecionados, setSelecionados] = useState<string[]>([]);
+  // ✨ Filtro por pendência de cadastro (vem do card "Qualidade do cadastro" do Painel: /produtos?pendencia=ncm)
+  const [params, setParams] = useSearchParams();
+  const pendencia = params.get('pendencia') ?? '';
+  const mudarPendencia = (v: string) => setParams(v ? { pendencia: v } : {}, { replace: true });
+  const { dados: pend, recarregar: recarregarPend } = useCarregar(async () => (await api.get<Pendencias>('/produtos/pendencias')).data);
+  const pendAtiva = pend?.itens.find(i => i.chave === pendencia) ?? null;
+  const idsPend = useMemo(() => (pendAtiva ? new Set(pendAtiva.ids) : null), [pendAtiva]);
 
   const { dados, carregando, recarregar } = useCarregar(async () => {
     const [p, c, l, f] = await Promise.all([
@@ -35,9 +42,9 @@ export default function Produtos() {
   });
 
   const filtrados = useMemo(() => (dados?.produtos ?? []).filter(p =>
-    (!categoria || p.categoriaId === categoria) && (!tipo || p.tipo === tipo) &&
+    (!categoria || p.categoriaId === categoria) && (!tipo || p.tipo === tipo) && (!idsPend || idsPend.has(p.id)) &&
     contem(busca, p.nome, p.sku, p.lote, p.enderecoLocalizacao, p.codigoBarras, p.fornecedor?.nomeEmpresa)),
-  [dados, busca, categoria, tipo]);
+  [dados, busca, categoria, tipo, idsPend]);
 
   async function excluir(p: Produto) {
     const motivo = await pedirTexto({
@@ -112,10 +119,23 @@ export default function Produtos() {
             <option value="ACABADO">Nacional (montado)</option>
             <option value="MATERIA_PRIMA">Importado (matéria-prima)</option>
           </select>
+          <select className="select" value={pendencia} onChange={e => mudarPendencia(e.target.value)} aria-label="Pendência de cadastro">
+            <option value="">Cadastro: todos</option>
+            {pend?.itens.map(i => <option key={i.chave} value={i.chave}>{i.rotulo} ({i.ids.length})</option>)}
+          </select>
           {selecionados.length > 0 && (
             <button className="btn" onClick={() => etiquetas((dados?.produtos ?? []).filter(p => selecionados.includes(p.id)))}><IoPrintOutline /> Etiquetas ({selecionados.length})</button>
           )}
         </div>
+        {pendencia && (
+          <div className="produtos-pendencia">
+            <Notice tom="warn" acao={<button className="btn btn--sm" onClick={() => mudarPendencia('')}><IoCloseOutline /> Mostrar todos</button>}>
+              {pendAtiva
+                ? <><b>{pendAtiva.rotulo}: {numero(pendAtiva.ids.length)} produto(s).</b> {pendAtiva.impacto}. Edite cada um para corrigir; ao salvar, ele sai desta lista.</>
+                : 'Carregando pendências…'}
+            </Notice>
+          </div>
+        )}
         <DataTable
           colunas={colunas} linhas={filtrados} chave={p => p.id} ordemInicial={{ key: 'nome', dir: 'asc' }}
           acoes={p => (
@@ -134,13 +154,15 @@ export default function Produtos() {
           produto={editando === 'novo' ? null : editando}
           {...dados}
           onFechar={() => setEditando(null)}
-          onSalvo={() => { setEditando(null); recarregar(true); }}
+          onSalvo={() => { setEditando(null); recarregar(true); recarregarPend(true); }}
           onCategoriaCriada={() => recarregar(true)}
         />
       )}
     </>
   );
 }
+
+interface Pendencias { total: number; indice: number; itens: { chave: string; rotulo: string; impacto: string; ids: string[] }[] }
 
 interface Ingrediente { produtoFilhoId: string; nome: string; sku: string; quantidade: number }
 
