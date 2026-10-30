@@ -28,6 +28,7 @@ export function NovaTransformacao({ materiais, receitas, ordem, receitaInicial, 
   const [perdas, setPerdas] = useState<Perda[]>([]);
   const [produzido, setProduzido] = useState('');
   const [lote, setLote] = useState('');
+  const [notaFiscal, setNotaFiscal] = useState(ordem?.notaFiscal ?? '');
   const [validade, setValidade] = useState('');
   const [justificativa, setJustificativa] = useState('');
   const [observacao, setObservacao] = useState(ordem?.observacao ?? '');
@@ -68,6 +69,7 @@ export function NovaTransformacao({ materiais, receitas, ordem, receitaInicial, 
     if (executar) {
       if (!consumos.some(c => n(c.quantidade) > 0)) return toast.warn('Informe o que foi consumido.');
       if (n(produzido) <= 0) return toast.warn('Informe quanto foi produzido.');
+      if (!notaFiscal.trim()) return toast.warn('Informe o número da NF desta transformação.');
       if (precisaJustificar && !justificativa.trim()) return toast.warn('Escreva a justificativa do desvio.');
       if (perdas.some(p => n(p.quantidade) > 0 && !(p.motivo === 'Outro' ? p.outro.trim() : p.motivo))) return toast.warn('Toda perda precisa de motivo.');
     }
@@ -76,7 +78,7 @@ export function NovaTransformacao({ materiais, receitas, ordem, receitaInicial, 
       produzido: n(produzido),
       subprodutos: subprodutos.filter(s => n(s.quantidade) > 0).map(s => ({ materialId: s.materialId, quantidade: n(s.quantidade) })),
       perdas: perdas.filter(p => n(p.quantidade) > 0).map(p => ({ materialId: p.materialId || null, quantidade: n(p.quantidade), motivo: p.motivo === 'Outro' ? p.outro.trim() : p.motivo })),
-      loteCodigo: lote.trim() || null, validade: validade || null, justificativa: justificativa.trim() || null, observacao: observacao.trim() || null,
+      loteCodigo: lote.trim() || null, notaFiscal: notaFiscal.trim() || null, validade: validade || null, justificativa: justificativa.trim() || null, observacao: observacao.trim() || null,
     } : null;
     setEnviando(true);
     try {
@@ -84,7 +86,7 @@ export function NovaTransformacao({ materiais, receitas, ordem, receitaInicial, 
         const r = await api.post(`/tf/ordens/${ordem.id}/executar`, execucao);
         toast.success(r.data.precisaAprovar ? `${ordem.codigo} enviada para aprovação.` : `${ordem.codigo} concluída.`);
       } else {
-        const r = await api.post('/tf/ordens', { receitaId: receita?.id ?? null, produtoId: produto.id, quantidadePlanejada: n(planejado), observacao: observacao.trim() || null, execucao });
+        const r = await api.post('/tf/ordens', { receitaId: receita?.id ?? null, produtoId: produto.id, quantidadePlanejada: n(planejado), observacao: observacao.trim() || null, notaFiscal: notaFiscal.trim() || null, execucao });
         const o = r.data.ordem as Ordem;
         toast.success(!executar ? `${o.codigo} salva como planejada.` : o.status === 'Aguardando aprovação' ? `${o.codigo} registrada e enviada para aprovação de um gestor.` : `${o.codigo} concluída. Lote ${o.loteCodigo} gerado.`);
       }
@@ -175,9 +177,10 @@ export function NovaTransformacao({ materiais, receitas, ordem, receitaInicial, 
         <section>
           <h3 className="tf-passo"><span>3</span> Resultado</h3>
           <div className="form-grid">
-            <Field label={`Produzido (bom)${produto ? ` · ${produto.unidade}` : ''}`} className="col-4"><input className="input" type="number" min={0} step="any" value={produzido} onChange={e => setProduzido(e.target.value)} /></Field>
-            <Field label="Lote gerado" className="col-4" dica="Em branco: código automático (TF…)"><input className="input" value={lote} onChange={e => setLote(e.target.value.toUpperCase())} placeholder="Automático" /></Field>
-            <Field label="Validade" className="col-4" dica="Em branco: herda a menor validade dos insumos"><input className="input" type="date" value={validade} onChange={e => setValidade(e.target.value)} /></Field>
+            <Field label={`Produzido (bom)${produto ? ` · ${produto.unidade}` : ''}`} className="col-3"><input className="input" type="number" min={0} step="any" value={produzido} onChange={e => setProduzido(e.target.value)} /></Field>
+            <Field label="Nota fiscal (NF)" className="col-3" dica="Obrigatória: cada transformação tem uma NF nova"><input className="input" inputMode="numeric" value={notaFiscal} onChange={e => setNotaFiscal(e.target.value)} placeholder="Nº da NF" aria-required /></Field>
+            <Field label="Lote gerado" className="col-3" dica="Em branco: código automático (TF…)"><input className="input" value={lote} onChange={e => setLote(e.target.value.toUpperCase())} placeholder="Automático" /></Field>
+            <Field label="Validade" className="col-3" dica="Em branco: herda a menor validade dos insumos"><input className="input" type="date" value={validade} onChange={e => setValidade(e.target.value)} /></Field>
           </div>
 
           {receita && <div className="mt-16"><ReguaRendimento rendimento={av?.rendimento ?? null} aviso={receita.toleranciaAviso} bloqueio={receita.toleranciaBloqueio} /></div>}

@@ -14,10 +14,10 @@ export function Ordens({ ordens, onExecutar, onRastrear, onAlterado }: { ordens:
   const [busca, setBusca] = useState('');
   const [aberta, setAberta] = useState<string | null>(null);
   const conta = (s: StatusOrdem) => ordens.filter(o => o.status === s).length;
-  const linhas = useMemo(() => ordens.filter(o => (filtro === 'todas' || o.status === filtro) && contem(busca, o.codigo, o.produto.nome, o.produto.codigo, o.loteCodigo, o.receita?.codigo, o.executadoPor)), [ordens, filtro, busca]);
+  const linhas = useMemo(() => ordens.filter(o => (filtro === 'todas' || o.status === filtro) && contem(busca, o.codigo, o.produto.nome, o.produto.codigo, o.loteCodigo, o.receita?.codigo, o.executadoPor, o.notaFiscal, o.requisicao?.codigo)), [ordens, filtro, busca]);
 
   const colunas: Col<Ordem>[] = [
-    { key: 'c', titulo: 'OT', ordenar: o => o.codigo, render: o => <><Code>{o.codigo}</Code><div className="cell-sub">{dataHora(o.concluidaEm ?? o.executadaEm ?? o.createdAt)}</div></> },
+    { key: 'c', titulo: 'OT', ordenar: o => o.codigo, render: o => <><Code>{o.codigo}</Code><div className="cell-sub">{o.notaFiscal ? `NF ${o.notaFiscal} · ` : ''}{dataHora(o.concluidaEm ?? o.executadaEm ?? o.createdAt)}</div></> },
     { key: 'p', titulo: 'Produto', principal: true, ordenar: o => o.produto.nome, render: o => <><div className="cell-title">{o.produto.nome}</div><div className="cell-sub">{o.receita ? `${o.receita.codigo} v${o.receita.versao}` : 'Sem receita'}{o.loteCodigo ? ` · lote ${o.loteCodigo}` : ''}</div></> },
     { key: 'q', titulo: 'Produzido', align: 'right', ordenar: o => o.quantidadeProduzida ?? 0, render: o => <><b>{o.quantidadeProduzida !== null ? qtd(o.quantidadeProduzida) : '-'}</b><span className="muted"> / {qtd(o.quantidadePlanejada, o.produto.unidade)}</span></> },
     { key: 'r', titulo: 'Rendimento', align: 'right', ordenar: o => o.rendimento ?? -1, render: o => (o.rendimento !== null ? <Badge tom={TOM_FAIXA[o.faixa ?? '']}>{numero(o.rendimento, 1)}%</Badge> : <span className="muted">-</span>) },
@@ -34,7 +34,7 @@ export function Ordens({ ordens, onExecutar, onRastrear, onAlterado }: { ordens:
             { valor: 'Planejada', label: 'Planejadas', n: conta('Planejada') }, { valor: 'Concluída', label: 'Concluídas', n: conta('Concluída') },
             { valor: 'Estornada', label: 'Estornadas', n: conta('Estornada') }, { valor: 'Cancelada', label: 'Canceladas', n: conta('Cancelada') },
           ]} />
-          <SearchInput value={busca} onChange={setBusca} placeholder="OT, produto, lote ou pessoa" />
+          <SearchInput value={busca} onChange={setBusca} placeholder="OT, NF, produto, lote ou pessoa" />
         </div>
         <DataTable colunas={colunas} linhas={linhas} chave={o => o.id} onLinha={o => setAberta(o.id)} ordemInicial={{ key: 'c', dir: 'desc' }} destaque={o => o.status === 'Aguardando aprovação'}
           vazio={<Empty titulo="Nenhuma ordem de transformação">Use "Nova transformação" para registrar a primeira.</Empty>} />
@@ -99,6 +99,7 @@ function DetalheOrdem({ id, onFechar, onExecutar, onRastrear, onAlterado }: { id
           <div className="tf-numeros">
             <div><span>Planejado</span><b>{qtd(o.quantidadePlanejada, o.produto.unidade)}</b></div>
             <div><span>Produzido</span><b>{o.quantidadeProduzida !== null ? qtd(o.quantidadeProduzida, o.produto.unidade) : '-'}</b></div>
+            <div><span>Nota fiscal</span><b>{o.notaFiscal ?? '-'}</b></div>
             <div><span>Lote gerado</span><b>{o.loteCodigo ?? '-'}</b></div>
             <div><span>Validade</span><b>{dataUTC(o.validade)}</b></div>
           </div>

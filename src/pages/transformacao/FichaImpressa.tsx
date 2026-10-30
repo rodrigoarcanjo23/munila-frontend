@@ -141,7 +141,7 @@ export function FichaImpressa({ ficha, rq, onFechar }: { ficha: Ficha; rq?: Requ
 
         <Secao titulo="3. LANÇAMENTO DE ESTOQUE DE PRODUTO ACABADO">
           <table className="fi-t">
-            <tbody><tr><Lado rowSpan={nOut + 1}>LOGÍSTICA MUNILA</Lado><th>CÓDIGO</th><th>DESCRIÇÃO</th><th className="fi-w-lote">LOTE</th><th className="fi-w-qtd">QUANTIDADE</th><th>UND</th><th>LANÇADO POR</th><th>DATA</th></tr>
+            <tbody><tr><Lado rowSpan={nOut + 1}>LOGÍSTICA MUNILA</Lado><th>CÓDIGO</th><th>DESCRIÇÃO</th><th className="fi-w-qtd">NF</th><th className="fi-w-lote">LOTE</th><th className="fi-w-qtd">QUANTIDADE</th><th>UND</th><th>LANÇADO POR</th><th>DATA</th></tr>
               {saidas.map((s, j) => {
                 const o = ordemDe(s.receitaCodigo);
                 const feito = o?.status === 'Concluída';
@@ -149,6 +149,7 @@ export function FichaImpressa({ ficha, rq, onFechar }: { ficha: Ficha; rq?: Requ
                   <tr key={s.receitaCodigo}>
                     <td className="fi-c">{s.receita!.produto.codigo}</td>
                     <td>{s.receita!.produto.nome}</td>
+                    <td className="fi-c fi-forte">{feito ? o!.notaFiscal : ''}</td>
                     <td className="fi-c">{feito ? o!.loteCodigo : ''}</td>
                     <td className="fi-c">{feito ? qtd(o!.quantidadeProduzida) : ''}</td>
                     <td className="fi-c">{rotuloUn(s.receita!.produto.unidade)}</td>

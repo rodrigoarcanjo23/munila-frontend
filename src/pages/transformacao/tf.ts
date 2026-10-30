@@ -40,7 +40,8 @@ export interface Ordem {
   id: string; codigo: string; status: StatusOrdem; receitaId: string | null; produtoId: string; quantidadePlanejada: number; quantidadeProduzida: number | null;
   rendimento: number | null; desvio: number | null; faixa: string | null; justificativa: string | null; loteCodigo: string | null; validade: string | null; observacao: string | null;
   criadoPor: string; executadoPor: string | null; aprovadoPor: string | null; aprovadoEm: string | null; createdAt: string; executadaEm: string | null; concluidaEm: string | null;
-  canceladaEm: string | null; estornadaEm: string | null; motivoCancelamento: string | null;
+  canceladaEm: string | null; estornadaEm: string | null; motivoCancelamento: string | null; notaFiscal: string | null;
+  requisicao?: { id: string; codigo: string } | null;
   produto: { id: string; codigo: string; nome: string; unidade: string };
   receita: { id: string; codigo: string; versao: number; nome: string; quantidadeBase: number; toleranciaAviso: number; toleranciaBloqueio: number } | null;
   itens: ItemOrdem[];

@@ -49,7 +49,7 @@ export function Requisicoes({ receitas, onAlterado, onEntrada }: { receitas: Rec
   const andamento = (r: Requisicao) => ['Solicitada', 'Entregue', 'Convertida'].includes(r.status);
   const linhas = useMemo(() => lista.filter(r =>
     (filtro === 'todas' || (filtro === 'andamento' ? andamento(r) : filtro === 'Concluída' ? r.status === 'Concluída' : ['Cancelada', 'Estornada'].includes(r.status)))
-    && contem(busca, r.codigo, r.numeroViapro, r.ficha.nome, ...r.itens.map(i => i.material.codigo), ...r.ordens.map(o => o.produto.codigo), ...r.ordens.map(o => o.loteCodigo))), [lista, filtro, busca]);
+    && contem(busca, r.codigo, r.numeroViapro, r.ficha.nome, ...r.ordens.map(o => o.notaFiscal), ...r.itens.map(i => i.material.codigo), ...r.ordens.map(o => o.produto.codigo), ...r.ordens.map(o => o.loteCodigo))), [lista, filtro, busca]);
 
   async function semear() {
     setSemeando(true);
@@ -262,12 +262,13 @@ function DetalheRequisicao({ id, onFechar, onAlterado, onEntrada }: { id: string
             ) : rq.lancadoEm ? (
               <>
                 <div className="table-wrap"><table className="table tf-tabela-mini">
-                  <thead><tr><th>Código</th><th>Descrição</th><th>Lote</th><th className="num">Quantidade</th><th className="num">Rendimento</th></tr></thead>
+                  <thead><tr><th>Código</th><th>Descrição</th><th>NF</th><th>Lote</th><th className="num">Quantidade</th><th className="num">Rendimento</th></tr></thead>
                   <tbody>
                     {rq.ordens.filter(o => o.status === 'Concluída' || o.status === 'Estornada').map(o => (
                       <tr key={o.id}>
                         <td><Code>{o.produto.codigo}</Code><div className="cell-sub">{o.codigo}</div></td>
                         <td>{o.produto.nome}</td>
+                        <td>{o.notaFiscal ?? '-'}</td>
                         <td>{o.loteCodigo ? <span className="rq-lote">{o.loteCodigo}</span> : '-'}</td>
                         <td className="num"><b>{qtd(o.quantidadeProduzida, rotuloUn(o.produto.unidade))}</b></td>
                         <td className="num"><Badge tom={o.faixa === 'OK' ? 'ok' : o.faixa === 'Justificar' ? 'warn' : 'bad'} plain>{numero(o.rendimento ?? 0, 1)}%</Badge></td>
@@ -506,7 +507,7 @@ function ResumoConversao({ rq }: { rq: RequisicaoDetalhe }) {
 // 3. lançamento (logística confere quantidade real e lote)
 function FormLancamento({ rq, enviando, onSalvar }: { rq: RequisicaoDetalhe; enviando: boolean; onSalvar: (corpo: object) => void }) {
   const ordens = rq.ordens.filter(o => o.status === 'Planejada');
-  const [linhas, setLinhas] = useState(() => Object.fromEntries(ordens.map(o => [o.id, { qtd: String(o.quantidadePlanejada), lote: '' }])));
+  const [linhas, setLinhas] = useState(() => Object.fromEntries(ordens.map(o => [o.id, { qtd: String(o.quantidadePlanejada), lote: '', nf: o.notaFiscal ?? '' }])));
   const [justificativa, setJustificativa] = useState('');
   const difs = ordens.filter(o => Math.abs(n(linhas[o.id].qtd) - o.quantidadePlanejada) > 1e-6);
   const foraTol = ordens.filter(o => {
@@ -515,13 +516,17 @@ function FormLancamento({ rq, enviando, onSalvar }: { rq: RequisicaoDetalhe; env
   });
   function salvar() {
     if (foraTol.length && !justificativa.trim()) return toast.warn('Escreva a justificativa da diferença.');
-    onSalvar({ justificativa, saidas: ordens.map(o => ({ ordemId: o.id, produzido: n(linhas[o.id].qtd), loteCodigo: linhas[o.id].lote.trim() || null })) });
+    const semNF = ordens.filter(o => !linhas[o.id].nf.trim());
+    if (semNF.length) return toast.warn(`Informe a NF de ${semNF.map(o => o.produto.codigo).join(', ')}.`);
+    const nfs = ordens.map(o => linhas[o.id].nf.trim().toUpperCase());
+    if (new Set(nfs).size !== nfs.length) return toast.warn('Cada produto acabado precisa de uma NF diferente.');
+    onSalvar({ justificativa, saidas: ordens.map(o => ({ ordemId: o.id, produzido: n(linhas[o.id].qtd), loteCodigo: linhas[o.id].lote.trim() || null, notaFiscal: linhas[o.id].nf.trim() })) });
   }
   return (
     <div className="rq-form">
       <div className="tf-tabela">
         <table className="table">
-          <thead><tr><th>Produto acabado</th><th className="num">Calculado</th><th className="num">Quantidade real</th><th>Lote</th></tr></thead>
+          <thead><tr><th>Produto acabado</th><th className="num">Calculado</th><th className="num">Quantidade real</th><th>NF</th><th>Lote</th></tr></thead>
           <tbody>
             {ordens.map(o => {
               const l = linhas[o.id];
@@ -530,6 +535,7 @@ function FormLancamento({ rq, enviando, onSalvar }: { rq: RequisicaoDetalhe; env
                   <td><div className="cell-title">{o.produto.nome}</div><div className="cell-sub"><Code>{o.produto.codigo}</Code> · {o.codigo}</div></td>
                   <td className="num">{qtd(o.quantidadePlanejada, rotuloUn(o.produto.unidade))}</td>
                   <td className="num" style={{ width: 170 }}><div className="rq-qtd"><input className="input" inputMode="decimal" value={l.qtd} onChange={e => setLinhas(s => ({ ...s, [o.id]: { ...l, qtd: e.target.value } }))} aria-label="Quantidade real" /><span>{rotuloUn(o.produto.unidade)}</span></div></td>
+                  <td style={{ width: 150 }}><input className="input" inputMode="numeric" value={l.nf} onChange={e => setLinhas(s => ({ ...s, [o.id]: { ...l, nf: e.target.value } }))} placeholder="Nº da NF" aria-label="Nota fiscal" aria-required /></td>
                   <td style={{ width: 190 }}><input className="input" value={l.lote} onChange={e => setLinhas(s => ({ ...s, [o.id]: { ...l, lote: e.target.value } }))} placeholder="Automático (TF…)" aria-label="Lote do produto acabado" /></td>
                 </tr>
               );
@@ -539,7 +545,7 @@ function FormLancamento({ rq, enviando, onSalvar }: { rq: RequisicaoDetalhe; env
       </div>
       {difs.length > 0 && <Field label={foraTol.length ? 'Justificativa da diferença (obrigatória)' : 'Justificativa da diferença'}><input className="input" value={justificativa} onChange={e => setJustificativa(e.target.value)} placeholder="Ex.: 5 blisters com solda aberta" /></Field>}
       <div className="rq-form__rodape">
-        <p className="muted">Ao lançar, o importado sai dos lotes entregues{rq.itens.some(i => i.avariada > 0) ? ', o avariado sai como perda' : ''} e o produto acabado entra no estoque da transformação com o seu nome.</p>
+        <p className="muted">Cada produto acabado pertence a uma NF nova. Ao lançar, o importado sai dos lotes entregues{rq.itens.some(i => i.avariada > 0) ? ', o avariado sai como perda' : ''} e o produto acabado entra no estoque da transformação com o seu nome.</p>
         <button className="btn btn--primary" onClick={salvar} disabled={enviando}><IoCheckmarkCircle /> Lançar no estoque</button>
       </div>
     </div>
