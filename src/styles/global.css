@@ -12,10 +12,10 @@
 
   --ink: #013a56;          /* blocos fortes (painel BI, chips do mapa) */
   --ink-2: #015176;
-  --paper: #f5f7fa;        /* fundo da aplicação: quase branco */
+  --paper: #edf3f7;        /* fundo azulado bem leve: os cartões brancos se destacam */
   --surface: #ffffff;
-  --surface-2: #f8fafc;
-  --line: #e3e8ee;
+  --surface-2: #f4f8fb;
+  --line: #dfe7ee;
   --line-strong: #cdd5df;
   --text: #13263a;
   --text-2: #475a70;
@@ -43,16 +43,16 @@
   --focus: 0 0 0 3px rgba(1, 81, 118, 0.28);
 
   /* Menu lateral */
-  --side-bg: #ffffff;
-  --side-line: #e8edf2;
-  --side-text: #3c4f64;
-  --side-strong: #013a56;
-  --side-muted: #8a98aa;
-  --side-hover: #f1f5f9;
-  --side-active: #e8f1f6;
-  --side-active-text: #015176;
+  --side-bg: linear-gradient(180deg, #015176 0%, #013a56 55%, #012c42 100%);
+  --side-line: rgba(255,255,255,.1);
+  --side-text: #d3e2ec;
+  --side-strong: #ffffff;
+  --side-muted: #8fb6cc;
+  --side-hover: rgba(255,255,255,.08);
+  --side-active: rgba(141,199,63,.2);
+  --side-active-text: #ffffff;
   --side-bar: #8dc73f;
-  --side-scroll: #d5dde6;
+  --side-scroll: rgba(255,255,255,.18);
   --login-art: linear-gradient(160deg, #015176 0%, #013a56 70%);
 
   --font: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -109,6 +109,47 @@
 }
 :root[data-theme='dark'] .marca .marca--claro { display: none; }
 :root[data-theme='dark'] .marca .marca--escuro { display: block; }
+/* O menu lateral é escuro nos dois temas: usa sempre a logo branca e verde. */
+.sidebar .marca .marca--claro { display: none; }
+.sidebar .marca .marca--escuro { display: block; }
+
+/* ------------------------------ tema claro: cor da marca ------------------------------
+   Só vale no claro; o noturno fica como está. */
+:root[data-theme='light'] .topbar { border-bottom: 0; box-shadow: 0 1px 0 var(--line); }
+:root[data-theme='light'] .topbar::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+  background: linear-gradient(90deg, var(--brand-navy) 0%, var(--brand-navy) 55%, var(--brand-green) 100%);
+}
+:root[data-theme='light'] .avatar { background: var(--brand-green); color: var(--brand-navy-deep); }
+:root[data-theme='light'] .page-head h1 { color: var(--brand-navy-deep); }
+:root[data-theme='light'] .panel { box-shadow: var(--shadow-card); border-color: #dbe5ed; }
+:root[data-theme='light'] .panel__head { background: linear-gradient(180deg, #f6fafd 0%, #ffffff 100%); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+:root[data-theme='light'] .panel__head h2 { color: var(--brand-navy-deep); }
+:root[data-theme='light'] .table th { background: #eef4f8; color: #2c4a63; }
+:root[data-theme='light'] .btn:not(.btn--primary):not(.btn--danger):not(.btn--ok):not(.btn--ghost) { color: var(--brand-navy); border-color: #c4d4e0; }
+:root[data-theme='light'] .btn:not(.btn--primary):not(.btn--danger):not(.btn--ok):not(.btn--ghost):hover { background: var(--primary-soft); border-color: var(--brand-navy); }
+:root[data-theme='light'] .btn--primary { background: linear-gradient(180deg, #02628f 0%, var(--brand-navy) 100%); }
+:root[data-theme='light'] .segmented button[aria-pressed='true'] { background: var(--brand-navy); color: #fff; }
+:root[data-theme='light'] .segmented button[aria-pressed='true'] .n { color: #cfe0ea; }
+
+/* KPIs: faixa de cor no topo (azul→verde da marca; vermelho/âmbar/verde conforme o estado) */
+:root[data-theme='light'] .kpi { overflow: hidden; border-color: #dbe5ed; box-shadow: var(--shadow-card); }
+:root[data-theme='light'] .kpi[data-tone] { border-left: 1px solid #dbe5ed; }
+:root[data-theme='light'] .kpi::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 4px;
+  background: linear-gradient(90deg, var(--brand-navy), var(--brand-green));
+}
+:root[data-theme='light'] .kpi[data-tone='bad']::before { background: var(--bad); }
+:root[data-theme='light'] .kpi[data-tone='warn']::before { background: #e39b17; }
+:root[data-theme='light'] .kpi[data-tone='ok']::before { background: var(--brand-green); }
+:root[data-theme='light'] .kpi[data-tone='bad'] { background: linear-gradient(180deg, #fff6f5 0%, #fff 70%); }
+:root[data-theme='light'] .kpi[data-tone='warn'] { background: linear-gradient(180deg, #fffaf0 0%, #fff 70%); }
+:root[data-theme='light'] .kpi .kpi__value { color: var(--brand-navy-deep); }
+:root[data-theme='light'] .kpi[data-tone='bad'] .kpi__value { color: var(--bad); }
+:root[data-theme='light'] .kpi[data-tone='warn'] .kpi__value { color: var(--warn); }
+:root[data-theme='light'] .kpi[data-tone='ok'] .kpi__value { color: var(--brand-green-ink); }
+:root[data-theme='light'] button.kpi:hover { border-color: var(--brand-navy); box-shadow: 0 6px 18px rgba(1,58,86,.12); transform: translateY(-1px); }
+button.kpi { transition: box-shadow .15s, transform .15s, border-color .15s; }
 
 /* ------------------------------ base ------------------------------ */
 *, *::before, *::after { box-sizing: border-box; }
