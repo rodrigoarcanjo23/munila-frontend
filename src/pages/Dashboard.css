@@ -117,3 +117,13 @@
   .contador { padding: 8px 12px; }
   .contador b { font-size: 17px; }
 }
+
+/* Tema claro: faixa "Hoje" na cor da marca */
+:root[data-theme='light'] .painel-hoje { background: linear-gradient(110deg, #015176 0%, #013a56 70%); border-color: transparent; color: #fff; box-shadow: 0 6px 20px rgba(1,58,86,.18); }
+:root[data-theme='light'] .painel-hoje h2 { color: var(--brand-green); border-right-color: rgba(255,255,255,.18); }
+:root[data-theme='light'] .painel-hoje dt { color: #a9c6d8; }
+:root[data-theme='light'] .painel-hoje dd { color: #fff; }
+:root[data-theme='light'] .painel-hoje dd small { color: #a9c6d8; }
+:root[data-theme='light'] .painel-hoje__horas > span { border-bottom-color: rgba(255,255,255,.25); }
+:root[data-theme='light'] .painel-hoje__horas i { background: var(--brand-green); }
+:root[data-theme='light'] .painel-hoje__horas small { color: #a9c6d8; }
