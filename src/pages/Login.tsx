@@ -3,6 +3,7 @@ import { toast } from 'react-toastify';
 import { IoLockClosedOutline, IoMailOutline } from 'react-icons/io5';
 import { api, msgErro } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { Marca } from '../components/ui';
 
 export default function Login() {
   const { entrar } = useAuth();
@@ -34,12 +35,12 @@ export default function Login() {
           <h1>Cada item no endereço certo.</h1>
           <p>Estoque, separação, inventário, compras e produção em um só lugar — do escritório ao corredor do armazém.</p>
         </div>
-        <small style={{ color: '#7f93b2' }}>ViaPro ERP · Munila</small>
+        <small>ViaPro ERP · Munila</small>
       </section>
 
       <section className="login__form">
         <form onSubmit={fazerLogin}>
-          <img src="/favicon.png" alt="ViaPro" />
+          <div className="login__marca"><Marca /></div>
           <div>
             <h2 style={{ font: '700 24px var(--font-cond)' }}>Entrar no sistema</h2>
             <p className="muted" style={{ marginTop: 4 }}>Use o e-mail e a senha cadastrados pelo gestor.</p>

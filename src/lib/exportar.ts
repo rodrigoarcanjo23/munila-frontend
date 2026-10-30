@@ -59,7 +59,7 @@ export async function exportarPDF<T>(opts: {
   if (opts.subtitulo) { doc.setFontSize(10); doc.text(opts.subtitulo, 14, y); y += 6; }
   if (opts.resumo?.length) {
     doc.setFontSize(10);
-    doc.setTextColor(11, 110, 121);
+    doc.setTextColor(1, 81, 118);
     doc.text(opts.resumo.join('    |    '), 14, y);
     y += 6;
   }
@@ -69,7 +69,7 @@ export async function exportarPDF<T>(opts: {
     head: [opts.colunas.map(c => c.titulo)],
     body: opts.linhas.map(l => opts.colunas.map(c => String(c.valor(l) ?? ''))),
     styles: { fontSize: 8.5, cellPadding: 2.5 },
-    headStyles: { fillColor: [11, 110, 121], textColor: 255, fontStyle: 'bold' },
+    headStyles: { fillColor: [1, 81, 118], textColor: 255, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [245, 247, 250] },
     didParseCell: d => {
       if (d.section !== 'body' || !opts.destacar) return;

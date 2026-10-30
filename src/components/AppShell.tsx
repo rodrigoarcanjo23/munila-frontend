@@ -7,6 +7,7 @@ import {
   IoSearchOutline, IoLogOutOutline, IoGitCompareOutline, IoWalletOutline, IoTrendingUpOutline, IoReceiptOutline, IoMoonOutline, IoSunnyOutline, IoAnalyticsOutline, IoSpeedometerOutline, IoConstructOutline, IoCalendarOutline, IoLayersOutline, IoCalculatorOutline, IoGitNetworkOutline, IoHammerOutline, IoChevronBackOutline, IoChevronForwardOutline, IoGitMergeOutline, IoMapOutline,
 } from 'react-icons/io5';
 import { useAuth } from '../lib/auth';
+import { Marca } from './ui';
 import { api } from '../lib/api';
 import { contem, iniciais } from '../lib/format';
 
@@ -143,10 +144,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className={`shell ${aberto ? 'is-open' : ''} ${recolhido ? 'is-collapsed' : ''}`}>
       <aside className="sidebar" aria-label="Menu principal">
-        <div className="sidebar__brand">
-          <img src="/favicon.png" alt="" />
-          <div><strong>ViaPro ERP</strong><span>Gestão de armazém</span></div>
-        </div>
+        <NavLink to="/" className="sidebar__brand" aria-label="ViaPro ERP, ir para o início" onClick={() => setAberto(false)}>
+          <Marca tipo="logo" className="marca-logo" />
+          <Marca tipo="simbolo" className="marca-simbolo" />
+        </NavLink>
         <nav className="sidebar__nav">
           {MENU.map(g => {
             const itens = g.itens.filter(i => !i.admin || isAdmin);
@@ -175,6 +176,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <div className="main">
         <header className="topbar">
           <button className="icon-btn menu-toggle" onClick={() => setAberto(true)} aria-label="Abrir menu"><IoMenuOutline /></button>
+          <Marca tipo="simbolo" className="topbar__marca" />
           <div className="topbar__crumb">
             <small>{grupo}</small>
             <b>{label || 'ViaPro ERP'}</b>

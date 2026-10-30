@@ -4,36 +4,56 @@
    ========================================================================== */
 
 :root {
-  --ink: #15233b;          /* shell / texto forte */
-  --ink-2: #1e3050;
-  --paper: #f3f5f8;        /* fundo da aplicação */
+  /* Cores da marca (logo) */
+  --brand-navy: #015176;
+  --brand-navy-deep: #013a56;
+  --brand-green: #8dc73f;
+  --brand-green-ink: #3f7d12;   /* verde com contraste para texto sobre branco */
+
+  --ink: #013a56;          /* blocos fortes (painel BI, chips do mapa) */
+  --ink-2: #015176;
+  --paper: #f5f7fa;        /* fundo da aplicação: quase branco */
   --surface: #ffffff;
   --surface-2: #f8fafc;
-  --line: #dfe4ec;
-  --line-strong: #c9d1dd;
-  --text: #1b2433;
-  --text-2: #4d5a6e;
-  --text-3: #7a8699;
+  --line: #e3e8ee;
+  --line-strong: #cdd5df;
+  --text: #13263a;
+  --text-2: #475a70;
+  --text-3: #7a899c;
 
-  --primary: #0b6e79;      /* petróleo */
-  --primary-hover: #095b64;
-  --primary-soft: #e3f1f2;
+  --primary: #015176;      /* azul da logo */
+  --primary-hover: #013f5c;
+  --primary-soft: #e6f0f5;
   --on-primary: #ffffff;
 
   --tag: #f2b705;          /* amarelo de etiqueta de endereço */
   --tag-ink: #1a1400;
 
-  --ok: #2e7d4f;   --ok-soft: #e6f3eb;
+  --ok: #2f7d32;   --ok-soft: #eaf5e0;
   --warn: #a96800; --warn-soft: #fdf2dc;
   --bad: #c0392b;  --bad-soft: #fbe9e7;
   --info: #2c5fa8; --info-soft: #e8eff9;
-  --muted-soft: #eef1f5;
+  --muted-soft: #eef2f6;
 
   --radius-sm: 5px;
   --radius: 8px;
   --radius-lg: 12px;
-  --shadow-pop: 0 12px 32px rgba(21, 35, 59, 0.18);
-  --focus: 0 0 0 3px rgba(11, 110, 121, 0.35);
+  --shadow-pop: 0 12px 32px rgba(1, 58, 86, 0.16);
+  --shadow-card: 0 1px 2px rgba(1, 58, 86, 0.05);
+  --focus: 0 0 0 3px rgba(1, 81, 118, 0.28);
+
+  /* Menu lateral */
+  --side-bg: #ffffff;
+  --side-line: #e8edf2;
+  --side-text: #3c4f64;
+  --side-strong: #013a56;
+  --side-muted: #8a98aa;
+  --side-hover: #f1f5f9;
+  --side-active: #e8f1f6;
+  --side-active-text: #015176;
+  --side-bar: #8dc73f;
+  --side-scroll: #d5dde6;
+  --login-art: linear-gradient(160deg, #015176 0%, #013a56 70%);
 
   --font: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-cond: 'IBM Plex Sans Condensed', 'IBM Plex Sans', system-ui, sans-serif;
@@ -53,18 +73,42 @@
     --ok: #5cbf86; --ok-soft: #15301f; --warn: #e6b04a; --warn-soft: #33270f; --bad: #ee7b6e; --bad-soft: #3a1c19;
     --info: #79a6ea; --info-soft: #1a2a44; --muted-soft: #222e42;
     --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.5);
+    --shadow-card: none;
+    --focus: 0 0 0 3px rgba(54, 163, 173, 0.4);
+    --ink: #15233b; --ink-2: #1e3050;
+    --side-bg: #15233b; --side-line: rgba(255,255,255,.08); --side-text: #c8d2e2; --side-strong: #ffffff; --side-muted: #7f93b2;
+    --side-hover: rgba(255,255,255,.06); --side-active: rgba(54,163,173,.18); --side-active-text: #ffffff; --side-bar: #36a3ad;
+    --side-scroll: #2c3e5c;
+    --login-art: #15233b;
     color-scheme: dark;
   }
 }
 :root[data-theme='dark'] {
   --paper: #0f1622; --surface: #172131; --surface-2: #1b2638; --line: #2a3850; --line-strong: #364763;
-  --text: #e7ecf3; --text-2: #b3bfd0; --text-3: #8492a8;
-  --primary: #36a3ad; --primary-hover: #4cb5be; --primary-soft: #133339; --on-primary: #06191c;
-  --ok: #5cbf86; --ok-soft: #15301f; --warn: #e6b04a; --warn-soft: #33270f; --bad: #ee7b6e; --bad-soft: #3a1c19;
-  --info: #79a6ea; --info-soft: #1a2a44; --muted-soft: #222e42;
-  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.5);
-  color-scheme: dark;
+    --text: #e7ecf3; --text-2: #b3bfd0; --text-3: #8492a8;
+    --primary: #36a3ad; --primary-hover: #4cb5be; --primary-soft: #133339; --on-primary: #06191c;
+    --ok: #5cbf86; --ok-soft: #15301f; --warn: #e6b04a; --warn-soft: #33270f; --bad: #ee7b6e; --bad-soft: #3a1c19;
+    --info: #79a6ea; --info-soft: #1a2a44; --muted-soft: #222e42;
+    --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.5);
+    --shadow-card: none;
+    --focus: 0 0 0 3px rgba(54, 163, 173, 0.4);
+    --ink: #15233b; --ink-2: #1e3050;
+    --side-bg: #15233b; --side-line: rgba(255,255,255,.08); --side-text: #c8d2e2; --side-strong: #ffffff; --side-muted: #7f93b2;
+    --side-hover: rgba(255,255,255,.06); --side-active: rgba(54,163,173,.18); --side-active-text: #ffffff; --side-bar: #36a3ad;
+    --side-scroll: #2c3e5c;
+    --login-art: #15233b;
+    color-scheme: dark;
 }
+
+/* Logo: cada ponto de marca tem as duas imagens; o tema escolhe qual aparece. */
+.marca img { display: block; width: 100%; height: auto; }
+.marca .marca--escuro { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .marca .marca--claro { display: none; }
+  :root:not([data-theme='light']) .marca .marca--escuro { display: block; }
+}
+:root[data-theme='dark'] .marca .marca--claro { display: none; }
+:root[data-theme='dark'] .marca .marca--escuro { display: block; }
 
 /* ------------------------------ base ------------------------------ */
 *, *::before, *::after { box-sizing: border-box; }
@@ -91,27 +135,35 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .sidebar {
   position: sticky; top: 0; height: 100vh; overflow: hidden;
-  background: var(--ink); color: #c8d2e2;
+  background: var(--side-bg); color: var(--side-text); border-right: 1px solid var(--side-line);
   display: flex; flex-direction: column; z-index: 40;
 }
-.sidebar__brand { display: flex; align-items: center; gap: 10px; height: var(--topbar-h); padding: 0 16px; border-bottom: 1px solid rgba(255,255,255,.08); }
-.sidebar__brand img { width: 30px; height: 30px; object-fit: contain; background: #fff; border-radius: 6px; padding: 2px; }
-.sidebar__brand strong { font: 700 17px var(--font-cond); color: #fff; letter-spacing: .2px; }
-.sidebar__brand span { display: block; font-size: 11px; color: #8da0bd; }
-.sidebar__nav { flex: 1; overflow-y: auto; padding: 8px 10px 16px; scrollbar-width: thin; scrollbar-color: #2c3e5c transparent; }
+.sidebar__brand {
+  display: grid; place-items: center; padding: 22px 20px 18px; border-bottom: 1px solid var(--side-line);
+  text-decoration: none;
+}
+.sidebar__brand .marca-logo { width: 100%; max-width: 184px; }
+.sidebar__brand .marca-simbolo { display: none; width: 40px; }
+.sidebar__nav { flex: 1; overflow-y: auto; padding: 4px 10px 16px; scrollbar-width: thin; scrollbar-color: var(--side-scroll) transparent; }
 .sidebar__group { margin-top: 14px; }
-.sidebar__group-title { padding: 0 10px 6px; font-size: 11.5px; font-weight: 600; color: #7f93b2; }
+.sidebar__group-title { padding: 0 10px 6px; font-size: 11.5px; font-weight: 600; color: var(--side-muted); }
 .sidebar__link {
   display: flex; align-items: center; gap: 11px; padding: 8px 10px; margin: 1px 0;
-  border-radius: var(--radius-sm); color: #c8d2e2; text-decoration: none; font-weight: 500; white-space: nowrap;
+  border-radius: var(--radius-sm); color: var(--side-text); text-decoration: none; font-weight: 500; white-space: nowrap;
 }
 .sidebar__link svg { flex: none; font-size: 18px; opacity: .85; }
-.sidebar__link:hover { background: rgba(255,255,255,.06); color: #fff; }
-.sidebar__link.active { background: rgba(54,163,173,.18); color: #fff; box-shadow: inset 3px 0 0 #36a3ad; }
+.sidebar__link:hover { background: var(--side-hover); color: var(--side-strong); }
+.sidebar__link.active { background: var(--side-active); color: var(--side-active-text); font-weight: 600; box-shadow: inset 3px 0 0 var(--side-bar); }
+.sidebar__link.active svg { opacity: 1; }
 .sidebar__link .count { margin-left: auto; min-width: 20px; padding: 0 6px; border-radius: 10px; background: #c0392b; color: #fff; font-size: 11px; font-weight: 700; text-align: center; }
-.sidebar__foot { border-top: 1px solid rgba(255,255,255,.08); padding: 10px; }
-.shell.is-collapsed .sidebar__brand div, .shell.is-collapsed .sidebar__group-title, .shell.is-collapsed .sidebar__link span, .shell.is-collapsed .sidebar__link .count { display: none; }
+.sidebar__foot { border-top: 1px solid var(--side-line); padding: 10px; }
+.shell.is-collapsed .sidebar__group-title, .shell.is-collapsed .sidebar__link span, .shell.is-collapsed .sidebar__link .count { display: none; }
+.shell.is-collapsed .sidebar__brand { padding: 12px 0; }
+.shell.is-collapsed .sidebar__brand .marca-logo { display: none; }
+.shell.is-collapsed .sidebar__brand .marca-simbolo { display: block; }
 .shell.is-collapsed .sidebar__link { justify-content: center; }
+
+.topbar__marca { display: none; width: 32px; flex: none; }
 
 .main { min-width: 0; display: flex; flex-direction: column; }
 .topbar {
@@ -372,13 +424,16 @@ a.btn { text-decoration: none; }
 
 /* ------------------------------ login ------------------------------ */
 .login { min-height: 100%; display: grid; grid-template-columns: 1.1fr 1fr; background: var(--surface); }
-.login__art { background: var(--ink); color: #d6deea; padding: 48px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; }
+.login__art { background: var(--login-art); color: #d6e4ee; padding: 48px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; }
+.login__art::after { content: ''; position: absolute; right: -120px; bottom: -120px; width: 380px; height: 380px; border-radius: 50%; border: 28px solid var(--brand-green); opacity: .16; pointer-events: none; }
 .login__art h1 { color: #fff; font: 700 40px/1.05 var(--font-cond); max-width: 14ch; }
-.login__art p { color: #9fb0c8; max-width: 44ch; margin-top: 12px; font-size: 15px; }
+.login__art p { color: #b5c9d8; max-width: 44ch; margin-top: 12px; font-size: 15px; }
+.login__art small { color: #8fb0c6; }
 .login__rack { display: grid; grid-template-columns: repeat(4, auto); gap: 8px; justify-content: start; }
 .login__form { display: grid; place-items: center; padding: 32px 20px; }
 .login__form form { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 14px; }
-.login__form img { width: 120px; }
+.login__marca { display: grid; place-items: center; padding-bottom: 10px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.login__marca .marca { width: min(260px, 80%); }
 
 /* ------------------------------ etiquetas (impressão) ------------------------------ */
 .label-sheet { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
@@ -410,7 +465,11 @@ a.btn { text-decoration: none; }
   .sidebar { position: fixed; inset: 0 auto 0 0; width: 280px; transform: translateX(-100%); transition: transform .2s ease; }
   .shell.is-open .sidebar { transform: none; box-shadow: var(--shadow-pop); }
   .shell.is-open .scrim { display: block; position: fixed; inset: 0; background: rgba(12,20,33,.5); z-index: 35; }
-  .shell.is-collapsed .sidebar__brand div, .shell.is-collapsed .sidebar__group-title, .shell.is-collapsed .sidebar__link span { display: initial; }
+  .shell.is-collapsed .sidebar__group-title, .shell.is-collapsed .sidebar__link span { display: initial; }
+  .shell.is-collapsed .sidebar__brand { padding: 22px 20px 18px; }
+  .shell.is-collapsed .sidebar__brand .marca-logo { display: block; }
+  .shell.is-collapsed .sidebar__brand .marca-simbolo { display: none; }
+  .topbar__marca { display: block; }
   .shell.is-collapsed .sidebar__link { justify-content: flex-start; }
   .content { padding: 18px 16px 40px; }
   .topbar { padding: 0 12px; }

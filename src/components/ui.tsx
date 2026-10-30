@@ -4,6 +4,16 @@ import { IoCloseOutline, IoSearchOutline, IoFileTrayOutline, IoAlertCircleOutlin
 import type { Tom } from '../lib/regras';
 
 // ------------------------------------------------------------ Layout
+/** Logo do ViaPro: versão colorida no tema claro e branca+verde no escuro (o CSS escolhe). */
+export function Marca({ tipo = 'logo', className = '' }: { tipo?: 'logo' | 'simbolo'; className?: string }) {
+  return (
+    <span className={`marca ${className}`} role="img" aria-label="ViaPro ERP">
+      <img className="marca--claro" src={`/marca/${tipo}-claro.png`} alt="" />
+      <img className="marca--escuro" src={`/marca/${tipo}-escuro.png`} alt="" />
+    </span>
+  );
+}
+
 export function PageHeader({ titulo, descricao, acoes }: { titulo: string; descricao?: ReactNode; acoes?: ReactNode }) {
   useEffect(() => { document.title = `${titulo} · ViaPro ERP`; }, [titulo]);
   return (
