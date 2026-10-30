@@ -192,3 +192,134 @@ ul.tf-rend-lista, ul.tf-barras, ul.tf-pendencias, ul.tf-lista, ol.tf-versoes, .t
 @media (max-width: 719px) {
   .tf-wizard .form-grid > *, .modal .form-grid > * { grid-column: span 12; }
 }
+
+/* ==========================================================================
+   Registro de transformação (requisições)
+   ========================================================================== */
+.rq-vazio { display: flex; flex-direction: column; gap: 14px; max-width: 72ch; }
+.rq-vazio p { color: var(--text-2); }
+
+/* etapas: requisição → entrega → conversão → lançamento */
+.rq-etapas { list-style: none; display: flex; gap: 4px; margin: 0; padding: 0; min-width: 0; }
+.rq-etapas li { flex: 1 1 0; min-width: 18px; display: flex; flex-direction: column; gap: 4px; }
+.rq-etapas li::before { content: ''; height: 5px; border-radius: 3px; background: var(--line); }
+.rq-etapas li.is-feita::before { background: var(--ok); }
+.rq-etapas li.is-atual::before { background: var(--primary); }
+.rq-etapas span { font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rq-etapas li.is-atual span { color: var(--primary); font-weight: 600; }
+.rq-etapas--compacta { display: flex; flex-direction: column; gap: 3px; width: 200px; }
+.rq-etapas--compacta .rq-etapas span { display: none; }
+.rq-etapas--compacta small { font-size: 12px; color: var(--text-2); }
+.rq-secao > .btn { align-self: flex-start; }
+.rq-detalhe > .rq-etapas { max-width: 520px; }
+.rq-detalhe > .rq-etapas span { font-size: 12px; }
+
+.rq-saidas { display: flex; flex-direction: column; gap: 1px; font-size: 12.5px; white-space: nowrap; }
+
+/* nova requisição */
+.rq-fichas { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.rq-ficha { display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); cursor: pointer; color: inherit; font: inherit; }
+.rq-ficha span { font-size: 12px; color: var(--text-3); }
+.rq-ficha:hover { border-color: var(--primary); }
+.rq-ficha[aria-checked='true'] { border-color: var(--primary); background: var(--primary-soft); box-shadow: inset 0 0 0 1px var(--primary); }
+.rq-ficha[aria-checked='true'] b { color: var(--primary); }
+.rq-qtd { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.rq-qtd .input { width: 100%; min-width: 80px !important; text-align: right; font-weight: 600; }
+.rq-qtd span { font-size: 12px; color: var(--text-3); min-width: 52px; text-align: left; }
+
+/* detalhe: as três seções da ficha */
+.rq-secao { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+.rq-secao.is-atual { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.rq-secao.is-futura { background: var(--surface-2); }
+.rq-secao.is-futura .rq-secao__titulo { color: var(--text-3); }
+.rq-secao__titulo { display: flex; align-items: center; gap: 10px; font: 700 15.5px var(--font-cond); }
+.rq-secao__titulo > span { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: var(--on-primary); font: 700 13px var(--font); flex: none; }
+.rq-secao.is-futura .rq-secao__titulo > span { background: var(--line-strong); }
+.rq-meta { font-size: 13px; color: var(--text-2); }
+.rq-lote { display: inline-block; margin-right: 4px; font: 600 12px var(--font-mono); padding: 1px 6px; border-radius: 4px; background: var(--muted-soft); }
+.rq-calc { font: 600 12.5px var(--font-mono); color: var(--primary); white-space: nowrap; font-style: normal; }
+.rq-gera { font: 700 20px var(--font-cond); }
+.rq-link { border: 0; background: none; padding: 2px 0 0; color: var(--primary); font-size: 12px; cursor: pointer; text-decoration: underline; }
+.rq-form { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
+.rq-form__titulo { font-weight: 600; font-size: 13px; color: var(--text-2); }
+.rq-form__acoes { display: flex; gap: 8px; align-items: flex-end; justify-content: flex-end; }
+.rq-form__rodape { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.rq-form__rodape p { font-size: 12.5px; max-width: 60ch; }
+.rq-balanco { display: flex; flex-direction: column; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.rq-balanco > div { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, .8fr) minmax(0, 1fr) minmax(0, .8fr); gap: 10px; align-items: center; padding: 8px 12px; background: var(--surface); font-size: 13px; }
+.rq-balanco > div.is-erro { background: var(--bad-soft); }
+.rq-balanco label { display: flex; align-items: center; gap: 6px; color: var(--text-2); }
+.input--mini { height: 30px; width: 90px; text-align: right; }
+.rq-mais summary { cursor: pointer; font: 700 14px var(--font-cond); padding: 4px 0; color: var(--text-2); }
+.rq-mais[open] summary { margin-bottom: 8px; }
+
+/* fichas */
+.rq-lista-fichas { display: flex; flex-direction: column; gap: 10px; }
+.rq-cartao { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.rq-cartao.is-arquivada { opacity: .6; }
+.rq-cartao header { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: flex-start; }
+.rq-cartao h3 { font: 700 16px var(--font-cond); }
+.rq-cartao header .muted { font-size: 12px; }
+.rq-equacao { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.2fr); gap: 12px; align-items: center; padding: 10px; background: var(--surface-2); border-radius: var(--radius-sm); font-size: 13px; }
+.rq-equacao > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.rq-equacao > span { font-size: 18px; color: var(--text-3); }
+.rq-escolha { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow: auto; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius); }
+.rq-escolha .check { align-items: flex-start; font-weight: 400; }
+.rq-escolha .check small { color: var(--text-3); }
+
+@media (max-width: 719px) {
+  .rq-etapas--compacta { width: 100%; }
+  .rq-balanco > div { grid-template-columns: 1fr 1fr; }
+  .rq-equacao { grid-template-columns: 1fr; }
+  .rq-equacao > span { transform: rotate(90deg); justify-self: start; }
+  .rq-form__acoes { justify-content: stretch; }
+  .rq-form__acoes .btn { flex: 1; }
+}
+
+/* ==========================================================================
+   Ficha impressa (mesmo desenho da planilha em papel, A4 paisagem)
+   ========================================================================== */
+.ficha-impressao { position: fixed; inset: 0; z-index: 200; overflow: auto; background: #5d6670; padding: 0 16px 32px; }
+.ficha-barra { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 12px; margin: 0 -16px 20px; padding: 10px 16px; background: #1d2630; color: #fff; }
+.ficha-barra > div { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.ficha-barra span { font-size: 12.5px; color: #b7c2cd; }
+.ficha-barra .icon-btn { color: #fff; }
+.ficha-barra .icon-btn:hover { background: rgba(255,255,255,.12); color: #fff; }
+
+.fi-folha { width: 277mm; min-height: 190mm; margin: 0 auto; padding: 8mm; background: #fff; color: #000; font: 9.5pt/1.25 Arial, Helvetica, sans-serif; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
+.fi-cab { display: grid; grid-template-columns: 34mm 1fr 34mm; align-items: center; gap: 6mm; margin-bottom: 3mm; }
+.fi-cab img { width: 100%; height: 13mm; object-fit: contain; }
+.fi-cab h1 { font: 700 11.5pt Arial, sans-serif; text-align: center; color: #000; }
+.fi-produto { font-weight: 700; font-size: 9pt; margin-bottom: 2mm; }
+.fi-secao { margin-bottom: 5mm; break-inside: avoid; }
+.fi-secao h2 { font: 700 9pt Arial, sans-serif; color: #000; border: 1px solid #000; border-bottom: 0; padding: 1.2mm 2mm; }
+.fi-t { width: 100%; border-collapse: collapse; table-layout: auto; }
+.fi-t + .fi-t { margin-top: -1px; }
+.fi-t--logistica { width: 62%; }
+.fi-t th, .fi-t td { border: 1px solid #000; padding: 1.2mm 1.6mm; vertical-align: middle; color: #000; height: 7mm; }
+.fi-t th { font-size: 7.5pt; font-weight: 700; text-align: center; background: #fff; }
+.fi-t th small, .fi-t td small { display: block; font-size: 7pt; font-weight: 400; }
+.fi-t td { font-size: 8.5pt; }
+.fi-c { text-align: center; }
+.fi-w-lote { width: 26mm; }
+.fi-w-qtd { width: 22mm; }
+.fi-forte { font-weight: 700; }
+.fi-grupo { letter-spacing: .3px; }
+.fi-lado { width: 22mm; font-size: 8pt !important; }
+.fi-calc { font-size: 8pt !important; white-space: nowrap; }
+.fi-calc small { color: #333; margin-top: .6mm; }
+.fi-t td:empty { background: #fff; }
+.fi-rodape td { height: 8mm; font-size: 8.5pt; }
+.fi-pe { display: flex; justify-content: space-between; gap: 6mm; margin-top: 2mm; font-size: 7.5pt; color: #444; }
+
+@media print {
+  @page { size: A4 landscape; margin: 8mm; }
+  body.com-ficha #root { display: none !important; }
+  body.com-ficha .ficha-impressao { position: static; overflow: visible; background: #fff; padding: 0; }
+  body.com-ficha .ficha-barra { display: none !important; }
+  body.com-ficha .fi-folha { width: auto; min-height: 0; padding: 0; box-shadow: none; }
+  body.com-ficha .Toastify { display: none !important; }
+}
+@media (max-width: 719px) {
+  .ficha-barra { position: sticky; left: 0; width: 100vw; }
+}

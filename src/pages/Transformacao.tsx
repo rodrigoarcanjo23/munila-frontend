@@ -12,10 +12,12 @@ import { Receitas } from './transformacao/Receitas';
 import { Rastreio } from './transformacao/Rastreio';
 import { Auditoria } from './transformacao/Auditoria';
 import { NovaTransformacao } from './transformacao/NovaTransformacao';
+import { Requisicoes } from './transformacao/Requisicoes';
 import './transformacao/tf.css';
 
 const ABAS = [
   { id: 'painel', label: 'Painel' },
+  { id: 'requisicoes', label: 'Requisições' },
   { id: 'ordens', label: 'Ordens' },
   { id: 'estoque', label: 'Estoque' },
   { id: 'receitas', label: 'Receitas' },
@@ -73,6 +75,7 @@ export default function Transformacao() {
       {!dados ? <Loading /> : (
         <div role="tabpanel">
           {aba === 'painel' && <Painel painel={dados.painel} ordens={dados.ordens} onAba={id => irPara(id as Aba)} onAbrirOrdem={() => setNova({})} />}
+          {aba === 'requisicoes' && <Requisicoes receitas={dados.receitas} onAlterado={atualizar} onEntrada={id => setEntrada({ materialId: id })} />}
           {aba === 'ordens' && <Ordens ordens={dados.ordens} onExecutar={o => setNova({ ordem: o })} onRastrear={l => irPara('rastreio', { lote: l })} onAlterado={atualizar} />}
           {aba === 'estoque' && <Estoque materiais={dados.materiais} onAlterado={atualizar} onEntrada={id => setEntrada({ materialId: id })} onRastrear={l => irPara('rastreio', { lote: l })} />}
           {aba === 'receitas' && <Receitas receitas={dados.receitas} materiais={dados.materiais} onUsar={r => setNova({ receitaId: r.id })} onAlterado={atualizar} />}

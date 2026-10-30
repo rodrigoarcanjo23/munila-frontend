@@ -83,3 +83,37 @@ export function avaliar(receita: Pick<Receita, 'quantidadeBase' | 'toleranciaAvi
   const faixa = pior <= receita.toleranciaAviso ? 'OK' : pior <= receita.toleranciaBloqueio ? 'Justificar' : 'Aprovar';
   return { rendimento, esperado, variacoes, faixa, pior };
 }
+
+// ------------------------------------------------------------ Registro de transformação (fichas e requisições)
+export interface SaidaFicha { receitaCodigo: string; receita: Receita | null; calculo: string | null }
+export interface Ficha {
+  id: string; codigo: string; nome: string; observacao: string | null; ativa: boolean; requisicoes?: number;
+  saidas: SaidaFicha[]; entradas: { id: string; codigo: string; nome: string; unidade: string }[];
+}
+export type StatusRequisicao = 'Solicitada' | 'Entregue' | 'Convertida' | 'Concluída' | 'Cancelada' | 'Estornada';
+export interface ItemRequisicao {
+  id: string; materialId: string; quantidade: number; quantidadeEntregue: number | null; avariada: number;
+  lotes: { loteId: string; codigo: string; quantidade: number }[] | null; material: { id: string; codigo: string; nome: string; unidade: string };
+}
+export interface Requisicao {
+  id: string; codigo: string; fichaId: string; status: StatusRequisicao; numeroViapro: string | null; solicitadoPor: string; solicitadoEm: string;
+  entreguePor: string | null; entregueEm: string | null; registradoEntregaPor: string | null; responsavelConversao: string | null; convertidaEm: string | null;
+  avariaMotivo: string | null; lancadoPor: string | null; lancadoEm: string | null; justificativa: string | null; observacao: string | null;
+  canceladaEm: string | null; motivoCancelamento: string | null; createdAt: string;
+  ficha: { id: string; codigo: string; nome: string };
+  itens: ItemRequisicao[];
+  ordens: (Ordem & { requisicaoId: string | null })[];
+}
+export interface RequisicaoDetalhe extends Requisicao {
+  fichaMontada: Ficha;
+  disponibilidade: { materialId: string; saldoLiberado: number; lotes: { id: string; codigo: string; saldo: number; status: string; validade: string | null }[] }[];
+  movimentos: Movimento[]; eventos: Evento[];
+}
+export const TOM_RQ: Record<StatusRequisicao, 'info' | 'warn' | 'ok' | 'bad' | 'primary' | undefined> = {
+  Solicitada: 'info', Entregue: 'primary', Convertida: 'warn', 'Concluída': 'ok', Cancelada: undefined, Estornada: 'bad',
+};
+/** Unidade como aparece na ficha em papel. */
+export const ROTULO_UN: Record<string, string> = { PACK: 'Packs', SACHE: 'Sachês', UN: 'Und', CX: 'Caixas', DISPLAY: 'Displays', PACOTE: 'Pacotes', CARTUCHO: 'Cartuchos' };
+export const rotuloUn = (u?: string | null) => (u ? ROTULO_UN[u] ?? u : '');
+/** Quanto de entrada (somando todos os materiais consumidos) cada unidade da saída usa. */
+export const entradaPorUnidade = (r: Receita) => r.itens.filter(i => i.papel === 'CONSUMO').reduce((a, i) => a + i.quantidade, 0) / r.quantidadeBase;
