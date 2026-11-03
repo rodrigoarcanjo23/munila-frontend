@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { IoBarcodeOutline } from 'react-icons/io5';
 import { contem, normalizar } from '../lib/format';
 import { Code, Loc } from './ui';
@@ -15,8 +15,10 @@ export interface ProdutoBasico {
  * Busca de produto por nome, SKU ou código de barras.
  * Funciona com leitor de código de barras: ao ler e "Enter", seleciona o produto exato automaticamente.
  */
-export function ProdutoPicker<P extends ProdutoBasico>({ produtos, onSelecionar, placeholder = 'Nome, SKU ou leia o código de barras', autoFocus }: {
+export function ProdutoPicker<P extends ProdutoBasico>({ produtos, onSelecionar, placeholder = 'Nome, SKU ou leia o código de barras', autoFocus, detalhe }: {
   produtos: P[]; onSelecionar: (p: P) => void; placeholder?: string; autoFocus?: boolean;
+  /** Informação extra em cada sugestão (ex.: saldo disponível). */
+  detalhe?: (p: P) => ReactNode;
 }) {
   const [termo, setTermo] = useState('');
   const [aberto, setAberto] = useState(false);
@@ -67,7 +69,7 @@ export function ProdutoPicker<P extends ProdutoBasico>({ produtos, onSelecionar,
                 <div className="cell-title">{p.nome}</div>
                 <div className="cell-sub"><Code>{p.sku}</Code></div>
               </div>
-              <Loc>{p.enderecoLocalizacao}</Loc>
+              <div className="ac__extra">{detalhe?.(p)}<Loc>{p.enderecoLocalizacao}</Loc></div>
             </div>
           ))}
         </div>

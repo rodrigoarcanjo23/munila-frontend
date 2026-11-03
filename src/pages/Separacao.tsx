@@ -216,6 +216,7 @@ export default function Separacao() {
 }
 
 interface ItemCarrinho { produtoId: string; nome: string; sku: string; endereco?: string | null; quantidade: number }
+interface Disponibilidade { saldo: number; reservado: number; livre: number }
 
 function ModalOrdem({ ordem, produtos, saldos, solicitanteId, armazens, padraoId, onFechar, onSalvo }: {
   ordem: OrdemServico | null; produtos: Produto[]; saldos: Map<string, number>; solicitanteId: string; armazens: Armazem[]; padraoId: string; onFechar: () => void; onSalvo: () => void;
@@ -229,9 +230,44 @@ function ModalOrdem({ ordem, produtos, saldos, solicitanteId, armazens, padraoId
     (ordem?.itens ?? []).map(i => ({ produtoId: i.produtoId, nome: i.produto.nome, sku: i.produto.sku, endereco: i.produto.enderecoLocalizacao, quantidade: i.quantidade })),
   );
   const [salvando, setSalvando] = useState(false);
+  const [alerta, setAlerta] = useState<string | null>(null);
+  const [faltasApi, setFaltasApi] = useState<Set<string>>(new Set());
+  const saida = tipo === 'SAIDA';
+
+  // ✨ Disponível para pedir = saldo do armazém − o que outras ordens abertas já reservaram (a própria ordem não conta)
+  const [disp, setDisp] = useState<Record<string, Disponibilidade> | null>(null);
+  useEffect(() => {
+    if (!saida) return;
+    let vivo = true;
+    setDisp(null);
+    api.get<{ produtos: Record<string, Disponibilidade> }>('/wms/disponibilidade', { params: { armazemId: armazemId || undefined, ignorarOrdemId: ordem?.id } })
+      .then(r => { if (vivo) setDisp(r.data.produtos); })
+      .catch(() => { if (vivo) setDisp({}); }); // API antiga: cai no saldo simples abaixo
+    return () => { vivo = false; };
+  }, [armazemId, saida, ordem?.id]);
+  const dispDe = (produtoId: string): Disponibilidade => {
+    const d = disp?.[produtoId];
+    if (d) return d;
+    const saldo = saldos.get(`${armazemId}|${produtoId}`) || 0;
+    return { saldo, reservado: 0, livre: saldo };
+  };
+  const faltando = saida ? carrinho.filter(c => c.quantidade > dispDe(c.produtoId).livre || faltasApi.has(c.produtoId)) : [];
 
   function adicionar(p: Produto) {
     const n = Math.max(1, Number(qtd) || 1);
+    if (saida) {
+      const d = dispDe(p.id);
+      const jaNoCarrinho = carrinho.find(x => x.produtoId === p.id)?.quantidade ?? 0;
+      if (d.livre <= 0) {
+        const msg = `${p.nome} está sem saldo disponível${d.saldo > 0 ? ` (as ${numero(d.saldo)} un em estoque já estão reservadas em outras ordens)` : ' no estoque'}. Não é possível pedir este item agora.`;
+        setAlerta(msg); toast.error(msg, { autoClose: 7000 });
+        return;
+      }
+      if (jaNoCarrinho + n > d.livre) {
+        const msg = `${p.nome}: só ${numero(d.livre)} un disponíveis${d.reservado > 0 ? ` (${numero(d.reservado)} reservadas em outras ordens)` : ''}. Ajuste a quantidade.`;
+        setAlerta(msg); toast.warn(msg, { autoClose: 7000 });
+      } else setAlerta(null);
+    }
     setCarrinho(c => {
       const ex = c.find(x => x.produtoId === p.id);
       if (ex) return c.map(x => (x.produtoId === p.id ? { ...x, quantidade: x.quantidade + n } : x));
@@ -242,18 +278,32 @@ function ModalOrdem({ ordem, produtos, saldos, solicitanteId, armazens, padraoId
 
   async function salvar() {
     if (carrinho.length === 0) return toast.warn('Adicione ao menos um produto.');
+    if (faltando.length) return toast.error(`Não é possível emitir: ${faltando.length === 1 ? 'um item está' : `${faltando.length} itens estão`} sem saldo suficiente. Ajuste ou remova.`);
     setSalvando(true);
     const payload = { solicitanteId, tipo, prioridade, observacao, armazemId: armazemId || undefined, itens: carrinho.map(c => ({ produtoId: c.produtoId, quantidade: c.quantidade })) };
     try {
       if (ordem) await api.put(`/wms/ordens/${ordem.id}`, payload); else await api.post('/wms/ordens', payload);
       toast.success(ordem ? 'Ordem atualizada.' : 'Ordem criada. Os operadores foram notificados.');
       onSalvo();
-    } catch (e) { toast.error(msgErro(e)); } finally { setSalvando(false); }
+    } catch (e) {
+      // 409 = a API recusou por falta de saldo (alguém pediu o mesmo item antes): marca as linhas e atualiza o disponível
+      const r = (e as { response?: { status?: number; data?: { faltas?: { produtoId: string; livre: number; saldo: number; reservado: number }[] } } }).response;
+      if (r?.status === 409 && r.data?.faltas) {
+        setFaltasApi(new Set(r.data.faltas.map(f => f.produtoId)));
+        setDisp(d => ({ ...(d ?? {}), ...Object.fromEntries(r.data!.faltas!.map(f => [f.produtoId, { saldo: f.saldo, reservado: f.reservado, livre: f.livre }])) }));
+        setAlerta(msgErro(e));
+      }
+      toast.error(msgErro(e), { autoClose: 9000 });
+    } finally { setSalvando(false); }
   }
+  const ajustar = (produtoId: string, livre: number) => {
+    setCarrinho(x => (livre > 0 ? x.map(y => (y.produtoId === produtoId ? { ...y, quantidade: livre } : y)) : x.filter(y => y.produtoId !== produtoId)));
+    setFaltasApi(s => { const n = new Set(s); n.delete(produtoId); return n; });
+  };
 
   return (
     <Modal aberto onFechar={onFechar} tamanho="lg" titulo={ordem ? `Editar ${ordem.codigo}` : 'Nova ordem de serviço'}
-      rodape={<><button className="btn" onClick={onFechar}>Cancelar</button><button className="btn btn--primary" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando…' : ordem ? 'Salvar alterações' : 'Criar ordem'}</button></>}>
+      rodape={<><button className="btn" onClick={onFechar}>Cancelar</button><button className="btn btn--primary" disabled={salvando || faltando.length > 0} title={faltando.length ? 'Há itens sem saldo disponível' : undefined} onClick={salvar}>{salvando ? 'Salvando…' : ordem ? 'Salvar alterações' : 'Criar ordem'}</button></>}>
       <div className="form-grid">
         {armazens.length > 1 && (
           <Field label="Armazém" className="col-12">
@@ -277,24 +327,30 @@ function ModalOrdem({ ordem, produtos, saldos, solicitanteId, armazens, padraoId
           </select>
         </Field>
         <Field label="Observação" className="col-4"><input className="input" value={observacao} onChange={e => setObservacao(e.target.value)} placeholder="Ex.: pedido do cliente X" /></Field>
-        <div className="col-9"><ProdutoPicker produtos={produtos} onSelecionar={adicionar} autoFocus /></div>
+        <div className="col-9"><ProdutoPicker produtos={produtos} onSelecionar={adicionar} autoFocus
+          detalhe={saida ? p => { const d = dispDe(p.id); return d.livre > 0 ? <Badge tom="ok" plain>{numero(d.livre)} disp.</Badge> : <Badge tom="bad">Sem saldo</Badge>; } : undefined} /></div>
         <div className="col-3"><input className="input" type="number" min={1} value={qtd} onChange={e => setQtd(e.target.value)} aria-label="Quantidade" /></div>
         {prioridade === 'Urgente' && <div className="col-12"><Notice tom="bad">Ordens urgentes aparecem no topo da fila e disparam notificação no app.</Notice></div>}
+        {saida && alerta && <div className="col-12"><Notice tom="bad">{alerta}</Notice></div>}
+        {saida && faltando.length > 0 && !alerta && <div className="col-12"><Notice tom="bad">{faltando.length === 1 ? 'Um item está' : `${faltando.length} itens estão`} acima do disponível. A ordem só pode ser emitida com quantidade que existe no estoque.</Notice></div>}
       </div>
 
       <div className="mt-16">
         {carrinho.length === 0 ? <Empty titulo="Nenhum item adicionado">Busque pelo nome, SKU ou leia o código de barras.</Empty> : (
           <table className="table">
-            <thead><tr><th>Produto</th><th>Endereço</th><th className="num">Saldo</th><th className="num">Quantidade</th><th className="actions" /></tr></thead>
+            <thead><tr><th>Produto</th><th>Endereço</th><th className="num">{saida ? 'Disponível' : 'Saldo'}</th><th className="num">Quantidade</th><th className="actions" /></tr></thead>
             <tbody>
               {carrinho.map(c => {
-                const saldo = saldos.get(`${armazemId}|${c.produtoId}`) || 0;
-                const falta = tipo === 'SAIDA' && saldo < c.quantidade;
+                const d = dispDe(c.produtoId);
+                const falta = saida && (c.quantidade > d.livre || faltasApi.has(c.produtoId));
                 return (
-                  <tr key={c.produtoId}>
-                    <td><div className="cell-title">{c.nome}</div><div className="cell-sub"><Code>{c.sku}</Code></div></td>
+                  <tr key={c.produtoId} className={falta ? 'is-falta' : ''}>
+                    <td><div className="cell-title">{c.nome}</div><div className="cell-sub"><Code>{c.sku}</Code></div>
+                      {falta && <div className="os-falta"><IoWarningOutline /> {d.livre <= 0 ? 'Sem saldo disponível' : `Só ${numero(d.livre)} disponíveis`}
+                        <button type="button" className="btn btn--sm" onClick={() => ajustar(c.produtoId, d.livre)}>{d.livre > 0 ? `Ajustar para ${numero(d.livre)}` : 'Remover'}</button></div>}
+                    </td>
                     <td><Loc>{c.endereco}</Loc></td>
-                    <td className={`num qty ${falta ? 'qty--bad' : ''}`}>{numero(saldo)}{falta && <IoWarningOutline title="Saldo insuficiente" style={{ marginLeft: 4, verticalAlign: -2 }} />}</td>
+                    <td className={`num qty ${falta ? 'qty--bad' : ''}`}>{numero(saida ? d.livre : d.saldo)}{saida && d.reservado > 0 && <div className="cell-sub">saldo {numero(d.saldo)} · {numero(d.reservado)} reserv.</div>}</td>
                     <td className="num"><input className="input" style={{ width: 90, height: 32, textAlign: 'right', marginLeft: 'auto' }} type="number" min={1} value={c.quantidade}
                       onChange={e => setCarrinho(x => x.map(y => (y.produtoId === c.produtoId ? { ...y, quantidade: Math.max(1, Number(e.target.value) || 1) } : y)))} /></td>
                     <td className="actions"><button className="icon-btn icon-btn--bad" aria-label="Remover" onClick={() => setCarrinho(x => x.filter(y => y.produtoId !== c.produtoId))}><IoTrashOutline /></button></td>

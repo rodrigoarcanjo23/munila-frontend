@@ -425,6 +425,11 @@ a.btn { text-decoration: none; }
 .ac__list { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20; max-height: 280px; overflow-y: auto; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius); box-shadow: var(--shadow-pop); }
 .ac__item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 12px; cursor: pointer; border-bottom: 1px solid var(--line); }
 .ac__item:last-child { border-bottom: 0; }
+.ac__extra { display: flex; align-items: center; gap: 6px; flex: none; }
+/* ordem de separação: item acima do disponível */
+.table tr.is-falta td { background: var(--bad-soft); }
+.os-falta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; color: var(--bad); font-size: 12.5px; font-weight: 600; }
+.os-falta svg { font-size: 15px; }
 .ac__item:hover, .ac__item[aria-selected='true'] { background: var(--primary-soft); }
 
 /* ------------------------------ command palette ------------------------------ */
