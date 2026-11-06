@@ -23,6 +23,7 @@ interface ProdutoEstoque {
   id: string; sku: string; nome: string; unidade: string | null; fabricante: string | null; codigoBarras: string | null; origemFiscal: number | null;
   referenciaFabricante: string | null; linha: string | null; enderecoLocalizacao: string | null; estoqueMinimo: number | null; precoCusto: number | null;
   categoria: { id: string; nome: string } | null; classe: 'A' | 'B' | 'C'; saldos: Saldos;
+  enderecos?: { codigo: string; quantidade: number }[];
 }
 const ORIGEM_CURTA: Record<number, string> = { 0: 'Nacional', 1: 'Importado', 2: 'Importado (merc. int.)', 3: 'Nacional (>40% imp.)', 5: 'Nacional (≤40% imp.)' };
 
@@ -77,7 +78,7 @@ export default function Estoque() {
   const produtos = useMemo(() => (dados?.porProduto ?? [])
     .filter(p => !categoria || p.categoria?.id === categoria)
     .filter(p => filtro === 'todos' || nivelOk(p.id, estoqueMinimo(p)))
-    .filter(p => contem(busca, p.nome, p.sku, p.codigoBarras, p.fabricante, p.referenciaFabricante, p.linha, p.enderecoLocalizacao, p.categoria?.nome)),
+    .filter(p => contem(busca, p.nome, p.sku, p.codigoBarras, p.fabricante, p.referenciaFabricante, p.linha, p.enderecoLocalizacao, p.categoria?.nome, ...(p.enderecos ?? []).map(x => x.codigo))),
   [dados, categoria, filtro, busca, totalProduto]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const disponiveis = estoque.filter(e => e.status === 'Disponível');
@@ -103,6 +104,11 @@ export default function Estoque() {
     { key: 'sku', titulo: 'Código', ordenar: p => p.sku, render: p => <Code>{p.sku}</Code> },
     { key: 'nome', titulo: 'Descrição', principal: true, ordenar: p => p.nome, render: p => <><div className="cell-title">{p.nome}</div><div className="cell-sub">{p.categoria?.nome ?? ''}{p.linha ? ` · ${p.linha}` : ''}</div></> },
     { key: 'un', titulo: 'UN', ocultarCelular: true, ordenar: p => p.unidade, render: p => p.unidade ?? 'UN' },
+    { key: 'end', titulo: 'Endereços', ordenar: p => p.enderecos?.[0]?.codigo ?? p.enderecoLocalizacao ?? 'zzz', render: p => {
+      const e = p.enderecos ?? [];
+      if (!e.length) return <Loc>{p.enderecoLocalizacao}</Loc>;
+      return <span className="end-cel" title={e.map(x => `${x.codigo}: ${numero(x.quantidade)}`).join('\n')}><Loc>{e[0].codigo}</Loc>{e.length > 1 && <span className="end-cel__mais">+{e.length - 1}</span>}</span>;
+    } },
     { key: 'fab', titulo: 'Fabricante', ocultarCelular: true, ordenar: p => p.fabricante ?? 'zzz', render: p => p.fabricante || <span className="muted">-</span> },
     { key: 'ean', titulo: 'Cód. barras', ocultarCelular: true, ordenar: p => p.codigoBarras ?? 'z', render: p => p.codigoBarras ? <span className="mono">{p.codigoBarras}</span> : <span className="muted">-</span> },
     { key: 'abc', titulo: 'ABC', align: 'center', ordenar: p => p.classe, render: p => <Badge tom={p.classe === 'A' ? 'bad' : p.classe === 'B' ? 'warn' : undefined} plain>{p.classe}</Badge> },

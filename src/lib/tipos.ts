@@ -1,6 +1,6 @@
 // Tipos das entidades devolvidas pela API.
 
-export interface Armazem { id: string; codigo: string; nome: string; endereco?: string | null; padrao: boolean; ativo: boolean; produtos?: number; unidades?: number; valor?: number; _count?: { locais: number } }
+export interface Armazem { id: string; codigo: string; nome: string; numero?: number | null; endereco?: string | null; padrao: boolean; ativo: boolean; produtos?: number; unidades?: number; valor?: number; _count?: { locais: number } }
 
 export interface Categoria { id: string; nome: string; descricao?: string | null; _count?: { produtos: number } }
 export interface Fornecedor {
@@ -8,7 +8,9 @@ export interface Fornecedor {
   prazoPagamentoDias?: number | null;
   _count?: { produtos: number; pedidosCompra: number };
 }
-export interface Localizacao { id: string; codigo: string; zona: string; corredor: string; prateleira: string; armazemId?: string | null; armazem?: Armazem | null; tipo?: string | null; ativo?: boolean }
+export interface Localizacao { id: string; codigo: string; zona: string; corredor: string; prateleira: string; armazemId?: string | null; armazem?: Armazem | null; tipo?: string | null; ativo?: boolean;
+  // ✨ FASE 12: RUA · COL (modulo) · NIV · APT e código de barras da etiqueta
+  rua?: string | null; modulo?: number | null; nivel?: number | null; apartamento?: number | null; codigoBarras?: string | null }
 export interface UsuarioResumo { id: string; nome: string; cargo: string; email?: string }
 
 export interface Composicao { id: string; produtoFilhoId: string; quantidade: number; produtoFilho?: Produto }

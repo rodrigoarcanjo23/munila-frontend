@@ -699,3 +699,74 @@ a.btn { text-decoration: none; }
 .modal { min-width: 0; } .modal__body { min-width: 0; } .fi > * { min-width: 0; }
 .fi-cab .badge { align-self: flex-start; }
 @media (max-width: 900px) { .fi-cab__venda { grid-column: span 2; } }
+
+/* ------------------------------ fase 12: endereços e etiqueta ------------------------------ */
+.etq { width: 100%; max-width: 420px; aspect-ratio: 2 / 1; background: #fff; color: #000; border: 1.5px solid #000; border-radius: 3px; box-shadow: 3px 3px 0 rgba(0,0,0,.18); padding: 10px 14px 8px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; font-family: Arial, Helvetica, sans-serif; overflow: hidden; }
+.etq__dep { font-size: clamp(14px, 4.2vw, 22px); line-height: 1; white-space: nowrap; letter-spacing: -.2px; }
+.etq__cod { display: flex; align-items: flex-end; justify-content: center; line-height: .85; }
+.etq__p { display: flex; flex-direction: column; align-items: center; }
+.etq__p small { font-size: clamp(10px, 2.6vw, 13px); margin-bottom: 2px; }
+.etq__p b { font-size: clamp(30px, 10vw, 54px); font-weight: 700; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+.etq__sep b { margin: 0 1px; }
+.etq__barras { height: 64px; max-width: 70%; }
+.etq--compacta { max-width: 300px; padding: 7px 10px 6px; }
+.etq--compacta .etq__dep { font-size: 15px; }
+.etq--compacta .etq__p b { font-size: 36px; }
+.etq--compacta .etq__p small { font-size: 10px; }
+.etq--compacta .etq__barras { height: 48px; }
+
+.endf { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 420px); gap: 20px; align-items: start; }
+.endf__campos { display: flex; flex-direction: column; gap: 12px; }
+.endf__campos .field { margin: 0; }
+.endf__partes { display: grid; grid-template-columns: 1.1fr 1fr 1.2fr 1.2fr; gap: 8px; }
+.endf__parte { display: flex; flex-direction: column; gap: 4px; font-weight: 600; font-size: 12px; color: var(--text-2); }
+.endf__parte span { letter-spacing: .02em; }
+.endf__parte .input { height: 52px; font-size: 24px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+.endf__previa { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; padding: 14px; border-radius: var(--radius); background: var(--surface-2); border: 1px solid var(--line); position: sticky; top: 0; }
+.endf__rotulo { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.endf__previa small { font-size: 12px; }
+
+.end { display: flex; flex-direction: column; gap: 14px; }
+.end__topo { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 16px; align-items: center; }
+.end__dados { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin: 0; }
+.end__dados dt { font-size: 11.5px; color: var(--text-3); }
+.end__dados dd { margin: 2px 0 0; font-weight: 600; font-size: 15px; }
+.end__titulo { margin: 4px 0 0; font-size: 14px; font-weight: 600; }
+.end__itens { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.end__item { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; background: var(--surface); display: flex; flex-direction: column; gap: 8px; }
+.end__item-cab { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.end__nome { all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.end__nome b { font-size: 14px; color: var(--text); }
+.end__nome:hover b, .end__nome:focus-visible b { color: var(--primary); text-decoration: underline; }
+.end__nome:focus-visible { outline: none; box-shadow: var(--focus); border-radius: 4px; }
+.end__nome span { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.end__qtd { text-align: right; flex: none; }
+.end__qtd b { display: block; font-size: 22px; line-height: 1; color: var(--primary); font-variant-numeric: tabular-nums; }
+.end__qtd small { font-size: 11.5px; color: var(--text-3); }
+.end__barra, .fi-onde__barra { display: block; height: 4px; border-radius: 2px; background: var(--muted-soft); overflow: hidden; }
+.end__barra span, .fi-onde__barra span { display: block; height: 100%; background: var(--brand-green); border-radius: 2px; }
+.end__lotes { display: flex; flex-wrap: wrap; gap: 6px; }
+.end__lote { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; padding: 3px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); }
+.end__outros { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12.5px; }
+.end__outro { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface); cursor: pointer; font-size: 12.5px; color: var(--text); }
+.end__outro:hover:not(:disabled) { border-color: var(--primary); background: var(--primary-soft); }
+.end__outro:disabled { cursor: default; opacity: .8; }
+.end__outro small { color: var(--text-3); }
+.end__total { margin-left: auto; color: var(--text-2); }
+.end__nota { font-size: 12px; display: flex; gap: 6px; align-items: center; margin: 0; }
+
+.fi-onde__lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; padding: 10px 12px; }
+.fi-onde__end { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; text-align: left; color: var(--text); }
+.fi-onde__end:hover:not(:disabled) { border-color: var(--primary); background: var(--primary-soft); }
+.fi-onde__end:disabled { cursor: default; }
+.fi-onde__end > b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.fi-onde__end small { font-size: 11.5px; }
+.fi-onde__cod { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.fi-onde__barra { width: 100%; }
+.end-cel { display: inline-flex; align-items: center; gap: 6px; }
+.end-cel__mais { font-size: 11.5px; font-weight: 600; color: var(--primary); background: var(--primary-soft); border-radius: 999px; padding: 1px 7px; }
+@media (max-width: 900px) {
+  .endf { grid-template-columns: 1fr; }
+  .endf__previa { position: static; order: -1; }
+  .end__topo { grid-template-columns: 1fr; }
+}

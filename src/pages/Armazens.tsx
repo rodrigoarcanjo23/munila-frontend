@@ -16,7 +16,7 @@ interface LinhaTransf { codigo: string; data: string; produto: string; sku: stri
 export default function Armazens() {
   const { isAdmin } = useAuth();
   const { confirmar } = useDialogo();
-  const [form, setForm] = useState<{ id?: string; codigo: string; nome: string; endereco: string; padrao: boolean } | null>(null);
+  const [form, setForm] = useState<{ id?: string; codigo: string; nome: string; numero: string; endereco: string; padrao: boolean } | null>(null);
   const [transferir, setTransferir] = useState(false);
   const [busca, setBusca] = useState('');
 
@@ -69,7 +69,7 @@ export default function Armazens() {
     <>
       <PageHeader titulo="Armazéns e transferências" descricao="Cada armazém tem saldo próprio por lote. As transferências mantêm lote e validade e saem pelo lote que vence primeiro."
         acoes={<>
-          {isAdmin && <button className="btn" onClick={() => setForm({ codigo: '', nome: '', endereco: '', padrao: false })}><IoAddOutline /> Novo armazém</button>}
+          {isAdmin && <button className="btn" onClick={() => setForm({ codigo: '', nome: '', numero: '', endereco: '', padrao: false })}><IoAddOutline /> Novo armazém</button>}
           <button className="btn btn--primary" onClick={() => setTransferir(true)} disabled={(dados?.armazens.length ?? 0) < 2}><IoGitCompareOutline /> Nova transferência</button>
         </>} />
 
@@ -79,11 +79,11 @@ export default function Armazens() {
             <div className="panel__head">
               <div>
                 <h2>{a.nome} {a.padrao && <IoStar title="Armazém padrão" style={{ color: 'var(--tag)', verticalAlign: -2 }} />}</h2>
-                <p><Code>{a.codigo}</Code> {a.endereco}</p>
+                <p><Code>{a.codigo}</Code>{a.numero ? <> · Dep. {String(a.numero).padStart(3, '0')}</> : null} {a.endereco}</p>
               </div>
               {isAdmin && (
                 <div className="row" style={{ flexWrap: 'nowrap' }}>
-                  <button className="icon-btn" aria-label="Editar" onClick={() => setForm({ id: a.id, codigo: a.codigo, nome: a.nome, endereco: a.endereco || '', padrao: a.padrao })}><IoPencilOutline /></button>
+                  <button className="icon-btn" aria-label="Editar" onClick={() => setForm({ id: a.id, codigo: a.codigo, nome: a.nome, numero: a.numero ? String(a.numero) : '', endereco: a.endereco || '', padrao: a.padrao })}><IoPencilOutline /></button>
                   {!a.padrao && <button className="icon-btn icon-btn--bad" aria-label="Excluir" onClick={() => excluir(a)}><IoTrashOutline /></button>}
                 </div>
               )}
@@ -115,7 +115,8 @@ export default function Armazens() {
           rodape={<><button className="btn" onClick={() => setForm(null)}>Cancelar</button><button className="btn btn--primary" form="form-arm">Salvar armazém</button></>}>
           <form id="form-arm" onSubmit={salvar} className="form-grid">
             <Field label="Código" className="col-4"><input className="input" required value={form.codigo} onChange={e => setForm({ ...form, codigo: e.target.value.toUpperCase() })} placeholder="MUN" /></Field>
-            <Field label="Nome" className="col-8"><input className="input" required value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} /></Field>
+            <Field label="Nº do depósito" className="col-4" dica="Vai na etiqueta: DEP. 001"><input className="input" type="number" min={1} max={99} value={form.numero} onChange={e => setForm({ ...form, numero: e.target.value })} placeholder="Automático" /></Field>
+            <Field label="Nome" className="col-4"><input className="input" required value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} /></Field>
             <Field label="Endereço" className="col-12"><input className="input" value={form.endereco} onChange={e => setForm({ ...form, endereco: e.target.value })} placeholder="Rua, número, cidade" /></Field>
             <div className="col-12"><label className="check"><input type="checkbox" checked={form.padrao} onChange={e => setForm({ ...form, padrao: e.target.checked })} /> Armazém padrão</label></div>
           </form>

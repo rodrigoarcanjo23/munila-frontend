@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { IoAddOutline, IoCreateOutline, IoGitBranchOutline, IoReceiptOutline, IoSaveOutline, IoTrashOutline } from 'react-icons/io5';
 import { api, msgErro } from '../lib/api';
@@ -124,6 +125,7 @@ export function FichaItem({ produtoId, onFechar, onMudou, onKardex }: { produtoI
           <Segmented<Aba> valor={aba} onChange={setAba} opcoes={[{ valor: 'estoque', label: 'Lotes e embalagens' }, { valor: 'cadastro', label: 'Cadastro completo' }]} />
 
           {aba === 'estoque' ? <>
+            <OndeEsta ficha={f} locais={locaisArm} />
             <Lotes ficha={f} locais={locaisArm} podeAjustar={podeEditarCadastros} onMudou={() => { recarregar(true); onMudou(); }} />
             <div className="fi-grade">
               <section className="fi-bloco">
@@ -231,6 +233,45 @@ export function FichaItem({ produtoId, onFechar, onMudou, onKardex }: { produtoI
 }
 
 /** Lotes por endereço, com edição em linha e "Endereçar" (dividir para outro endereço). */
+/** ✨ FASE 12: em quais endereços o item está e quanto há em cada um (maior primeiro). Clicar abre o endereço. */
+function OndeEsta({ ficha, locais }: { ficha: Ficha; locais: Localizacao[] }) {
+  const navigate = useNavigate();
+  const principal = (ficha.produto.enderecoLocalizacao ?? '').toUpperCase();
+  const grupos = new Map<string, { codigo: string; id: string | null; armazem: string | null; armazemId: string | null; quantidade: number }>();
+  for (const l of ficha.linhas) {
+    if (l.status === 'Em Demonstração' || l.quantidade <= 0) continue;
+    const codigo = l.localizacao?.codigo ?? l.enderecoCadastro ?? 'Sem endereço';
+    const k = `${codigo}|${l.armazem?.id ?? ''}`;
+    const id = l.localizacao?.id ?? locais.find(x => x.codigo.toUpperCase() === codigo.toUpperCase() && (!x.armazemId || x.armazemId === l.armazem?.id))?.id ?? null;
+    const g = grupos.get(k) ?? { codigo, id, armazem: l.armazem?.nome ?? null, armazemId: l.armazem?.id ?? null, quantidade: 0 };
+    g.quantidade += l.quantidade; grupos.set(k, g);
+  }
+  const lista = [...grupos.values()].sort((a, b) => b.quantidade - a.quantidade);
+  const total = lista.reduce((a, g) => a + g.quantidade, 0);
+  const variosArm = new Set(lista.map(g => g.armazemId)).size > 1;
+  if (!lista.length) return null;
+  return (
+    <section className="fi-bloco fi-onde">
+      <header><h4>Onde está</h4><span className="muted">{lista.length === 1 ? 'Em 1 endereço' : `Em ${lista.length} endereços`} · {numero(total)} un.</span></header>
+      <div className="fi-onde__lista">
+        {lista.map(g => {
+          const pct = total ? Math.round((g.quantidade / total) * 100) : 0;
+          return (
+            <button key={`${g.codigo}|${g.armazemId}`} type="button" className="fi-onde__end" disabled={!g.id} onClick={() => g.id && navigate(`/locais?endereco=${g.id}`)}
+              title={g.id ? 'Ver tudo o que está neste endereço' : 'Endereço não cadastrado'}>
+              <span className="fi-onde__cod"><span className="loc">{g.codigo}</span>{g.codigo.toUpperCase() === principal && <Badge tom="primary" plain>principal</Badge>}</span>
+              {variosArm && <small className="muted">{g.armazem}</small>}
+              <b>{numero(g.quantidade)}</b>
+              <span className="fi-onde__barra"><span style={{ width: `${pct}%` }} /></span>
+              <small className="muted">{pct}% do saldo</small>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function Lotes({ ficha, locais, podeAjustar, onMudou }: { ficha: Ficha; locais: Localizacao[]; podeAjustar: boolean; onMudou: () => void }) {
   const emb = ficha.produto.embalagem || null;
   const [edit, setEdit] = useState<{ id: string; modo: 'editar' | 'enderecar'; localizacaoId: string; lote: string; validade: string; quantidade: string; motivo: string } | null>(null);
