@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { IoAddOutline, IoArrowBackOutline, IoBarcodeOutline, IoCheckmarkDoneOutline, IoEyeOutline, IoEyeOffOutline, IoDownloadOutline, IoCloseCircleOutline } from 'react-icons/io5';
+import { IoAddOutline, IoTrashOutline, IoArrowBackOutline, IoBarcodeOutline, IoCheckmarkDoneOutline, IoEyeOutline, IoEyeOffOutline, IoDownloadOutline, IoCloseCircleOutline } from 'react-icons/io5';
 import { api, msgErro } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useCarregar } from '../lib/useCarregar';
@@ -10,6 +10,7 @@ import { exportarExcel } from '../lib/exportar';
 import type { Categoria } from '../lib/tipos';
 import { DataTable, type Col } from '../components/DataTable';
 import { SelectArmazem, useArmazens } from '../components/EstoqueModais';
+import { EscolherItens } from '../components/EscolherItens';
 import { rotuloLote } from '../lib/regras';
 import { Badge, Code, Empty, Field, Kpi, Loading, Loc, Modal, Notice, PageHeader, Panel, SearchInput, Segmented, useDialogo } from '../components/ui';
 
@@ -24,7 +25,7 @@ interface ItemInv {
   lotes?: { lote: string | null; validade: string | null; quantidade: number | null }[];
   lotesContados?: { lote: string; validade?: string | null; quantidade: number }[] | null;
 }
-interface InventarioDet extends Omit<InventarioResumo, 'totalItens' | 'contados' | 'divergentes'> { itens: ItemInv[]; saldoRevelado: boolean; armazem?: { nome: string } | null }
+interface InventarioDet extends Omit<InventarioResumo, 'totalItens' | 'contados' | 'divergentes'> { itens: ItemInv[]; saldoRevelado: boolean; armazem?: { id?: string; nome: string } | null }
 
 const tomStatus = (s: string) => (s === 'Concluído' ? 'ok' : s === 'Cancelado' ? undefined : s === 'Em contagem' ? 'info' : 'warn') as 'ok' | 'info' | 'warn' | undefined;
 
@@ -68,23 +69,28 @@ function Lista() {
 }
 
 function ModalNovo({ categorias, onFechar, onCriado }: { categorias: Categoria[]; onFechar: () => void; onCriado: (id: string) => void }) {
-  const { usuario } = useAuth();
-  const [tipo, setTipo] = useState('Cíclico');
+  const { usuario, isAdmin } = useAuth();
+  // ✨ padrão: escolher os itens; "por filtro" e "geral" continuam disponíveis
+  const [modo, setModo] = useState<'Itens' | 'Filtro' | 'Geral'>('Itens');
   const [descricao, setDescricao] = useState('');
   const [categoriaId, setCategoriaId] = useState('');
   const [prefixo, setPrefixo] = useState('');
   const [cego, setCego] = useState(true);
   const { armazens, padraoId } = useArmazens();
   const [armazemId, setArmazemId] = useState('');
+  const [escolhidos, setEscolhidos] = useState<Set<string>>(new Set());
   const [salvando, setSalvando] = useState(false);
 
   async function criar() {
+    if (modo === 'Itens' && escolhidos.size === 0) return toast.warn('Escolha pelo menos um item para contar.');
+    if (modo === 'Filtro' && !categoriaId && !prefixo.trim()) return toast.warn('Escolha a categoria ou o início do endereço.');
     setSalvando(true);
     try {
       const { data } = await api.post('/inventarios', {
-        tipo, descricao, cego, usuarioId: usuario?.id, armazemId: armazemId || padraoId || undefined,
-        categoriaId: tipo === 'Cíclico' ? categoriaId || undefined : undefined,
-        enderecoPrefixo: tipo === 'Cíclico' ? prefixo || undefined : undefined,
+        tipo: modo === 'Geral' ? 'Geral' : 'Cíclico', descricao, cego, usuarioId: usuario?.id, armazemId: armazemId || padraoId || undefined,
+        produtoIds: modo === 'Itens' ? [...escolhidos] : undefined,
+        categoriaId: modo === 'Filtro' ? categoriaId || undefined : undefined,
+        enderecoPrefixo: modo === 'Filtro' ? prefixo || undefined : undefined,
       });
       toast.success(`Inventário ${data.codigo} aberto.`);
       onCriado(data.id);
@@ -92,15 +98,20 @@ function ModalNovo({ categorias, onFechar, onCriado }: { categorias: Categoria[]
   }
 
   return (
-    <Modal aberto onFechar={onFechar} titulo="Novo inventário" tamanho="md"
-      rodape={<><button className="btn" onClick={onFechar}>Cancelar</button><button className="btn btn--primary" disabled={salvando} onClick={criar}>{salvando ? 'Abrindo…' : 'Abrir inventário'}</button></>}>
+    <Modal aberto onFechar={onFechar} titulo="Novo inventário" tamanho={modo === 'Itens' ? 'xl' : 'md'}
+      rodape={<>
+        {modo === 'Itens' && <span className="muted" style={{ marginRight: 'auto' }}>{numero(escolhidos.size)} item(ns) para contar</span>}
+        <button className="btn" onClick={onFechar}>Cancelar</button>
+        <button className="btn btn--primary" disabled={salvando || (modo === 'Itens' && escolhidos.size === 0)} onClick={criar}>{salvando ? 'Abrindo…' : modo === 'Itens' ? `Abrir com ${numero(escolhidos.size)} item(ns)` : 'Abrir inventário'}</button>
+      </>}>
       <div className="form-grid">
-        <Field label="Abrangência" className="col-12">
-          <Segmented valor={tipo} onChange={setTipo} opcoes={[{ valor: 'Cíclico', label: 'Cíclico (parte do estoque)' }, { valor: 'Geral', label: 'Geral (todo o estoque)' }]} />
+        <Field label="O que contar" className="col-12">
+          <Segmented valor={modo} onChange={setModo} opcoes={[{ valor: 'Itens', label: 'Escolher os itens' }, { valor: 'Filtro', label: 'Por categoria ou endereço' }, { valor: 'Geral', label: 'Geral (todo o estoque)' }]} />
         </Field>
-        <SelectArmazem armazens={armazens} value={armazemId || padraoId} onChange={setArmazemId} className="col-12" />
-        <Field label="Descrição" className="col-12"><input className="input" value={descricao} onChange={e => setDescricao(e.target.value)} placeholder="Ex.: Rua A — outubro" /></Field>
-        {tipo === 'Cíclico' && <>
+        <SelectArmazem armazens={armazens} value={armazemId || padraoId} onChange={id => { setArmazemId(id); setEscolhidos(new Set()); }} className="col-6" />
+        <Field label="Descrição" className="col-6"><input className="input" value={descricao} onChange={e => setDescricao(e.target.value)} placeholder="Ex.: Lupas e raspadores, semana 45" /></Field>
+        {modo === 'Itens' && <div className="col-12"><EscolherItens armazemId={armazemId || padraoId || undefined} selecionados={escolhidos} onChange={setEscolhidos} mostrarSaldo={isAdmin} /></div>}
+        {modo === 'Filtro' && <>
           <Field label="Categoria" className="col-6">
             <select className="select" value={categoriaId} onChange={e => setCategoriaId(e.target.value)}>
               <option value="">Todas</option>
@@ -109,11 +120,31 @@ function ModalNovo({ categorias, onFechar, onCriado }: { categorias: Categoria[]
           </Field>
           <Field label="Endereço começa com" className="col-6" dica="Ex.: A01 conta toda a rua A01"><input className="input" value={prefixo} onChange={e => setPrefixo(e.target.value.toUpperCase())} placeholder="A01" /></Field>
         </>}
+        {modo === 'Geral' && <div className="col-12"><Notice tom="warn">Todos os produtos do armazém entram na contagem. Para as contagens do dia a dia, prefira escolher os itens.</Notice></div>}
         <div className="col-12">
           <label className="check"><input type="checkbox" checked={cego} onChange={e => setCego(e.target.checked)} /> Contagem cega (o operador não vê o saldo do sistema)</label>
         </div>
-        <div className="col-12"><Notice tom="info">O saldo de cada item é registrado no momento da abertura. Movimente o mínimo possível a área durante a contagem.</Notice></div>
+        {modo !== 'Itens' && <div className="col-12"><Notice tom="info">O saldo de cada item é registrado no momento da abertura. Movimente o mínimo possível a área durante a contagem.</Notice></div>}
       </div>
+    </Modal>
+  );
+}
+
+/** ✨ Acrescentar itens a um inventário em andamento. */
+function ModalAdicionar({ inv, onFechar, onAdicionado }: { inv: InventarioDet; onFechar: () => void; onAdicionado: (n: number) => void }) {
+  const { isAdmin } = useAuth();
+  const [escolhidos, setEscolhidos] = useState<Set<string>>(new Set());
+  const [salvando, setSalvando] = useState(false);
+  const ja = useMemo(() => new Set(inv.itens.map(i => i.produtoId)), [inv]);
+  async function adicionar() {
+    setSalvando(true);
+    try { const { data } = await api.post(`/inventarios/${inv.id}/itens`, { produtoIds: [...escolhidos] }); onAdicionado(data.adicionados); }
+    catch (e) { toast.error(msgErro(e)); } finally { setSalvando(false); }
+  }
+  return (
+    <Modal aberto onFechar={onFechar} tamanho="xl" titulo={`Adicionar itens ao ${inv.codigo}`} descricao="O saldo do sistema de cada item novo é registrado agora."
+      rodape={<><button className="btn" onClick={onFechar}>Cancelar</button><button className="btn btn--primary" disabled={salvando || escolhidos.size === 0} onClick={adicionar}>{salvando ? 'Adicionando…' : `Adicionar ${numero(escolhidos.size)} item(ns)`}</button></>}>
+      <EscolherItens armazemId={inv.armazem?.id} selecionados={escolhidos} onChange={setEscolhidos} ocultar={ja} mostrarSaldo={isAdmin} />
     </Modal>
   );
 }
@@ -127,6 +158,7 @@ function Contagem({ id }: { id: string }) {
   const [filtro, setFiltro] = useState<'todos' | 'pendentes' | 'divergentes'>('todos');
   const [leitura, setLeitura] = useState('');
   const [porLote, setPorLote] = useState<ItemInv | null>(null);
+  const [adicionar, setAdicionar] = useState(false);
   const inputs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const { dados: inv, setDados, carregando, recarregar } = useCarregar(async () => (await api.get<InventarioDet>(`/inventarios/${id}${revelar ? '?revelar=1' : ''}`)).data, [id, revelar]);
@@ -178,6 +210,12 @@ function Contagem({ id }: { id: string }) {
     } catch (e) { toast.error(msgErro(e)); }
   }
 
+  async function tirar(item: ItemInv) {
+    if (!(await confirmar({ titulo: `Tirar ${item.produto.sku} do inventário?`, mensagem: `${item.produto.nome} sai desta contagem. Nada muda no estoque.`, confirmar: 'Tirar do inventário' }))) return;
+    try { await api.delete(`/inventarios/${id}/itens/${item.id}`); setDados(d => d && { ...d, itens: d.itens.filter(x => x.id !== item.id) }); toast.success('Item retirado do inventário.'); }
+    catch (e) { toast.error(msgErro(e)); }
+  }
+
   async function cancelar() {
     if (!(await confirmar({ titulo: 'Cancelar inventário?', mensagem: 'As contagens serão descartadas e nenhum ajuste será feito.', confirmar: 'Cancelar inventário', perigo: true }))) return;
     try { await api.delete(`/inventarios/${id}`); toast.success('Inventário cancelado.'); navigate('/inventario'); } catch (e) { toast.error(msgErro(e)); }
@@ -202,7 +240,10 @@ function Contagem({ id }: { id: string }) {
       return <span className={d > 0 ? 'up' : d < 0 ? 'down' : 'muted'}>{d > 0 ? '+' : ''}{numero(d)}</span>;
     } }] : []),
     { key: 'por', titulo: 'Contado por', ocultarCelular: true, render: i => <>{i.contadoPor?.nome || <span className="muted">Pendente</span>}{Array.isArray(i.lotesContados) && i.lotesContados.length > 0 && <div className="cell-sub">{i.lotesContados.map(l => `${rotuloLote(l.lote)}: ${l.quantidade}`).join(', ')}</div>}</> },
-    ...(aberto ? [{ key: 'lote', titulo: '', render: (i: ItemInv) => <button className="btn btn--sm" onClick={() => setPorLote(i)}>Por lote</button> }] : []),
+    ...(aberto ? [{ key: 'lote', titulo: '', render: (i: ItemInv) => <div className="row" style={{ flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
+      <button className="btn btn--sm" onClick={() => setPorLote(i)}>Por lote</button>
+      {i.quantidadeContada === null && inv.itens.length > 1 && <button className="icon-btn icon-btn--bad" title="Tirar do inventário" aria-label={`Tirar ${i.produto.nome} do inventário`} onClick={() => tirar(i)}><IoTrashOutline /></button>}
+    </div> }] : []),
   ];
 
   return (
@@ -217,6 +258,7 @@ function Contagem({ id }: { id: string }) {
             { titulo: 'Sistema', valor: i => i.saldoSistema ?? '' }, { titulo: 'Contado', valor: i => i.quantidadeContada ?? '' },
             { titulo: 'Diferença', valor: i => (i.quantidadeContada === null || i.saldoSistema === null ? '' : i.quantidadeContada - i.saldoSistema) },
           ] }])}><IoDownloadOutline /> Excel</button>}
+          {aberto && <button className="btn" onClick={() => setAdicionar(true)}><IoAddOutline /> Adicionar itens</button>}
           {aberto && inv.cego && isAdmin && <button className="btn" onClick={() => setRevelar(r => !r)}>{revelar ? <IoEyeOffOutline /> : <IoEyeOutline />} {revelar ? 'Ocultar saldo' : 'Ver saldo do sistema'}</button>}
           {aberto && <button className="btn btn--danger" onClick={cancelar}><IoCloseCircleOutline /> Cancelar</button>}
           {aberto && <button className="btn btn--primary" onClick={concluir} disabled={contados === 0}><IoCheckmarkDoneOutline /> Concluir</button>}
@@ -249,6 +291,7 @@ function Contagem({ id }: { id: string }) {
         </div>
         <DataTable colunas={colunas} linhas={linhas} chave={i => i.id + (i.quantidadeContada ?? '')} porPagina={200} />
       </Panel>
+      {adicionar && <ModalAdicionar inv={inv} onFechar={() => setAdicionar(false)} onAdicionado={n => { setAdicionar(false); toast.success(`${n} item(ns) adicionados.`); recarregar(true); }} />}
       {porLote && (
         <ModalPorLote item={porLote} mostrarSaldo={mostrarSaldo} onFechar={() => setPorLote(null)} onSalvar={async lotes => {
           try {

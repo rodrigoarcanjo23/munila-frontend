@@ -1,61 +1,53 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { toast } from 'react-toastify';
-import {
-  IoSwapVerticalOutline, IoConstructOutline, IoDownloadOutline, IoDocumentTextOutline, IoArrowDownCircleOutline,
-  IoArrowUpCircleOutline, IoRepeatOutline, IoAddCircleOutline, IoRemoveCircleOutline, IoHandRightOutline,
-  IoWarningOutline, IoReturnDownBackOutline, IoReceiptOutline, IoGitCompareOutline, IoEnterOutline,
-} from 'react-icons/io5';
-import { api, msgErro } from '../lib/api';
+import { IoSwapVerticalOutline, IoDownloadOutline, IoDocumentTextOutline, IoReceiptOutline, IoGitCompareOutline, IoEnterOutline } from 'react-icons/io5';
+import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useCarregar } from '../lib/useCarregar';
 import { contem, moeda, numero } from '../lib/format';
 import { estoqueMinimo, tomStatusEstoque } from '../lib/regras';
 import { exportarExcel, exportarPDF, VERDE, VERMELHO, LARANJA } from '../lib/exportar';
-import type { Armazem, Categoria, Estoque as EstoqueT, Produto } from '../lib/tipos';
-import { ModalEntrada, ModalTransferencia, SelectArmazem, useArmazens } from '../components/EstoqueModais';
+import type { Categoria, Estoque as EstoqueT, Produto } from '../lib/tipos';
+import { ModalMovimento, ModalTransferencia, useArmazens } from '../components/EstoqueModais';
+import { FichaItem, type Saldos } from '../components/FichaItem';
 import { dataUTC } from '../lib/format';
 import { DataTable, type Col } from '../components/DataTable';
-import { Badge, Code, Field, Kpi, Loading, Loc, Modal, Notice, PageHeader, Panel, SearchInput, Segmented } from '../components/ui';
+import { Badge, Code, Kpi, Loading, Loc, Notice, PageHeader, Panel, SearchInput, Segmented } from '../components/ui';
 
+// ✨ FASE 11: visão "Por produto" (como o sistema antigo) + janela do item ao clicar.
+// Entradas, saídas e ajustes foram para a página "Entrada e saída".
+type Visao = 'produto' | 'lote';
 type Aba = 'Disponível' | 'Em Demonstração' | 'Ruptura' | 'Sobra sem NF' | 'Todos';
 type Filtro = 'todos' | 'critico' | 'zerado';
-
-const OPERACOES: { valor: string; label: string; dica: string; icone: ReactNode; tom: 'in' | 'out' | 'neutral'; status?: string[] }[] = [
-  { valor: 'Entrada de mercadoria', label: 'Entrada', dica: 'Recebimento avulso', icone: <IoArrowDownCircleOutline />, tom: 'in' },
-  { valor: 'Devolução VIAPRO', label: 'Devolução VIAPRO', dica: 'Retorno da indústria', icone: <IoRepeatOutline />, tom: 'in' },
-  { valor: 'Ajuste de Entrada de Inventário', label: 'Ajuste (+)', dica: 'Correção de contagem', icone: <IoAddCircleOutline />, tom: 'neutral' },
-  { valor: 'Saída de mercadoria', label: 'Saída', dica: 'Retirada avulsa', icone: <IoArrowUpCircleOutline />, tom: 'out' },
-  { valor: 'Saída para demonstração', label: 'Demonstração', dica: 'Fica sob sua responsabilidade', icone: <IoHandRightOutline />, tom: 'out' },
-  { valor: 'Ajuste de Saída de Inventário', label: 'Ajuste (−)', dica: 'Correção de contagem', icone: <IoRemoveCircleOutline />, tom: 'neutral' },
-  { valor: 'Perdas/Avarias', label: 'Perda / avaria', dica: 'Vai para o painel de perdas', icone: <IoWarningOutline />, tom: 'out' },
-  { valor: 'Retorno de demonstração', label: 'Retorno de demonstração', dica: 'Volta ao saldo disponível', icone: <IoReturnDownBackOutline />, tom: 'in', status: ['Em Demonstração'] },
-];
-const SOMA = ['Entrada de mercadoria', 'Devolução VIAPRO', 'Ajuste de Entrada de Inventário'];
+interface ProdutoEstoque {
+  id: string; sku: string; nome: string; unidade: string | null; fabricante: string | null; codigoBarras: string | null; origemFiscal: number | null;
+  referenciaFabricante: string | null; linha: string | null; enderecoLocalizacao: string | null; estoqueMinimo: number | null; precoCusto: number | null;
+  categoria: { id: string; nome: string } | null; classe: 'A' | 'B' | 'C'; saldos: Saldos;
+}
+const ORIGEM_CURTA: Record<number, string> = { 0: 'Nacional', 1: 'Importado', 2: 'Importado (merc. int.)', 3: 'Nacional (>40% imp.)', 5: 'Nacional (≤40% imp.)' };
 
 export default function Estoque() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const { usuario } = useAuth();
-  const filtroUrl = params.get('filtro') || (params.get('critico') ? 'critico' : 'todos');
+  const filtro = (params.get('filtro') || (params.get('critico') ? 'critico' : 'todos')) as Filtro;
+  const visao: Visao = params.get('visao') === 'lote' ? 'lote' : 'produto';
 
   const [aba, setAba] = useState<Aba>('Disponível');
-  const filtro = filtroUrl as Filtro;
   const [busca, setBusca] = useState('');
   const [categoria, setCategoria] = useState('');
   const [movimentar, setMovimentar] = useState<EstoqueT | null>(null);
-  const [produzir, setProduzir] = useState(false);
   const [armazemId, setArmazemId] = useState('');
-  const [entrada, setEntrada] = useState(false);
-  const [transferir, setTransferir] = useState<EstoqueT | 'nova' | null>(null);
-  const { armazens, padraoId } = useArmazens();
+  const [transferir, setTransferir] = useState<EstoqueT | null>(null);
+  const [ficha, setFicha] = useState<string | null>(params.get('item'));
+  const { armazens } = useArmazens();
 
   const { dados, carregando, recarregar } = useCarregar(async () => {
-    const [e, p, c] = await Promise.all([api.get<EstoqueT[]>('/estoque'), api.get<Produto[]>('/produtos'), api.get<Categoria[]>('/categorias')]);
-    return { estoque: e.data, produtos: p.data, categorias: c.data };
+    const [e, p, c, pe] = await Promise.all([api.get<EstoqueT[]>('/estoque'), api.get<Produto[]>('/produtos'), api.get<Categoria[]>('/categorias'), api.get<ProdutoEstoque[]>('/estoque/produtos')]);
+    return { estoque: e.data, produtos: p.data, categorias: c.data, porProduto: pe.data };
   });
 
-  // Linhas por produto × armazém × lote. Lotes zerados ficam ocultos; a linha "sem lote" aparece mesmo zerada.
+  // ---------------- visão por lote e endereço
   const estoque = useMemo(() => (dados?.estoque ?? [])
     .filter(e => !armazemId || e.armazemId === armazemId)
     .filter(e => !(e.status === 'Disponível' && e.quantidade <= 0 && e.lote)), [dados, armazemId]);
@@ -69,18 +61,24 @@ export default function Estoque() {
     for (const e of estoque) { if (e.quantidade <= 0 && e.status !== 'Disponível') continue; c[e.status] = (c[e.status] || 0) + 1; c.Todos++; }
     return c;
   }, [estoque]);
-
+  const nivelOk = (produtoId: string, minimo: number) => {
+    const total = totalProduto.get(produtoId) ?? 0;
+    return filtro === 'critico' ? total <= minimo : filtro === 'zerado' ? total <= 0 : true;
+  };
   const linhas = useMemo(() => estoque
     .filter(e => (aba === 'Todos' ? true : e.status === aba))
     .filter(e => e.status === 'Disponível' || e.quantidade > 0)
     .filter(e => !categoria || e.produto.categoriaId === categoria)
-    .filter(e => {
-      if (filtro === 'critico') return e.status === 'Disponível' && (totalProduto.get(e.produtoId) ?? 0) <= estoqueMinimo(e.produto);
-      if (filtro === 'zerado') return e.status === 'Disponível' && (totalProduto.get(e.produtoId) ?? 0) <= 0;
-      return true;
-    })
-    .filter(e => contem(busca, e.produto.nome, e.produto.sku, e.produto.codigoBarras, e.status, e.produto.enderecoLocalizacao, e.localizacao?.codigo, e.lote, e.armazem?.nome)),
-  [estoque, aba, categoria, filtro, busca, totalProduto]);
+    .filter(e => filtro === 'todos' || (e.status === 'Disponível' && nivelOk(e.produtoId, estoqueMinimo(e.produto))))
+    .filter(e => contem(busca, e.produto.nome, e.produto.sku, e.produto.codigoBarras, e.status, e.produto.enderecoLocalizacao, e.localizacao?.codigo, e.lote, e.armazem?.nome, ...(e.produto.eans ?? []).map(x => x.codigo))),
+  [estoque, aba, categoria, filtro, busca, totalProduto]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---------------- visão por produto (saldos de todos os armazéns)
+  const produtos = useMemo(() => (dados?.porProduto ?? [])
+    .filter(p => !categoria || p.categoria?.id === categoria)
+    .filter(p => filtro === 'todos' || nivelOk(p.id, estoqueMinimo(p)))
+    .filter(p => contem(busca, p.nome, p.sku, p.codigoBarras, p.fabricante, p.referenciaFabricante, p.linha, p.enderecoLocalizacao, p.categoria?.nome)),
+  [dados, categoria, filtro, busca, totalProduto]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const disponiveis = estoque.filter(e => e.status === 'Disponível');
   const produtosDisp = [...new Map(disponiveis.map(e => [e.produtoId, e.produto])).values()];
@@ -91,15 +89,35 @@ export default function Estoque() {
     valor: estoque.filter(e => e.status !== 'Ruptura' && e.status !== 'Sobra sem NF').reduce((a, e) => a + e.quantidade * (e.produto.precoCusto || 0), 0),
   };
 
-  function mudarFiltro(f: Filtro) {
-    if (f === 'todos') params.delete('filtro'); else params.set('filtro', f);
-    params.delete('critico');
+  function setParam(k: string, v: string | null) {
+    if (v === null) params.delete(k); else params.set(k, v);
+    if (k === 'filtro') params.delete('critico');
     setParams(params, { replace: true });
   }
+  const mudarFiltro = (f: Filtro) => setParam('filtro', f === 'todos' ? null : f);
+  const abrirFicha = (id: string | null) => { setFicha(id); setParam('item', id); };
 
   const endereco = (e: EstoqueT) => e.localizacao?.codigo || e.produto.enderecoLocalizacao;
 
-  const colunas: Col<EstoqueT>[] = [
+  const colProduto: Col<ProdutoEstoque>[] = [
+    { key: 'sku', titulo: 'Código', ordenar: p => p.sku, render: p => <Code>{p.sku}</Code> },
+    { key: 'nome', titulo: 'Descrição', principal: true, ordenar: p => p.nome, render: p => <><div className="cell-title">{p.nome}</div><div className="cell-sub">{p.categoria?.nome ?? ''}{p.linha ? ` · ${p.linha}` : ''}</div></> },
+    { key: 'un', titulo: 'UN', ocultarCelular: true, ordenar: p => p.unidade, render: p => p.unidade ?? 'UN' },
+    { key: 'fab', titulo: 'Fabricante', ocultarCelular: true, ordenar: p => p.fabricante ?? 'zzz', render: p => p.fabricante || <span className="muted">-</span> },
+    { key: 'ean', titulo: 'Cód. barras', ocultarCelular: true, ordenar: p => p.codigoBarras ?? 'z', render: p => p.codigoBarras ? <span className="mono">{p.codigoBarras}</span> : <span className="muted">-</span> },
+    { key: 'abc', titulo: 'ABC', align: 'center', ordenar: p => p.classe, render: p => <Badge tom={p.classe === 'A' ? 'bad' : p.classe === 'B' ? 'warn' : undefined} plain>{p.classe}</Badge> },
+    { key: 'venda', titulo: 'Est. venda', align: 'right', ordenar: p => p.saldos.venda, render: p => {
+      const min = estoqueMinimo(p);
+      const tom = p.saldos.disponivel <= 0 ? 'qty--bad' : p.saldos.disponivel <= min ? 'qty--warn' : 'qty--ok';
+      return <span className={`qty ${tom}`}>{numero(p.saldos.venda)}</span>;
+    } },
+    { key: 'fis', titulo: 'Est. físico', align: 'right', ocultarCelular: true, ordenar: p => p.saldos.fisico, render: p => numero(p.saldos.fisico) },
+    { key: 'trans', titulo: 'Est. trânsito', align: 'right', ocultarCelular: true, ordenar: p => p.saldos.transito, render: p => p.saldos.transito ? numero(p.saldos.transito) : <span className="muted">0</span> },
+    { key: 'orig', titulo: 'Origem', ocultarCelular: true, ordenar: p => p.origemFiscal ?? 9, render: p => p.origemFiscal != null ? (ORIGEM_CURTA[p.origemFiscal] ?? String(p.origemFiscal)) : <span className="muted">-</span> },
+    { key: 'ref', titulo: 'Ref. fabricante', ocultarCelular: true, ordenar: p => p.referenciaFabricante ?? 'zzz', render: p => p.referenciaFabricante || <span className="muted">-</span> },
+  ];
+
+  const colLote: Col<EstoqueT>[] = [
     { key: 'produto', titulo: 'Produto', principal: true, ordenar: e => e.produto.nome, render: e => (
       <><div className="cell-title">{e.produto.nome}</div><div className="cell-sub"><Code>{e.produto.sku}</Code></div></>
     ) },
@@ -121,15 +139,36 @@ export default function Estoque() {
     ) },
   ];
 
-  const exportCols = [
-    { titulo: 'Produto', valor: (e: EstoqueT) => e.produto.nome, largura: 45 },
-    { titulo: 'SKU', valor: (e: EstoqueT) => e.produto.sku },
-    { titulo: 'Qtd. atual', valor: (e: EstoqueT) => e.quantidade },
-    { titulo: 'Qtd. mínima', valor: (e: EstoqueT) => estoqueMinimo(e.produto) },
-    { titulo: 'Alerta', valor: (e: EstoqueT) => (e.status === 'Disponível' && e.quantidade <= estoqueMinimo(e.produto) ? 'ESTOQUE CRÍTICO' : 'OK'), largura: 18 },
-    { titulo: 'Status', valor: (e: EstoqueT) => e.status, largura: 16 },
-    { titulo: 'Endereço', valor: (e: EstoqueT) => endereco(e) || '-', largura: 14 },
-  ];
+  function exportar(tipo: 'xlsx' | 'pdf') {
+    if (visao === 'produto') {
+      const cols = [
+        { titulo: 'Código', valor: (p: ProdutoEstoque) => p.sku }, { titulo: 'Descrição', valor: (p: ProdutoEstoque) => p.nome, largura: 45 },
+        { titulo: 'UN', valor: (p: ProdutoEstoque) => p.unidade ?? 'UN' }, { titulo: 'Fabricante', valor: (p: ProdutoEstoque) => p.fabricante ?? '', largura: 18 },
+        { titulo: 'Cód. barras', valor: (p: ProdutoEstoque) => p.codigoBarras ?? '', largura: 16 }, { titulo: 'ABC', valor: (p: ProdutoEstoque) => p.classe },
+        { titulo: 'Est. venda', valor: (p: ProdutoEstoque) => p.saldos.venda }, { titulo: 'Est. físico', valor: (p: ProdutoEstoque) => p.saldos.fisico },
+        { titulo: 'Est. trânsito', valor: (p: ProdutoEstoque) => p.saldos.transito }, { titulo: 'Origem', valor: (p: ProdutoEstoque) => (p.origemFiscal != null ? ORIGEM_CURTA[p.origemFiscal] ?? p.origemFiscal : ''), largura: 14 },
+        { titulo: 'Ref. fabricante', valor: (p: ProdutoEstoque) => p.referenciaFabricante ?? '', largura: 16 },
+      ];
+      if (tipo === 'xlsx') return exportarExcel('Estoque_por_produto_ViaPro', [{ nome: 'Estoque', colunas: cols, linhas: produtos }]);
+      return exportarPDF({ arquivo: 'Estoque_por_produto_ViaPro', titulo: 'Estoque por produto', colunas: cols, linhas: produtos, resumo: [`${produtos.length} produtos`] });
+    }
+    const cols = [
+      { titulo: 'Produto', valor: (e: EstoqueT) => e.produto.nome, largura: 45 },
+      { titulo: 'SKU', valor: (e: EstoqueT) => e.produto.sku },
+      { titulo: 'Qtd. atual', valor: (e: EstoqueT) => e.quantidade },
+      { titulo: 'Qtd. mínima', valor: (e: EstoqueT) => estoqueMinimo(e.produto) },
+      { titulo: 'Alerta', valor: (e: EstoqueT) => (e.status === 'Disponível' && e.quantidade <= estoqueMinimo(e.produto) ? 'ESTOQUE CRÍTICO' : 'OK'), largura: 18 },
+      { titulo: 'Status', valor: (e: EstoqueT) => e.status, largura: 16 },
+      { titulo: 'Endereço', valor: (e: EstoqueT) => endereco(e) || '-', largura: 14 },
+      { titulo: 'Lote', valor: (e: EstoqueT) => e.lote || '-', largura: 14 },
+    ];
+    if (tipo === 'xlsx') return exportarExcel('Inventario_ViaPro', [{ nome: 'Armazém', colunas: cols, linhas }]);
+    return exportarPDF({
+      arquivo: 'Inventario_ViaPro', titulo: 'Armazém e inventário', colunas: cols, linhas,
+      resumo: [`${resumo.skus} SKUs`, `${numero(resumo.unidades)} unidades`, `${resumo.criticos} abaixo do mínimo`],
+      destacar: (e, col) => (col === 2 && e.status === 'Disponível' ? (e.quantidade <= estoqueMinimo(e.produto) ? VERMELHO : VERDE) : col === 5 && e.status !== 'Disponível' ? LARANJA : undefined),
+    });
+  }
 
   if (carregando && !dados) return <Loading />;
 
@@ -137,17 +176,11 @@ export default function Estoque() {
     <>
       <PageHeader
         titulo="Estoque"
-        descricao="Saldos por produto e situação. Use “Movimentar” para entradas, saídas, ajustes, demonstrações e avarias."
+        descricao="Clique num item para abrir a ficha: saldos, lotes por endereço, picking, EANs e dimensões."
         acoes={<>
-          <button className="btn" onClick={() => exportarExcel('Inventario_ViaPro', [{ nome: 'Armazém', colunas: exportCols, linhas }])}><IoDownloadOutline /> Excel</button>
-          <button className="btn" onClick={() => exportarPDF({
-            arquivo: 'Inventario_ViaPro', titulo: 'Armazém e inventário', colunas: exportCols, linhas,
-            resumo: [`${resumo.skus} SKUs`, `${numero(resumo.unidades)} unidades`, `${resumo.criticos} abaixo do mínimo`],
-            destacar: (e, col) => (col === 2 && e.status === 'Disponível' ? (e.quantidade <= estoqueMinimo(e.produto) ? VERMELHO : VERDE) : col === 5 && e.status !== 'Disponível' ? LARANJA : undefined),
-          })}><IoDocumentTextOutline /> PDF</button>
-          <button className="btn" onClick={() => setTransferir('nova')}><IoGitCompareOutline /> Transferir</button>
-          <button className="btn" onClick={() => setProduzir(true)}><IoConstructOutline /> Produzir lote</button>
-          <button className="btn btn--primary" onClick={() => setEntrada(true)}><IoEnterOutline /> Nova entrada</button>
+          <button className="btn" onClick={() => exportar('xlsx')}><IoDownloadOutline /> Excel</button>
+          <button className="btn" onClick={() => exportar('pdf')}><IoDocumentTextOutline /> PDF</button>
+          <button className="btn btn--primary" onClick={() => navigate('/movimentacoes')}><IoEnterOutline /> Entrada e saída</button>
         </>}
       />
 
@@ -168,12 +201,12 @@ export default function Estoque() {
 
       <Panel flush>
         <div className="toolbar">
-          <Segmented<Aba> valor={aba} onChange={setAba} opcoes={(['Disponível', 'Em Demonstração', 'Ruptura', ...(contagem['Sobra sem NF'] || aba === 'Sobra sem NF' ? ['Sobra sem NF'] : []), 'Todos'] as Aba[]).map(a => ({ valor: a, label: a === 'Ruptura' ? 'Avarias' : a === 'Em Demonstração' ? 'Demonstração' : a, n: contagem[a] || 0 }))} />
-          <SearchInput value={busca} onChange={setBusca} placeholder="Nome, SKU, código de barras, endereço ou lote" />
-          <select className="select" value={armazemId} onChange={e => setArmazemId(e.target.value)} aria-label="Armazém">
+          <Segmented<Visao> valor={visao} onChange={v => setParam('visao', v === 'produto' ? null : v)} opcoes={[{ valor: 'produto', label: 'Por produto', n: produtos.length }, { valor: 'lote', label: 'Por lote e endereço' }]} />
+          <SearchInput value={busca} onChange={setBusca} placeholder={visao === 'produto' ? 'Código, descrição, fabricante, EAN ou referência' : 'Nome, SKU, código de barras, endereço ou lote'} />
+          {visao === 'lote' && <select className="select" value={armazemId} onChange={e => setArmazemId(e.target.value)} aria-label="Armazém">
             <option value="">Todos os armazéns</option>
             {armazens.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
-          </select>
+          </select>}
           <select className="select" value={categoria} onChange={e => setCategoria(e.target.value)} aria-label="Categoria">
             <option value="">Todas as categorias</option>
             {dados?.categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
@@ -184,170 +217,38 @@ export default function Estoque() {
             <option value="zerado">Saldo zerado</option>
           </select>
         </div>
-        <DataTable
-          colunas={colunas} linhas={linhas} chave={e => e.id} ordemInicial={{ key: 'produto', dir: 'asc' }}
-          acoes={e => (
-            <div className="row" style={{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
-              {e.status === 'Sobra sem NF'
-                ? <button className="btn btn--sm" onClick={() => navigate('/divergencias')} title="Sobra sem nota: regularize por nova NF, devolução ou ajuste aprovado">Regularizar</button>
-                : <button className="btn btn--sm" onClick={() => setMovimentar(e)}><IoSwapVerticalOutline /> Movimentar</button>}
-              {e.status === 'Disponível' && e.quantidade > 0 && armazens.length > 1 && <button className="icon-btn" title="Transferir para outro armazém" aria-label="Transferir" onClick={() => setTransferir(e)}><IoGitCompareOutline /></button>}
-              <button className="icon-btn" title="Kardex do produto" aria-label="Kardex do produto" onClick={() => navigate(`/kardex/${e.produtoId}`)}><IoReceiptOutline /></button>
-            </div>
-          )}
-        />
+        {visao === 'lote' && (
+          <div className="toolbar toolbar--sub">
+            <Segmented<Aba> valor={aba} onChange={setAba} opcoes={(['Disponível', 'Em Demonstração', 'Ruptura', ...(contagem['Sobra sem NF'] || aba === 'Sobra sem NF' ? ['Sobra sem NF'] : []), 'Todos'] as Aba[]).map(a => ({ valor: a, label: a === 'Ruptura' ? 'Avarias' : a === 'Em Demonstração' ? 'Demonstração' : a, n: contagem[a] || 0 }))} />
+          </div>
+        )}
+        {visao === 'produto' ? (
+          <DataTable colunas={colProduto} linhas={produtos} chave={p => p.id} ordemInicial={{ key: 'nome', dir: 'asc' }} onLinha={p => abrirFicha(p.id)} />
+        ) : (
+          <DataTable
+            colunas={colLote} linhas={linhas} chave={e => e.id} ordemInicial={{ key: 'produto', dir: 'asc' }} onLinha={e => abrirFicha(e.produtoId)}
+            acoes={e => (
+              <div className="row" style={{ justifyContent: 'flex-end', flexWrap: 'nowrap' }} onClick={ev => ev.stopPropagation()}>
+                {e.status === 'Sobra sem NF'
+                  ? <button className="btn btn--sm" onClick={() => navigate('/divergencias')} title="Sobra sem nota: regularize por nova NF, devolução ou ajuste aprovado">Regularizar</button>
+                  : <button className="btn btn--sm" onClick={() => setMovimentar(e)}><IoSwapVerticalOutline /> Movimentar</button>}
+                {e.status === 'Disponível' && e.quantidade > 0 && armazens.length > 1 && <button className="icon-btn" title="Transferir para outro armazém" aria-label="Transferir" onClick={() => setTransferir(e)}><IoGitCompareOutline /></button>}
+                <button className="icon-btn" title="Kardex do produto" aria-label="Kardex do produto" onClick={() => navigate(`/kardex/${e.produtoId}`)}><IoReceiptOutline /></button>
+              </div>
+            )}
+          />
+        )}
       </Panel>
 
+      {ficha && <FichaItem produtoId={ficha} onFechar={() => abrirFicha(null)} onMudou={() => recarregar(true)} onKardex={() => navigate(`/kardex/${ficha}`)} />}
       {movimentar && usuario && (
         <ModalMovimento item={movimentar} usuarioId={usuario.id} onFechar={() => setMovimentar(null)} onSalvo={() => { setMovimentar(null); recarregar(true); }} />
       )}
-      {entrada && dados && <ModalEntrada produtos={dados.produtos} armazens={armazens} padraoId={armazemId || padraoId} onFechar={() => setEntrada(false)} onSalvo={() => { setEntrada(false); recarregar(true); }} />}
       {transferir && dados && armazens.length > 0 && (
         <ModalTransferencia produtos={dados.produtos} armazens={armazens}
-          inicial={transferir === 'nova' ? { origemId: armazemId || undefined } : { produto: transferir.produto, origemId: transferir.armazemId ?? undefined, lote: transferir.lote }}
+          inicial={{ produto: transferir.produto, origemId: transferir.armazemId ?? undefined, lote: transferir.lote }}
           onFechar={() => setTransferir(null)} onSalvo={() => { setTransferir(null); recarregar(true); }} />
       )}
-      {produzir && usuario && dados && (
-        <ModalProducao produtos={dados.produtos} estoque={dados.estoque} usuarioId={usuario.id} armazens={armazens} armazemInicial={armazemId || padraoId} onFechar={() => setProduzir(false)} onSalvo={() => { setProduzir(false); recarregar(true); }} />
-      )}
     </>
-  );
-}
-
-function ModalMovimento({ item, usuarioId, onFechar, onSalvo }: { item: EstoqueT; usuarioId: string; onFechar: () => void; onSalvo: () => void }) {
-  const opcoes = OPERACOES.filter(o => !o.status || o.status.includes(item.status));
-  const [tipo, setTipo] = useState(item.status === 'Em Demonstração' ? 'Retorno de demonstração' : 'Entrada de mercadoria');
-  const [qtd, setQtd] = useState('');
-  const [obs, setObs] = useState('');
-  const [salvando, setSalvando] = useState(false);
-  const n = Number(qtd) || 0;
-  const saldoDepois = SOMA.includes(tipo) ? item.quantidade + n : item.quantidade - n;
-
-  async function salvar(e: FormEvent) {
-    e.preventDefault();
-    if (n <= 0) return toast.warn('Informe uma quantidade válida.');
-    setSalvando(true);
-    try {
-      await api.post('/movimentacoes/operacao', { produtoId: item.produtoId, usuarioId, estoqueId: item.id, quantidade: n, tipoAcao: tipo, observacao: obs });
-      toast.success('Movimentação registrada.');
-      onSalvo();
-    } catch (err) {
-      toast.error(msgErro(err));
-    } finally {
-      setSalvando(false);
-    }
-  }
-
-  return (
-    <Modal
-      aberto onFechar={onFechar} tamanho="md" titulo="Movimentar estoque"
-      descricao={<>{item.produto.nome} · saldo {item.status.toLowerCase()}: <b>{numero(item.quantidade)}</b></>}
-      rodape={<>
-        <button className="btn" onClick={onFechar}>Cancelar</button>
-        <button className="btn btn--primary" form="form-mov" disabled={salvando}>{salvando ? 'Registrando…' : 'Registrar movimentação'}</button>
-      </>}
-    >
-      <form id="form-mov" onSubmit={salvar} className="stack">
-        <div className="tiles" role="group" aria-label="Tipo de movimentação">
-          {opcoes.map(o => (
-            <button type="button" key={o.valor} className="tile" data-tone={o.tom} aria-pressed={tipo === o.valor} onClick={() => setTipo(o.valor)}>
-              {o.icone}{o.label}<small>{o.dica}</small>
-            </button>
-          ))}
-        </div>
-        <div className="form-grid">
-          <Field label="Quantidade" className="col-4">
-            <input className="input input--lg" type="number" min={1} inputMode="numeric" value={qtd} onChange={e => setQtd(e.target.value)} required autoFocus />
-          </Field>
-          <Field label="Motivo ou observação" className="col-8">
-            <input className="input input--lg" style={{ fontSize: 15, fontWeight: 400 }} value={obs} onChange={e => setObs(e.target.value)} placeholder="Ex.: devolução de cliente, erro de contagem" />
-          </Field>
-        </div>
-        {n > 0 && (
-          <Notice tom={saldoDepois < 0 ? 'bad' : 'info'}>
-            {saldoDepois < 0 ? 'Quantidade maior que o saldo desta linha.' : <>Saldo desta linha após a operação: <b>{numero(saldoDepois)}</b></>}
-          </Notice>
-        )}
-      </form>
-    </Modal>
-  );
-}
-
-function ModalProducao({ produtos, estoque, usuarioId, armazens, armazemInicial, onFechar, onSalvo }: {
-  produtos: Produto[]; estoque: EstoqueT[]; usuarioId: string; armazens: Armazem[]; armazemInicial: string; onFechar: () => void; onSalvo: () => void;
-}) {
-  const [armazemId, setArmazemId] = useState(armazemInicial);
-  const [lote, setLote] = useState('');
-  const [validade, setValidade] = useState('');
-  const [produtoId, setProdutoId] = useState('');
-  const [qtd, setQtd] = useState('1');
-  const [salvando, setSalvando] = useState(false);
-  const comReceita = produtos.filter(p => p.tipo === 'ACABADO').sort((a, b) => a.nome.localeCompare(b.nome));
-  const produto = produtos.find(p => p.id === produtoId);
-  const n = Number(qtd) || 0;
-  const saldo = (id: string) => estoque.filter(e => e.produtoId === id && e.status === 'Disponível' && (!armazemId || e.armazemId === armazemId)).reduce((a, e) => a + e.quantidade, 0);
-  const necessidades = (produto?.ingredientes || []).map(i => ({
-    nome: i.produtoFilho?.nome || '-', sku: i.produtoFilho?.sku || '-', necessario: i.quantidade * n, disponivel: saldo(i.produtoFilhoId),
-  }));
-  const falta = necessidades.some(x => x.disponivel < x.necessario);
-
-  async function executar(e: FormEvent) {
-    e.preventDefault();
-    if (!produtoId) return toast.warn('Selecione o produto que deseja fabricar.');
-    if (n <= 0) return toast.warn('A quantidade deve ser maior que zero.');
-    setSalvando(true);
-    try {
-      const r = await api.post('/producao/executar', { produtoFinalId: produtoId, quantidadeProduzir: n, usuarioId, armazemId, lote: lote || undefined, validade: validade || undefined });
-      toast.success(r.data.mensagem || 'Lote produzido. Matéria-prima baixada.');
-      onSalvo();
-    } catch (err) {
-      toast.error(msgErro(err, 'Erro ao executar produção.'));
-    } finally {
-      setSalvando(false);
-    }
-  }
-
-  return (
-    <Modal
-      aberto onFechar={onFechar} tamanho="md" titulo="Ordem de produção interna"
-      descricao="O sistema baixa as matérias-primas conforme a receita cadastrada no produto e dá entrada no produto acabado."
-      rodape={<>
-        <button className="btn" onClick={onFechar}>Cancelar</button>
-        <button className="btn btn--primary" form="form-prod" disabled={salvando || falta || !produto?.ingredientes?.length}>{salvando ? 'Produzindo…' : 'Executar produção'}</button>
-      </>}
-    >
-      <form id="form-prod" onSubmit={executar} className="stack">
-        <div className="form-grid">
-          <Field label="Produto final" className="col-8">
-            <select className="select" value={produtoId} onChange={e => setProdutoId(e.target.value)} required>
-              <option value="">Selecione…</option>
-              {comReceita.map(p => <option key={p.id} value={p.id}>[{p.sku}] {p.nome}{p.ingredientes?.length ? '' : ' (sem receita)'}</option>)}
-            </select>
-          </Field>
-          <Field label="Quantidade a produzir" className="col-4">
-            <input className="input" type="number" min={1} value={qtd} onChange={e => setQtd(e.target.value)} required />
-          </Field>
-          <SelectArmazem armazens={armazens} value={armazemId} onChange={setArmazemId} className="col-4" />
-          <Field label="Lote do produto final" className="col-4"><input className="input" value={lote} onChange={e => setLote(e.target.value.toUpperCase())} placeholder="Opcional" /></Field>
-          <Field label="Validade" className="col-4"><input className="input" type="date" value={validade} onChange={e => setValidade(e.target.value)} /></Field>
-        </div>
-        {produto && !produto.ingredientes?.length && <Notice tom="warn">Este produto não tem receita. Cadastre a receita em Produtos → Editar.</Notice>}
-        {necessidades.length > 0 && (
-          <table className="table">
-            <thead><tr><th>Matéria-prima</th><th className="num">Necessário</th><th className="num">Disponível</th></tr></thead>
-            <tbody>
-              {necessidades.map(x => (
-                <tr key={x.sku}>
-                  <td><div className="cell-title">{x.nome}</div><div className="cell-sub"><Code>{x.sku}</Code></div></td>
-                  <td className="num">{numero(x.necessario)}</td>
-                  <td className={`num qty ${x.disponivel < x.necessario ? 'qty--bad' : 'qty--ok'}`}>{numero(x.disponivel)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        {falta && <Notice tom="bad">Saldo insuficiente de matéria-prima para esta quantidade.</Notice>}
-      </form>
-    </Modal>
   );
 }

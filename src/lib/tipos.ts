@@ -8,7 +8,7 @@ export interface Fornecedor {
   prazoPagamentoDias?: number | null;
   _count?: { produtos: number; pedidosCompra: number };
 }
-export interface Localizacao { id: string; codigo: string; zona: string; corredor: string; prateleira: string; armazemId?: string | null; armazem?: Armazem | null }
+export interface Localizacao { id: string; codigo: string; zona: string; corredor: string; prateleira: string; armazemId?: string | null; armazem?: Armazem | null; tipo?: string | null; ativo?: boolean }
 export interface UsuarioResumo { id: string; nome: string; cargo: string; email?: string }
 
 export interface Composicao { id: string; produtoFilhoId: string; quantidade: number; produtoFilho?: Produto }
@@ -20,6 +20,9 @@ export interface Produto {
   fornecedorId?: string | null; fornecedor?: Fornecedor | null; categoriaId: string; categoria?: Categoria | null;
   ingredientes?: Composicao[];
   ncm?: string | null; cest?: string | null; origemFiscal?: number | null; cfopPadrao?: string | null;
+  // ✨ FASE 11: ficha do item
+  fabricante?: string | null; linha?: string | null; referenciaFabricante?: string | null; embalagem?: number | null;
+  eans?: { codigo: string; embalagem: number }[];
 }
 
 export interface Estoque {

@@ -1,10 +1,14 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { toast } from 'react-toastify';
+import {
+  IoArrowDownCircleOutline, IoArrowUpCircleOutline, IoRepeatOutline, IoAddCircleOutline, IoRemoveCircleOutline, IoHandRightOutline,
+  IoWarningOutline, IoReturnDownBackOutline,
+} from 'react-icons/io5';
 import { api, msgErro } from '../lib/api';
 import { dataUTC, numero } from '../lib/format';
 import { rotuloLote } from '../lib/regras';
-import type { Armazem, Produto } from '../lib/tipos';
+import type { Armazem, Estoque as EstoqueT, Produto } from '../lib/tipos';
 import { ProdutoPicker } from './ProdutoPicker';
 import { Badge, Code, Field, Modal, Notice } from './ui';
 
@@ -29,7 +33,7 @@ export function SelectArmazem({ armazens, value, onChange, todos, label = 'Armaz
   );
 }
 
-interface LoteDisp { estoqueId: string; lote: string | null; validade: string | null; quantidade: number }
+export interface LoteDisp { estoqueId: string; lote: string | null; validade: string | null; quantidade: number; endereco?: string | null }
 
 /** Lotes disponíveis de um produto num armazém, na ordem FEFO. */
 export function useLotes(produtoId?: string, armazemId?: string) {
@@ -141,6 +145,158 @@ export function ModalTransferencia({ produtos, armazens, inicial, onFechar, onSa
             <div className="row">{lotes.map((l, i) => <Badge key={l.estoqueId} tom={i === 0 ? 'primary' : undefined} plain>{rotuloLote(l.lote)} · {numero(l.quantidade)} · {dataUTC(l.validade)}</Badge>)}</div>
           </div>
         )}
+      </form>
+    </Modal>
+  );
+}
+
+// ------------------------------------------------------------ movimentação de uma linha (demonstração, avaria, retorno…)
+export const OPERACOES: { valor: string; label: string; dica: string; icone: ReactNode; tom: 'in' | 'out' | 'neutral'; status?: string[] }[] = [
+  { valor: 'Entrada de mercadoria', label: 'Entrada', dica: 'Recebimento avulso', icone: <IoArrowDownCircleOutline />, tom: 'in' },
+  { valor: 'Devolução VIAPRO', label: 'Devolução VIAPRO', dica: 'Retorno da indústria', icone: <IoRepeatOutline />, tom: 'in' },
+  { valor: 'Ajuste de Entrada de Inventário', label: 'Ajuste (+)', dica: 'Correção de contagem', icone: <IoAddCircleOutline />, tom: 'neutral' },
+  { valor: 'Saída de mercadoria', label: 'Saída', dica: 'Retirada avulsa', icone: <IoArrowUpCircleOutline />, tom: 'out' },
+  { valor: 'Saída para demonstração', label: 'Demonstração', dica: 'Fica sob sua responsabilidade', icone: <IoHandRightOutline />, tom: 'out' },
+  { valor: 'Ajuste de Saída de Inventário', label: 'Ajuste (−)', dica: 'Correção de contagem', icone: <IoRemoveCircleOutline />, tom: 'neutral' },
+  { valor: 'Perdas/Avarias', label: 'Perda / avaria', dica: 'Vai para o painel de perdas', icone: <IoWarningOutline />, tom: 'out' },
+  { valor: 'Retorno de demonstração', label: 'Retorno de demonstração', dica: 'Volta ao saldo disponível', icone: <IoReturnDownBackOutline />, tom: 'in', status: ['Em Demonstração'] },
+];
+const SOMA = ['Entrada de mercadoria', 'Devolução VIAPRO', 'Ajuste de Entrada de Inventário'];
+
+export function ModalMovimento({ item, usuarioId, onFechar, onSalvo }: { item: EstoqueT; usuarioId: string; onFechar: () => void; onSalvo: () => void }) {
+  const opcoes = OPERACOES.filter(o => !o.status || o.status.includes(item.status));
+  const [tipo, setTipo] = useState(item.status === 'Em Demonstração' ? 'Retorno de demonstração' : 'Entrada de mercadoria');
+  const [qtd, setQtd] = useState('');
+  const [obs, setObs] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const n = Number(qtd) || 0;
+  const saldoDepois = SOMA.includes(tipo) ? item.quantidade + n : item.quantidade - n;
+
+  async function salvar(e: FormEvent) {
+    e.preventDefault();
+    if (n <= 0) return toast.warn('Informe uma quantidade válida.');
+    setSalvando(true);
+    try {
+      await api.post('/movimentacoes/operacao', { produtoId: item.produtoId, usuarioId, estoqueId: item.id, quantidade: n, tipoAcao: tipo, observacao: obs });
+      toast.success('Movimentação registrada.');
+      onSalvo();
+    } catch (err) {
+      toast.error(msgErro(err));
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <Modal
+      aberto onFechar={onFechar} tamanho="md" titulo="Movimentar estoque"
+      descricao={<>{item.produto.nome} · saldo {item.status.toLowerCase()}: <b>{numero(item.quantidade)}</b></>}
+      rodape={<>
+        <button className="btn" onClick={onFechar}>Cancelar</button>
+        <button className="btn btn--primary" form="form-mov" disabled={salvando}>{salvando ? 'Registrando…' : 'Registrar movimentação'}</button>
+      </>}
+    >
+      <form id="form-mov" onSubmit={salvar} className="stack">
+        <div className="tiles" role="group" aria-label="Tipo de movimentação">
+          {opcoes.map(o => (
+            <button type="button" key={o.valor} className="tile" data-tone={o.tom} aria-pressed={tipo === o.valor} onClick={() => setTipo(o.valor)}>
+              {o.icone}{o.label}<small>{o.dica}</small>
+            </button>
+          ))}
+        </div>
+        <div className="form-grid">
+          <Field label="Quantidade" className="col-4">
+            <input className="input input--lg" type="number" min={1} inputMode="numeric" value={qtd} onChange={e => setQtd(e.target.value)} required autoFocus />
+          </Field>
+          <Field label="Motivo ou observação" className="col-8">
+            <input className="input input--lg" style={{ fontSize: 15, fontWeight: 400 }} value={obs} onChange={e => setObs(e.target.value)} placeholder="Ex.: devolução de cliente, erro de contagem" />
+          </Field>
+        </div>
+        {n > 0 && (
+          <Notice tom={saldoDepois < 0 ? 'bad' : 'info'}>
+            {saldoDepois < 0 ? 'Quantidade maior que o saldo desta linha.' : <>Saldo desta linha após a operação: <b>{numero(saldoDepois)}</b></>}
+          </Notice>
+        )}
+      </form>
+    </Modal>
+  );
+}
+
+/** Ordem de produção interna pela receita (composição) do produto. */
+export function ModalProducao({ produtos, estoque, usuarioId, armazens, armazemInicial, onFechar, onSalvo }: {
+  produtos: Produto[]; estoque: EstoqueT[]; usuarioId: string; armazens: Armazem[]; armazemInicial: string; onFechar: () => void; onSalvo: () => void;
+}) {
+  const [armazemId, setArmazemId] = useState(armazemInicial);
+  const [lote, setLote] = useState('');
+  const [validade, setValidade] = useState('');
+  const [produtoId, setProdutoId] = useState('');
+  const [qtd, setQtd] = useState('1');
+  const [salvando, setSalvando] = useState(false);
+  const comReceita = produtos.filter(p => p.tipo === 'ACABADO').sort((a, b) => a.nome.localeCompare(b.nome));
+  const produto = produtos.find(p => p.id === produtoId);
+  const n = Number(qtd) || 0;
+  const saldo = (id: string) => estoque.filter(e => e.produtoId === id && e.status === 'Disponível' && (!armazemId || e.armazemId === armazemId)).reduce((a, e) => a + e.quantidade, 0);
+  const necessidades = (produto?.ingredientes || []).map(i => ({
+    nome: i.produtoFilho?.nome || '-', sku: i.produtoFilho?.sku || '-', necessario: i.quantidade * n, disponivel: saldo(i.produtoFilhoId),
+  }));
+  const falta = necessidades.some(x => x.disponivel < x.necessario);
+
+  async function executar(e: FormEvent) {
+    e.preventDefault();
+    if (!produtoId) return toast.warn('Selecione o produto que deseja fabricar.');
+    if (n <= 0) return toast.warn('A quantidade deve ser maior que zero.');
+    setSalvando(true);
+    try {
+      const r = await api.post('/producao/executar', { produtoFinalId: produtoId, quantidadeProduzir: n, usuarioId, armazemId, lote: lote || undefined, validade: validade || undefined });
+      toast.success(r.data.mensagem || 'Lote produzido. Matéria-prima baixada.');
+      onSalvo();
+    } catch (err) {
+      toast.error(msgErro(err, 'Erro ao executar produção.'));
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <Modal
+      aberto onFechar={onFechar} tamanho="md" titulo="Ordem de produção interna"
+      descricao="O sistema baixa as matérias-primas conforme a receita cadastrada no produto e dá entrada no produto acabado."
+      rodape={<>
+        <button className="btn" onClick={onFechar}>Cancelar</button>
+        <button className="btn btn--primary" form="form-prod" disabled={salvando || falta || !produto?.ingredientes?.length}>{salvando ? 'Produzindo…' : 'Executar produção'}</button>
+      </>}
+    >
+      <form id="form-prod" onSubmit={executar} className="stack">
+        <div className="form-grid">
+          <Field label="Produto final" className="col-8">
+            <select className="select" value={produtoId} onChange={e => setProdutoId(e.target.value)} required>
+              <option value="">Selecione…</option>
+              {comReceita.map(p => <option key={p.id} value={p.id}>[{p.sku}] {p.nome}{p.ingredientes?.length ? '' : ' (sem receita)'}</option>)}
+            </select>
+          </Field>
+          <Field label="Quantidade a produzir" className="col-4">
+            <input className="input" type="number" min={1} value={qtd} onChange={e => setQtd(e.target.value)} required />
+          </Field>
+          <SelectArmazem armazens={armazens} value={armazemId} onChange={setArmazemId} className="col-4" />
+          <Field label="Lote do produto final" className="col-4"><input className="input" value={lote} onChange={e => setLote(e.target.value.toUpperCase())} placeholder="Opcional" /></Field>
+          <Field label="Validade" className="col-4"><input className="input" type="date" value={validade} onChange={e => setValidade(e.target.value)} /></Field>
+        </div>
+        {produto && !produto.ingredientes?.length && <Notice tom="warn">Este produto não tem receita. Cadastre a receita em Produtos → Editar.</Notice>}
+        {necessidades.length > 0 && (
+          <table className="table">
+            <thead><tr><th>Matéria-prima</th><th className="num">Necessário</th><th className="num">Disponível</th></tr></thead>
+            <tbody>
+              {necessidades.map(x => (
+                <tr key={x.sku}>
+                  <td><div className="cell-title">{x.nome}</div><div className="cell-sub"><Code>{x.sku}</Code></div></td>
+                  <td className="num">{numero(x.necessario)}</td>
+                  <td className={`num qty ${x.disponivel < x.necessario ? 'qty--bad' : 'qty--ok'}`}>{numero(x.disponivel)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {falta && <Notice tom="bad">Saldo insuficiente de matéria-prima para esta quantidade.</Notice>}
       </form>
     </Modal>
   );

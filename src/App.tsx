@@ -9,6 +9,7 @@ import Login from './pages/Login';
 // Cada tela é carregada sob demanda (o app abre mais rápido, principalmente no celular).
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Estoque = lazy(() => import('./pages/Estoque'));
+const Movimentacoes = lazy(() => import('./pages/Movimentacoes'));
 const Separacao = lazy(() => import('./pages/Separacao'));
 const Layout = lazy(() => import('./pages/wms/Layout'));
 const Ondas = lazy(() => import('./pages/wms/Ondas'));
@@ -56,6 +57,7 @@ function Rotas() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/estoque" element={<Estoque />} />
+            <Route path="/movimentacoes" element={<Movimentacoes />} />
             <Route path="/separacao" element={<Separacao />} />
             <Route path="/ondas" element={<Ondas />} />
             <Route path="/layout" element={<Layout />} />

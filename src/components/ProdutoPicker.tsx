@@ -9,6 +9,7 @@ export interface ProdutoBasico {
   nome: string;
   codigoBarras?: string | null;
   enderecoLocalizacao?: string | null;
+  eans?: { codigo: string }[];
 }
 
 /**
@@ -25,7 +26,7 @@ export function ProdutoPicker<P extends ProdutoBasico>({ produtos, onSelecionar,
   const [ativo, setAtivo] = useState(0);
 
   const sugestoes = useMemo(
-    () => (termo.trim() ? produtos.filter(p => contem(termo, p.nome, p.sku, p.codigoBarras)).slice(0, 12) : []),
+    () => (termo.trim() ? produtos.filter(p => contem(termo, p.nome, p.sku, p.codigoBarras, ...(p.eans ?? []).map(e => e.codigo))).slice(0, 12) : []),
     [termo, produtos],
   );
 
@@ -43,7 +44,7 @@ export function ProdutoPicker<P extends ProdutoBasico>({ produtos, onSelecionar,
     if (e.key === 'Enter') {
       e.preventDefault();
       const t = normalizar(termo.trim());
-      const exato = produtos.find(p => normalizar(p.codigoBarras) === t || normalizar(p.sku) === t);
+      const exato = produtos.find(p => normalizar(p.codigoBarras) === t || normalizar(p.sku) === t || (p.eans ?? []).some(e => normalizar(e.codigo) === t));
       const alvo = exato ?? sugestoes[ativo];
       if (alvo) escolher(alvo);
     }
