@@ -7,6 +7,8 @@ export const TIPOS_ENTRADA = [
   'Entrada por produção',
   'Retorno de demonstração',
   'Transferência (entrada)',
+  'Estorno de produção (entrada)',
+  'Regularização de sobra (NF)',
 ];
 export const TIPOS_SAIDA = [
   'Saída de mercadoria',
@@ -40,6 +42,7 @@ export function tomStatusEstoque(status: string): Tom {
   if (status === 'Disponível') return 'ok';
   if (status === 'Ruptura') return 'bad';
   if (status === 'Em Demonstração') return 'warn';
+  if (status === 'Sobra sem NF') return 'warn';
   return 'info';
 }
 

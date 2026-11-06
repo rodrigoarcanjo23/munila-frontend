@@ -164,12 +164,15 @@ function Contagem({ id }: { id: string }) {
     const pendentes = (inv?.itens.length ?? 0) - contados;
     const ok = await confirmar({
       titulo: `Concluir ${inv?.codigo}?`, confirmar: 'Concluir e ajustar estoque',
-      mensagem: <>As diferenças entre o contado e o sistema serão lançadas como ajuste de inventário.{pendentes > 0 && <><br /><br /><b>{pendentes} item(ns) sem contagem</b> serão mantidos como estão.</>}</>,
+      mensagem: <>As faltas viram ajuste de inventário. As <b>sobras</b> não entram no saldo disponível: ficam como <b>sobra sem NF</b> até chegar a nota, serem devolvidas ou um gestor aprovar o ajuste.{pendentes > 0 && <><br /><br /><b>{pendentes} item(ns) sem contagem</b> serão mantidos como estão.</>}</>,
     });
     if (!ok) return;
     try {
       const { data } = await api.post(`/inventarios/${id}/concluir`, { usuarioId: usuario?.id });
       toast.success(`Inventário concluído: ${data.ajustes} ajuste(s) lançados.`);
+      // ✨ sobra sem NF: não entra no disponível, abre ocorrência
+      if (data.sobras?.length) toast.warn(`${data.sobras.length} sobra(s) sem NF (${data.unidadesSobra} un) guardadas fora do saldo disponível: ${data.sobras.map((x: { codigo: string; sku: string; quantidade: number }) => `${x.sku} +${x.quantidade}`).join(', ')}. Regularize em Sobras sem NF.`, { autoClose: 12000, onClick: () => navigate('/divergencias') });
+      for (const a of data.avisos ?? []) toast.info(a, { autoClose: 12000 });
       setRevelar(true);
       recarregar(true);
     } catch (e) { toast.error(msgErro(e)); }

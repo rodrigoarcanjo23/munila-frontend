@@ -4,7 +4,7 @@ import {
   IoGridOutline, IoCubeOutline, IoClipboardOutline, IoListOutline, IoLocationOutline, IoTimerOutline, IoWarningOutline,
   IoCartOutline, IoBulbOutline, IoDocumentAttachOutline, IoBusinessOutline, IoFlaskOutline, IoPricetagsOutline,
   IoPieChartOutline, IoShieldCheckmarkOutline, IoSwapHorizontalOutline, IoPeopleOutline, IoMenuOutline,
-  IoSearchOutline, IoLogOutOutline, IoGitCompareOutline, IoWalletOutline, IoTrendingUpOutline, IoReceiptOutline, IoMoonOutline, IoSunnyOutline, IoAnalyticsOutline, IoSpeedometerOutline, IoConstructOutline, IoCalendarOutline, IoLayersOutline, IoCalculatorOutline, IoGitNetworkOutline, IoHammerOutline, IoChevronBackOutline, IoChevronForwardOutline, IoGitMergeOutline, IoMapOutline,
+  IoSearchOutline, IoLogOutOutline, IoGitCompareOutline, IoWalletOutline, IoTrendingUpOutline, IoReceiptOutline, IoMoonOutline, IoSunnyOutline, IoAnalyticsOutline, IoSpeedometerOutline, IoConstructOutline, IoCalendarOutline, IoLayersOutline, IoCalculatorOutline, IoGitNetworkOutline, IoHammerOutline, IoChevronBackOutline, IoChevronForwardOutline, IoGitMergeOutline, IoMapOutline, IoAlertCircleOutline,
 } from 'react-icons/io5';
 import { useAuth } from '../lib/auth';
 import { Marca } from './ui';
@@ -25,6 +25,7 @@ const MENU: Grupo[] = [
       { to: '/ondas', label: 'Ondas de separação', icone: <IoGitMergeOutline /> },
       { to: '/layout', label: 'Mapa e slotting', icone: <IoMapOutline /> },
       { to: '/inventario', label: 'Inventário', icone: <IoListOutline /> },
+      { to: '/divergencias', label: 'Sobras sem NF', icone: <IoAlertCircleOutline /> },
       { to: '/locais', label: 'Endereços', icone: <IoLocationOutline /> },
       { to: '/validade', label: 'Validade', icone: <IoTimerOutline /> },
       { to: '/rupturas', label: 'Perdas e avarias', icone: <IoWarningOutline /> },

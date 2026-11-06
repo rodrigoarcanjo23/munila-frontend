@@ -13,6 +13,7 @@ const Separacao = lazy(() => import('./pages/Separacao'));
 const Layout = lazy(() => import('./pages/wms/Layout'));
 const Ondas = lazy(() => import('./pages/wms/Ondas'));
 const Inventario = lazy(() => import('./pages/Inventario'));
+const Divergencias = lazy(() => import('./pages/Divergencias'));
 const Locais = lazy(() => import('./pages/Locais'));
 const Validade = lazy(() => import('./pages/Validade'));
 const Rupturas = lazy(() => import('./pages/Rupturas'));
@@ -60,6 +61,7 @@ function Rotas() {
             <Route path="/layout" element={<Layout />} />
             <Route path="/inventario" element={<Inventario />} />
             <Route path="/inventario/:id" element={<Inventario />} />
+            <Route path="/divergencias" element={<Divergencias />} />
             <Route path="/locais" element={<Locais />} />
             <Route path="/validade" element={<Validade />} />
             <Route path="/rupturas" element={<Rupturas />} />

@@ -12,6 +12,8 @@ import { Badge, Code, Empty, Field, Kpi, Loading, Notice, PageHeader, Panel, use
 interface ItemNF {
   n: string; lote: string; validade: string; cProd: string; cEAN: string; xProd: string; uCom: string; qCom: number; vUnCom: number; vProd: number;
   produtoId: string; fator: number; automatico: boolean;
+  /** ✨ quantidade contada fisicamente (na unidade do sistema); o que passar da nota vira sobra sem NF */
+  conferido?: string;
 }
 interface Duplicata { numero: string; vencimento: string; valor: number }
 interface NotaFiscal { numero: string; serie: string; emitente: string; cnpj: string; chave: string; emissao: string; valorTotal: number; itens: ItemNF[]; duplicatas: Duplicata[] }
@@ -64,7 +66,7 @@ export default function RecebimentoNFe() {
   const { armazens, padraoId } = useArmazens();
   const [armazemId, setArmazemId] = useState('');
   const [enviando, setEnviando] = useState(false);
-  const [resultado, setResultado] = useState<{ codigo: string; unidades: number } | null>(null);
+  const [resultado, setResultado] = useState<{ codigo: string; unidades: number; sobras?: { codigo: string; sku: string; quantidade: number }[] } | null>(null);
   const { dados: produtos, carregando } = useCarregar(async () => (await api.get<Produto[]>('/produtos')).data);
 
   async function abrirArquivo(file?: File) {
@@ -90,10 +92,11 @@ export default function RecebimentoNFe() {
       const { data } = await api.post('/recebimentos/nfe', {
         usuarioId: usuario?.id, numero: nota.numero, emitente: nota.emitente, cnpjEmitente: nota.cnpj, chave: nota.chave, atualizarCusto,
         armazemId: armazemId || padraoId || undefined, gerarTitulos, duplicatas: nota.duplicatas,
-        itens: vinculados.map(i => ({ produtoId: i.produtoId, quantidade: Math.round(i.qCom * i.fator), custoUnitario: i.fator ? i.vUnCom / i.fator : i.vUnCom, lote: i.lote || undefined, validade: i.validade || undefined })),
+        itens: vinculados.map(i => ({ produtoId: i.produtoId, quantidade: Math.round(i.qCom * i.fator), quantidadeConferida: i.conferido?.trim() ? Math.round(Number(i.conferido)) : undefined, custoUnitario: i.fator ? i.vUnCom / i.fator : i.vUnCom, lote: i.lote || undefined, validade: i.validade || undefined })),
       });
       setResultado(data);
       toast.success(`Entrada ${data.codigo} registrada: ${data.unidades} unidades${data.titulos ? ` e ${data.titulos} título(s) a pagar` : ''}.`);
+      if (data.sobras?.length) toast.warn(`${data.sobras.length} item(ns) com sobra sem NF guardada fora do disponível. Veja em Sobras sem NF.`, { autoClose: 12000 });
     } catch (e) { toast.error(msgErro(e)); } finally { setEnviando(false); }
   }
 
@@ -127,6 +130,7 @@ export default function RecebimentoNFe() {
           </div>
 
           {resultado && <div className="mb-16"><Notice tom="ok">Entrada <b>{resultado.codigo}</b> registrada com {numero(resultado.unidades)} unidades. Consulte em Auditoria ou no Kardex de cada produto.</Notice></div>}
+          {resultado?.sobras?.length ? <div className="mb-16"><Notice tom="warn">Sobra sem NF: {resultado.sobras.map(x => `${x.sku} +${x.quantidade} (${x.codigo})`).join(', ')}. Essas unidades ficaram fora do saldo disponível até a nota chegar ou serem devolvidas.</Notice></div> : null}
 
           <Panel flush titulo="Itens da nota" descricao="Confira o vínculo de cada item. Use o fator quando o fornecedor vende em caixa (ex.: 1 CX = 12 UN)."
             acoes={<>
@@ -139,7 +143,7 @@ export default function RecebimentoNFe() {
             {nota.itens.length === 0 ? <Empty titulo="A nota não tem itens" /> : (
               <div className="table-wrap">
                 <table className="table table--cards">
-                  <thead><tr><th>#</th><th>Item na nota</th><th>Lote / validade</th><th className="num">Qtd. nota</th><th className="num">Unitário</th><th>Produto no sistema</th><th className="num">Fator</th><th className="num">Entra no estoque</th></tr></thead>
+                  <thead><tr><th>#</th><th>Item na nota</th><th>Lote / validade</th><th className="num">Qtd. nota</th><th className="num">Unitário</th><th>Produto no sistema</th><th className="num">Fator</th><th className="num">Entra no estoque</th><th className="num">Conferido</th></tr></thead>
                   <tbody>
                     {nota.itens.map(i => (
                       <tr key={i.n}>
@@ -162,6 +166,13 @@ export default function RecebimentoNFe() {
                         </td>
                         <td className="num" data-label="Fator"><input className="input" type="number" min={1} style={{ width: 70, height: 32, textAlign: 'right', marginLeft: 'auto' }} value={i.fator} onChange={e => atualizarItem(i.n, { fator: Math.max(1, Number(e.target.value) || 1) })} aria-label="Fator de conversão" /></td>
                         <td className="num" data-label="Entra"><b>{i.produtoId ? numero(Math.round(i.qCom * i.fator)) : '-'}</b></td>
+                        <td className="num" data-label="Conferido">
+                          {i.produtoId ? <>
+                            <input className="input" type="number" min={0} style={{ width: 84, height: 32, textAlign: 'right', marginLeft: 'auto' }} value={i.conferido ?? ''} placeholder="= nota"
+                              onChange={e => atualizarItem(i.n, { conferido: e.target.value })} aria-label="Quantidade conferida fisicamente" />
+                            {Number(i.conferido) > Math.round(i.qCom * i.fator) && <div className="cell-sub" style={{ color: 'var(--warn)', fontWeight: 600 }}>+{numero(Number(i.conferido) - Math.round(i.qCom * i.fator))} sobra sem NF</div>}
+                          </> : '-'}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

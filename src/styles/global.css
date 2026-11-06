@@ -569,3 +569,36 @@ a.btn { text-decoration: none; }
   body { background: #fff; }
 }
 .produtos-pendencia { padding: 12px 12px 0; }
+
+/* ==========================================================================
+   ✨ Divergências: sobra sem NF
+   ========================================================================== */
+.dv-resumo { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.dv-resumo > div { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; background: var(--surface); }
+.dv-resumo span { font-size: 12px; color: var(--text-3); }
+.dv-resumo b { font: 700 22px var(--font-cond); }
+.dv-resumo .is-sobra { background: var(--warn-soft); }
+.dv-resumo .is-sobra b { color: var(--warn); }
+.dv-dados { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-size: 13.5px; }
+.dv-dados dt { color: var(--text-3); }
+.dv-rotulo { font-weight: 600; font-size: 13px; color: var(--text-2); }
+.dv-opcoes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.dv-opcao { display: flex; gap: 10px; align-items: flex-start; text-align: left; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); color: inherit; font: inherit; cursor: pointer; }
+.dv-opcao:hover:not(:disabled) { border-color: var(--primary); }
+.dv-opcao[aria-checked='true'] { border-color: var(--primary); background: var(--primary-soft); box-shadow: inset 0 0 0 1px var(--primary); }
+.dv-opcao:disabled { opacity: .55; cursor: not-allowed; }
+.dv-opcao > span:last-child { display: flex; flex-direction: column; gap: 2px; }
+.dv-opcao small { font-size: 12px; color: var(--text-2); line-height: 1.35; }
+.dv-opcao__icone { display: grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 8px; background: var(--muted-soft); color: var(--primary); font-size: 17px; }
+.dv-opcao[aria-checked='true'] .dv-opcao__icone { background: var(--primary); color: var(--on-primary); }
+@media (max-width: 719px) {
+  .dv-resumo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dv-opcoes { grid-template-columns: 1fr; }
+}
+
+/* divergências: inventários concluídos antes da regra de sobra sem NF */
+.dv-invs { display: flex; flex-direction: column; gap: 8px; }
+.dv-inv { display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); color: inherit; font: inherit; cursor: pointer; }
+.dv-inv:hover { border-color: var(--primary); background: var(--primary-soft); }
+.dv-inv small { color: var(--text-3); font-size: 12px; }
+.dv-inv b { font-size: 13px; color: var(--warn); }

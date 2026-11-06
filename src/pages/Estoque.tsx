@@ -18,7 +18,7 @@ import { dataUTC } from '../lib/format';
 import { DataTable, type Col } from '../components/DataTable';
 import { Badge, Code, Field, Kpi, Loading, Loc, Modal, Notice, PageHeader, Panel, SearchInput, Segmented } from '../components/ui';
 
-type Aba = 'Disponível' | 'Em Demonstração' | 'Ruptura' | 'Todos';
+type Aba = 'Disponível' | 'Em Demonstração' | 'Ruptura' | 'Sobra sem NF' | 'Todos';
 type Filtro = 'todos' | 'critico' | 'zerado';
 
 const OPERACOES: { valor: string; label: string; dica: string; icone: ReactNode; tom: 'in' | 'out' | 'neutral'; status?: string[] }[] = [
@@ -88,7 +88,7 @@ export default function Estoque() {
     skus: produtosDisp.filter(p => (totalProduto.get(p.id) ?? 0) > 0).length,
     unidades: disponiveis.reduce((a, e) => a + e.quantidade, 0),
     criticos: produtosDisp.filter(p => (totalProduto.get(p.id) ?? 0) <= estoqueMinimo(p)).length,
-    valor: estoque.filter(e => e.status !== 'Ruptura').reduce((a, e) => a + e.quantidade * (e.produto.precoCusto || 0), 0),
+    valor: estoque.filter(e => e.status !== 'Ruptura' && e.status !== 'Sobra sem NF').reduce((a, e) => a + e.quantidade * (e.produto.precoCusto || 0), 0),
   };
 
   function mudarFiltro(f: Filtro) {
@@ -168,7 +168,7 @@ export default function Estoque() {
 
       <Panel flush>
         <div className="toolbar">
-          <Segmented<Aba> valor={aba} onChange={setAba} opcoes={(['Disponível', 'Em Demonstração', 'Ruptura', 'Todos'] as Aba[]).map(a => ({ valor: a, label: a === 'Ruptura' ? 'Avarias' : a === 'Em Demonstração' ? 'Demonstração' : a, n: contagem[a] || 0 }))} />
+          <Segmented<Aba> valor={aba} onChange={setAba} opcoes={(['Disponível', 'Em Demonstração', 'Ruptura', ...(contagem['Sobra sem NF'] || aba === 'Sobra sem NF' ? ['Sobra sem NF'] : []), 'Todos'] as Aba[]).map(a => ({ valor: a, label: a === 'Ruptura' ? 'Avarias' : a === 'Em Demonstração' ? 'Demonstração' : a, n: contagem[a] || 0 }))} />
           <SearchInput value={busca} onChange={setBusca} placeholder="Nome, SKU, código de barras, endereço ou lote" />
           <select className="select" value={armazemId} onChange={e => setArmazemId(e.target.value)} aria-label="Armazém">
             <option value="">Todos os armazéns</option>
@@ -188,7 +188,9 @@ export default function Estoque() {
           colunas={colunas} linhas={linhas} chave={e => e.id} ordemInicial={{ key: 'produto', dir: 'asc' }}
           acoes={e => (
             <div className="row" style={{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
-              <button className="btn btn--sm" onClick={() => setMovimentar(e)}><IoSwapVerticalOutline /> Movimentar</button>
+              {e.status === 'Sobra sem NF'
+                ? <button className="btn btn--sm" onClick={() => navigate('/divergencias')} title="Sobra sem nota: regularize por nova NF, devolução ou ajuste aprovado">Regularizar</button>
+                : <button className="btn btn--sm" onClick={() => setMovimentar(e)}><IoSwapVerticalOutline /> Movimentar</button>}
               {e.status === 'Disponível' && e.quantidade > 0 && armazens.length > 1 && <button className="icon-btn" title="Transferir para outro armazém" aria-label="Transferir" onClick={() => setTransferir(e)}><IoGitCompareOutline /></button>}
               <button className="icon-btn" title="Kardex do produto" aria-label="Kardex do produto" onClick={() => navigate(`/kardex/${e.produtoId}`)}><IoReceiptOutline /></button>
             </div>
